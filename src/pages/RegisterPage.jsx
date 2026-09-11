@@ -1,18 +1,30 @@
-import React, { useState } from 'react';
-import { registerUser, isRegistrationOpen, getUserCount } from '../utils/auth';
+import React, { useState, useEffect } from 'react';
+import { registerUser, getMeta } from '../utils/auth';
 
 export default function RegisterPage({ onSuccess, onGoLogin, onBack }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [meta, setMeta] = useState({ userCount: 0, maxUsers: 10, registrationOpen: true, loaded: false });
 
-  const open = isRegistrationOpen();
+  // Ro'yxatdan o'tish ochiqmi va nechta joy qolgani — serverdan (barcha
+  // qurilmalar uchun bir xil sonlar) olinadi.
+  useEffect(() => {
+    let cancelled = false;
+    getMeta().then((m) => { if (!cancelled) setMeta({ ...m, loaded: true }); });
+    return () => { cancelled = true; };
+  }, []);
 
-  const handleSubmit = (e) => {
+  const open = !meta.loaded || meta.registrationOpen;
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (password !== password2) { setError('Parollar mos emas'); return; }
-    const res = registerUser(username, password);
+    setLoading(true);
+    const res = await registerUser(username, password);
+    setLoading(false);
     if (!res.ok) { setError(res.error); return; }
     setError('');
     onSuccess(res.username);
@@ -62,11 +74,14 @@ export default function RegisterPage({ onSuccess, onGoLogin, onBack }) {
 
             <button
               type="submit"
-              className="w-full rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold py-2.5 mt-1 transition-colors"
+              disabled={loading}
+              className="w-full rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:opacity-60 text-white font-bold py-2.5 mt-1 transition-colors"
             >
-              Ro'yxatdan o'tish
+              {loading ? 'Yuborilmoqda...' : "Ro'yxatdan o'tish"}
             </button>
-            <div className="text-center text-xs text-slate-400 mt-1">Joylar: {getUserCount()}/10</div>
+            <div className="text-center text-xs text-slate-400 mt-1">
+              Joylar: {meta.loaded ? `${meta.userCount}/${meta.maxUsers}` : '—'}
+            </div>
           </>
         )}
       </form>

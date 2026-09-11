@@ -5,10 +5,13 @@ export default function LoginPage({ onSuccess, onGoRegister, onBack }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const res = loginUser(username, password);
+    setLoading(true);
+    const res = await loginUser(username, password);
+    setLoading(false);
     if (!res.ok) { setError(res.error); return; }
     setError('');
     onSuccess(res.username);
@@ -48,9 +51,10 @@ export default function LoginPage({ onSuccess, onGoRegister, onBack }) {
 
         <button
           type="submit"
-          className="w-full rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold py-2.5 mt-1 transition-colors"
+          disabled={loading}
+          className="w-full rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:opacity-60 text-white font-bold py-2.5 mt-1 transition-colors"
         >
-          Kirish
+          {loading ? 'Tekshirilmoqda...' : 'Kirish'}
         </button>
         <div className="text-center text-xs text-slate-500 mt-1 cursor-default">forgot password?</div>
       </form>

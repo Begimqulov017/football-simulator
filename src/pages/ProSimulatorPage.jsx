@@ -1,16 +1,29 @@
-import React from 'react';
-import { getAllUsers, setProAccess, isAdmin } from '../utils/auth';
+import React, { useState, useEffect, useCallback } from 'react';
+import { getAllUsers, setProAccess } from '../utils/auth';
 
 export default function ProSimulatorPage({ currentUser, onBack }) {
-  const admin = isAdmin(currentUser.username);
+  // currentUser — server tomonidan tasdiqlangan obyekt ({username, canAccessPro, isAdmin}),
+  // shuning uchun admin ekanini alohida so'rov bilan tekshirish shart emas.
+  const admin = !!currentUser.isAdmin;
   const allowed = currentUser.canAccessPro;
-  const [, forceRerender] = React.useReducer((x) => x + 1, 0);
 
-  const users = getAllUsers();
+  const [users, setUsers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(admin);
 
-  const toggleUser = (username, current) => {
-    setProAccess(username, !current);
-    forceRerender();
+  const loadUsers = useCallback(() => {
+    if (!admin) return;
+    setUsersLoading(true);
+    getAllUsers().then((list) => {
+      setUsers(list);
+      setUsersLoading(false);
+    });
+  }, [admin]);
+
+  useEffect(() => { loadUsers(); }, [loadUsers]);
+
+  const toggleUser = async (username, current) => {
+    await setProAccess(username, !current);
+    loadUsers();
   };
 
   return (
@@ -43,6 +56,7 @@ export default function ProSimulatorPage({ currentUser, onBack }) {
         {admin && (
           <div className="w-full rounded-xl border border-slate-700 bg-slate-800/60 p-4 text-left">
             <div className="text-slate-200 font-bold text-sm mb-3">🛡️ Admin: Foydalanuvchilar ruxsati</div>
+            {usersLoading && <div className="text-slate-400 text-sm">Yuklanmoqda...</div>}
             <div className="flex flex-col gap-2">
               {users.map((u) => (
                 <div
@@ -50,18 +64,24 @@ export default function ProSimulatorPage({ currentUser, onBack }) {
                   className="flex items-center justify-between rounded-lg bg-slate-900/60 border border-slate-700 px-3 py-2"
                 >
                   <span className="text-slate-200 text-sm">
-                    {u.username}{u.username === currentUser.username ? ' (siz)' : ''}
+                    {u.username}
+                    {u.username === currentUser.username ? ' (siz)' : ''}
+                    {u.isAdmin ? ' 🛡️' : ''}
                   </span>
-                  <button
-                    className={`text-xs font-bold px-3 py-1 rounded-full transition-colors ${
-                      u.canAccessPro
-                        ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white'
-                        : 'bg-slate-700 text-slate-300'
-                    }`}
-                    onClick={() => toggleUser(u.username, u.canAccessPro)}
-                  >
-                    {u.canAccessPro ? 'ON' : 'OFF'}
-                  </button>
+                  {u.isAdmin ? (
+                    <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-700 text-amber-300">ADMIN</span>
+                  ) : (
+                    <button
+                      className={`text-xs font-bold px-3 py-1 rounded-full transition-colors ${
+                        u.canAccessPro
+                          ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white'
+                          : 'bg-slate-700 text-slate-300'
+                      }`}
+                      onClick={() => toggleUser(u.username, u.canAccessPro)}
+                    >
+                      {u.canAccessPro ? 'ON' : 'OFF'}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

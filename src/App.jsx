@@ -8,26 +8,37 @@ import { getCurrentUser, logout as authLogout } from './utils/auth';
 
 export default function App() {
   const [screen, setScreen] = useState('start'); // 'start' | 'login' | 'register' | 'matchsimulator' | 'pro'
-  const [currentUser, setCurrentUser] = useState(() => getCurrentUser());
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
+  // Sessiyani serverdan tekshiramiz (token localStorage'da, LEKIN haqiqiyligini
+  // markazlashgan backend tasdiqlaydi — shuning uchun asinxron).
   useEffect(() => {
-    setCurrentUser(getCurrentUser());
+    let cancelled = false;
+    getCurrentUser().then((user) => {
+      if (!cancelled) {
+        setCurrentUser(user);
+        setAuthChecked(true);
+      }
+    });
+    return () => { cancelled = true; };
   }, [screen]);
 
-  const handleAuthSuccess = () => {
-    setCurrentUser(getCurrentUser());
+  const handleAuthSuccess = async () => {
+    const user = await getCurrentUser();
+    setCurrentUser(user);
     setScreen('pro'); // login/register Pro Simulatorga kirish uchun so'ralgan bo'lardi
   };
 
-  const handleLogout = () => {
-    authLogout();
+  const handleLogout = async () => {
+    await authLogout();
     setCurrentUser(null);
     setScreen('start');
   };
 
   const handleOpenPro = () => {
     // Matchsimulator uchun login shart emas, lekin Pro Simulator uchun MAJBURIY
-    if (!getCurrentUser()) {
+    if (!currentUser) {
       setScreen('login');
       return;
     }
@@ -59,9 +70,9 @@ export default function App() {
   }
 
   if (screen === 'pro') {
-    const user = currentUser || getCurrentUser();
-    if (!user) { setScreen('login'); return null; }
-    return <ProSimulatorPage currentUser={user} onBack={() => setScreen('start')} />;
+    if (!authChecked) return null; // sessiya hali tekshirilmoqda — miltillashning oldini olamiz
+    if (!currentUser) { setScreen('login'); return null; }
+    return <ProSimulatorPage currentUser={currentUser} onBack={() => setScreen('start')} />;
   }
 
   return (

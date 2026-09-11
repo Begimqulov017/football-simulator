@@ -1,0 +1,21 @@
+{
+  "users": [
+    {
+      "username": "Begimqulov017",
+      "passwordHash": "$2a$10$OSbEjX19aHtDS3klEqIXveE2sPT7mEJuUWuoVNK8FIGPM8rtnt3Ey",
+      "canAccessPro": true,
+      "isAdmin": true,
+      "createdAt": "2026-09-11T09:24:23.050Z"
+    },
+    {
+      "username": "Begimqulov_017",
+      "passwordHash": "$2a$10$itXH1agnY8hMnSsaYb7fKeiOlyR0jZIriObUjNF3YRvE9tZse4DS2",
+      "canAccessPro": true,
+      "isAdmin": false,
+      "createdAt": "2026-09-11T09:27:27.769Z"
+    }
+  ],
+  "sessions": {
+    "47be108970a4a3c76caadc68c016208ea87c6e4d4676a551": "Begimqulov_017"
+  }
+}

@@ -5,18 +5,19 @@
 // FAQAT shu fayldagi funksiyalarni import qiladi (`from '../utils/auth'`) —
 // ular qaysi adapter ishlatilayotganini bilmaydi ham, bilishi ham shart emas.
 //
-// Hozircha faol adapter — `localStorageAdapter` (frontend-simulyatsiya,
-// haqiqiy backend emas — batafsili shu fayl ichida yozilgan).
+// FAOL ADAPTER: `apiAdapter` — markazlashgan server (`server/`)ga ulanadi,
+// shuning uchun akkauntlar BARCHA qurilmalarda bir xil (localStorage'dagi
+// eski `localStorageAdapter` endi ishlatilmaydi, lekin kelajakda kerak
+// bo'lib qolsa deb fayli saqlab qo'yilgan).
 //
-// KELAJAKDA HAQIQIY BACKENDGA O'TISH UCHUN:
-//   import firebaseAdapter from './firebaseAdapter';
-//   const activeAdapter = firebaseAdapter;
-// — shu ikki qatorni almashtirish kifoya, boshqa hech narsani o'zgartirish
-// shart emas (metod nomlari bir xil bo'lishi kerak).
-import localStorageAdapter from './localStorageAdapter';
+// Diqqat: bu adapterning barcha metodlari ENDI ASINXRON (Promise qaytaradi),
+// chunki ular tarmoq orqali serverga so'rov yuboradi — chaqirilgan joyda
+// albatta `await`/`.then()` ishlatilishi kerak.
+import apiAdapter from './apiAdapter';
 
-const activeAdapter = localStorageAdapter;
+const activeAdapter = apiAdapter;
 
+export const getMeta = (...args) => activeAdapter.getMeta(...args);
 export const getAllUsers = (...args) => activeAdapter.getAllUsers(...args);
 export const getUserCount = (...args) => activeAdapter.getUserCount(...args);
 export const isRegistrationOpen = (...args) => activeAdapter.isRegistrationOpen(...args);
