@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { removePlayerFromClubRoster, joinClubRoster } from '../data/clubRosterStore';
 import { INITIAL_TEAMS } from '../data/teamsData';
-import { advanceOneDay, computeContractOffer } from '../utils/season';
+import { advanceOneDay, prepareNextDay, isMatchdayNext, computeContractOffer } from '../utils/season';
 import { saveCareerToServer, loadCareerFromServer } from '../utils/careerApi';
 
 const GameContext = createContext(null);
@@ -89,9 +89,42 @@ export function GameProvider({ children, username }) {
   // Advances the in-game calendar by one day. When the new date lands on a
   // scheduled matchday, the whole league's round is simulated (results,
   // table, top scorers, the player's own match stats, messages, wages,
-  // injuries) via the season engine.
+  // injuries) via the season engine. This is only used for QUIET days now -
+  // matchdays go through prepareMatchday/commitMatchday below instead, so
+  // the outcome can be played back before it's applied.
   const nextDay = useCallback(() => {
     setPlayer((prev) => (prev ? advanceOneDay(prev) : prev));
+  }, []);
+
+  const matchdayNext = useMemo(() => isMatchdayNext(player), [player]);
+
+  // Computes (once) the full result of the upcoming matchday - both the
+  // final next-player state AND a compact summary of just the player's own
+  // match (matchInfo) for the live playback screen. Calling this again for
+  // the same in-game date reuses the already-computed result instead of
+  // re-rolling the outcome (the RNG only runs once per matchday).
+  const pendingMatchdayRef = useRef(null);
+  const [pendingMatchday, setPendingMatchdayState] = useState(null);
+
+  const prepareMatchday = useCallback(() => {
+    if (!player) return null;
+    const cached = pendingMatchdayRef.current;
+    if (cached && cached.forDate === player.career.gameDate) return cached;
+    const { nextPlayer, matchInfo } = prepareNextDay(player);
+    const record = { nextPlayer, matchInfo, forDate: player.career.gameDate };
+    pendingMatchdayRef.current = record;
+    setPendingMatchdayState(record);
+    return record;
+  }, [player]);
+
+  const commitMatchday = useCallback(() => {
+    const record = pendingMatchdayRef.current;
+    setPlayer((prev) => {
+      if (!record || !prev || record.forDate !== prev.career.gameDate) return prev;
+      return record.nextPlayer;
+    });
+    pendingMatchdayRef.current = null;
+    setPendingMatchdayState(null);
   }, []);
 
   const markMessageRead = useCallback((messageId) => {
@@ -219,6 +252,7 @@ export function GameProvider({ children, username }) {
 
   const value = {
     player, ready, createPlayer, updatePlayer, nextDay, resetSave,
+    matchdayNext, pendingMatchday, prepareMatchday, commitMatchday,
     markMessageRead, requestNewContract, acceptContractOffer, acceptTransferOffer, declineOffer,
     purchasePerk
   };

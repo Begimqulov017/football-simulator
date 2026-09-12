@@ -21,11 +21,22 @@ async function apiFetch(path, options = {}) {
   const token = getToken();
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
   if (token) headers.Authorization = `Bearer ${token}`;
+  let res;
   try {
-    const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  } catch (err) {
+    // The request itself never reached the server (offline, CORS block, or
+    // the backend is unreachable/asleep) - as opposed to the server
+    // responding with an error, which is handled below.
+    return { ok: false, error: "Serverga ulanib bo'lmadi. Internetni tekshiring yoki birozdan so'ng qayta urinib ko'ring.", networkError: true };
+  }
+  try {
     return await res.json();
   } catch (err) {
-    return { ok: false, error: 'network', networkError: true };
+    // The server responded, but not with JSON - almost always means this
+    // route doesn't exist yet on the deployed backend (e.g. server/ hasn't
+    // been redeployed with the latest code) rather than a real network fault.
+    return { ok: false, error: "Server bu so'rovni tanimadi — backend hali yangilanmagan bo'lishi mumkin.", networkError: true };
   }
 }
 

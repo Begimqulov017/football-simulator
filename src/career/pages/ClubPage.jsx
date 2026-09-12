@@ -9,6 +9,44 @@ function initials(fullName) {
   return fullName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 }
 
+// Real position groups, used to lay the squad out like an actual formation
+// (attackers up top, goalkeeper at the very bottom) instead of just slicing
+// the top-11-by-OVR regardless of what position everyone actually plays -
+// that used to be able to drop an attacker into the "goalkeeper" slot.
+const GROUP_OF_POS = {
+  GK: 'GK',
+  CB: 'DEF', LB: 'DEF', RB: 'DEF',
+  CDM: 'MID', CM: 'MID', CAM: 'MID', LM: 'MID', RM: 'MID',
+  ST: 'ATT', LW: 'ATT', RW: 'ATT'
+};
+const GROUP_SLOTS = { ATT: 3, MID: 3, DEF: 4, GK: 1 };
+const GROUP_ORDER = ['ATT', 'MID', 'DEF', 'GK']; // rendered top-to-bottom
+
+function buildFormation(squad) {
+  const byGroup = { ATT: [], MID: [], DEF: [], GK: [] };
+  squad.forEach((p) => {
+    const g = GROUP_OF_POS[p.pos] || 'MID';
+    byGroup[g].push(p);
+  });
+  Object.values(byGroup).forEach((list) => list.sort((a, b) => (b.ovr || 0) - (a.ovr || 0)));
+
+  const starters = [];
+  GROUP_ORDER.forEach((g) => starters.push(...byGroup[g].slice(0, GROUP_SLOTS[g])));
+
+  // If a squad is short on a particular line (e.g. no natural backup GK),
+  // top the XI back up to 11 with the next-best remaining players so the
+  // display never looks emptier than it needs to.
+  const usedIds = new Set(starters.map((p) => p.id));
+  const leftovers = squad.filter((p) => !usedIds.has(p.id)).sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+  while (starters.length < 11 && leftovers.length) starters.push(leftovers.shift());
+
+  const starterIds = new Set(starters.map((p) => p.id));
+  const bench = squad.filter((p) => !starterIds.has(p.id)).sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+
+  const rows = GROUP_ORDER.map((g) => starters.filter((p) => (GROUP_OF_POS[p.pos] || 'MID') === g));
+  return { rows, bench };
+}
+
 export default function ClubPage() {
   const { player } = useGame();
   if (!player) return null;
@@ -18,9 +56,7 @@ export default function ClubPage() {
   // this browser) who has ever joined this club - a shared/global roster,
   // not just this player's own view of it.
   const squad = team ? getMergedSquad(team) : [];
-  const starters = squad.slice(0, 11);
-  const bench = squad.slice(11);
-  const rows = [starters.slice(0, 3), starters.slice(3, 6), starters.slice(6, 10), starters.slice(10, 11)];
+  const { rows, bench } = buildFormation(squad);
 
   const cardStyle = (p) => ({
     width: 64, height: 64, borderRadius: 14,

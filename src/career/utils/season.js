@@ -11,6 +11,8 @@
 
 import { INITIAL_TEAMS } from '../data/teamsData';
 import { LEAGUES } from '../data/leaguesData';
+import { getMergedSquad } from '../data/clubRosterStore';
+import { isMvpPerformance } from './statCalc';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const GAP_DAYS = 4; // days between rounds
@@ -19,7 +21,7 @@ const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 
-function addDays(iso, days) {
+export function addDays(iso, days) {
   return new Date(new Date(iso).getTime() + days * DAY_MS).toISOString().slice(0, 10);
 }
 
@@ -205,6 +207,61 @@ function maybeGenerateTransferOffer(player, league, gameDate) {
   };
 }
 
+// A softer, no-offer-attached version of the message above: other clubs
+// noticing you exists as its own flavour message, separate from (and more
+// frequent than) an actual formal transfer offer.
+function maybeGenerateScoutInterest(player, league, gameDate) {
+  if (Math.random() > 0.12) return null;
+  const candidates = league.teamIds.filter((id) => id !== player.club.id);
+  if (!candidates.length) return null;
+  const team = INITIAL_TEAMS.find((t) => t.id === pick(candidates));
+  if (!team) return null;
+  const lines = [
+    `${team.name}'s scouts were in the stands for your last match - nothing formal yet, but they're keeping an eye on you.`,
+    `Rumours in the press: ${team.name} have added you to their list of transfer targets for the upcoming window.`,
+    `A source close to ${team.name} says the club's recruitment team rates you highly and will "monitor the situation".`
+  ];
+  return {
+    id: newId('msg'),
+    type: 'scout',
+    date: gameDate,
+    from: team.name,
+    subject: `${team.name} are watching you`,
+    body: pick(lines),
+    read: false,
+    resolved: true
+  };
+}
+
+// Random dressing-room banter from a teammate - pure flavour, always
+// resolved, never blocks anything. Pulled from the player's own club squad
+// (built-in pros + any other human players who joined the same club).
+function maybeGenerateTeammateMessage(player, gameDate) {
+  if (Math.random() > 0.16) return null;
+  const team = INITIAL_TEAMS.find((t) => t.id === player.club.id);
+  if (!team) return null;
+  const squad = getMergedSquad(team).filter((p) => p.id !== player.id);
+  if (!squad.length) return null;
+  const mate = pick(squad);
+  const won = player.career.matchRatings?.length && player.career.matchRatings[player.career.matchRatings.length - 1] >= 7;
+  const lines = won
+    ? [
+      `Great game out there today, that performance deserved the three points!`,
+      `Was a pleasure playing alongside you today, let's keep this run going.`,
+      `Coach was buzzing about your display in the dressing room after the match.`
+    ]
+    : [
+      `Rough one today, but we'll bounce back next week - heads up.`,
+      `Fancy an extra shooting session tomorrow before training? Could help both of us.`,
+      `Don't worry about today's result too much, one bad game means nothing over a season.`
+    ];
+  return {
+    id: newId('msg'), type: 'teammate', date: gameDate, from: mate.name || 'Teammate',
+    subject: `Message from ${mate.name || 'a teammate'}`,
+    body: pick(lines), read: false, resolved: true
+  };
+}
+
 // ---------------------------------------------------------------------------
 // One round, every match in the league
 // ---------------------------------------------------------------------------
@@ -277,6 +334,8 @@ function processRound(round, player, standings, topScorers) {
       let body = `${resultLine}. You played ${pStats.minutes}' and rated ${pStats.rating}/10`;
       if (pStats.goals) body += ` with ${pStats.goals} goal${pStats.goals > 1 ? 's' : ''}`;
       if (pStats.assists) body += `${pStats.goals ? ' and' : ' with'} ${pStats.assists} assist${pStats.assists > 1 ? 's' : ''}`;
+      const mvp = isMvpPerformance(pStats);
+      if (mvp) body += ' - Man of the Match!';
       body += '.';
       if (pStats.injured) body += ` You picked up a knock and will be out for around ${pStats.injuryDays} days.`;
 
@@ -289,13 +348,29 @@ function processRound(round, player, standings, topScorers) {
       if (!pStats.injured && pStats.rating >= 7.5) {
         const offer = maybeGenerateTransferOffer(player, league, round.date);
         if (offer) messages.push(offer);
+        else {
+          const scout = maybeGenerateScoutInterest(player, league, round.date);
+          if (scout) messages.push(scout);
+        }
       }
+      const teammateMsg = maybeGenerateTeammateMessage(player, round.date);
+      if (teammateMsg) messages.push(teammateMsg);
+
+      const historyEntry = {
+        id: newId('hist'), date: round.date, round: round.round,
+        opponent: (isHome ? opponent.name : opponent.name), opponentLogo: opponent.logo,
+        isHome, golFor: isHome ? golA : golB, golAgainst: isHome ? golB : golA,
+        minutes: pStats.minutes, rating: pStats.rating, goals: pStats.goals, assists: pStats.assists,
+        mvp, injured: pStats.injured
+      };
 
       playerPatch.careerUpdate = {
         appearances: player.career.appearances + 1,
         goals: player.career.goals + pStats.goals,
         assists: player.career.assists + pStats.assists,
         matchRatings: ratings,
+        matchHistory: [...(player.career.matchHistory || []), historyEntry].slice(-40),
+        mvpCount: (player.career.mvpCount || 0) + (mvp ? 1 : 0),
         form,
         stamina: clamp(player.career.stamina - randInt(15, 25), 0, 100),
         injury
@@ -316,10 +391,25 @@ function processRound(round, player, standings, topScorers) {
 }
 
 // ---------------------------------------------------------------------------
-// Advance the calendar by exactly one day, resolving any scheduled round,
-// injury recovery, stamina trickle and weekly wages along the way.
+// Is the very next day a scheduled matchday for the player's own club? Used
+// to swap the Home page's "Next Day" button for a "Play Match" button, and
+// to flag the right fixture on the Games page.
 // ---------------------------------------------------------------------------
-export function advanceOneDay(player) {
+export function isMatchdayNext(player) {
+  if (!player) return false;
+  const newDate = addDays(player.career.gameDate, 1);
+  const schedule = player.career.schedule || [];
+  return schedule.some((r) => r.date === newDate && !r.matches.every((m) => m.played));
+}
+
+// ---------------------------------------------------------------------------
+// Advance the calendar by exactly one day, resolving any scheduled round,
+// injury recovery, stamina trickle and weekly wages along the way. Returns
+// both the fully-updated player AND (when the day involved the player's own
+// match) a compact "matchInfo" summary describing just that match, so a live
+// playback screen can replay it before the result is committed to the save.
+// ---------------------------------------------------------------------------
+export function prepareNextDay(player) {
   const newDate = addDays(player.career.gameDate, 1);
   const newDay = player.career.day + 1;
 
@@ -329,6 +419,7 @@ export function advanceOneDay(player) {
   let messages = [...(player.career.messages || [])];
   let career = { ...player.career, gameDate: newDate, day: newDay };
   let potential = player.potential;
+  let matchInfo = null;
 
   const roundIdx = schedule.findIndex((r) => r.date === newDate && !r.matches.every((m) => m.played));
   if (roundIdx !== -1) {
@@ -337,9 +428,32 @@ export function advanceOneDay(player) {
     messages = [...messages, ...roundMessages];
     if (playerPatch?.careerUpdate) career = { ...career, ...playerPatch.careerUpdate };
     if (playerPatch?.potential !== undefined) potential = playerPatch.potential;
+
+    if (playerPatch) {
+      const { pStats, opponent, isHome, golA, golB } = playerPatch;
+      matchInfo = {
+        opponentName: opponent.name,
+        opponentLogo: opponent.logo,
+        isHome,
+        golFor: isHome ? golA : golB,
+        golAgainst: isHome ? golB : golA,
+        pStats: pStats || { played: false }
+      };
+    }
   } else {
-    // Quiet day: stamina trickles back, injuries heal a little.
+    // Quiet day: stamina trickles back, injuries heal a little, and there's
+    // a small chance of a flavour message (scout interest / teammate banter)
+    // to keep the inbox from going completely silent between matchdays.
     career.stamina = clamp(career.stamina + 8, 0, 100);
+    const league = LEAGUES.find((l) => l.id === player.club.leagueId);
+    if (league && Math.random() < 0.10) {
+      const scout = maybeGenerateScoutInterest(player, league, newDate);
+      if (scout) messages = [...messages, scout];
+    }
+    if (Math.random() < 0.10) {
+      const teammateMsg = maybeGenerateTeammateMessage(player, newDate);
+      if (teammateMsg) messages = [...messages, teammateMsg];
+    }
   }
 
   if (career.injury) {
@@ -351,11 +465,19 @@ export function advanceOneDay(player) {
     career.money = (career.money || 0) + (career.weeklyWage || 0);
   }
 
-  return {
+  const nextPlayer = {
     ...player,
     potential,
     career: { ...career, schedule, standings, topScorers, messages }
   };
+
+  return { nextPlayer, matchInfo };
+}
+
+// Back-compat convenience wrapper for call sites (quiet days, or anywhere
+// the match playback screen isn't involved) that just want the next state.
+export function advanceOneDay(player) {
+  return prepareNextDay(player).nextPlayer;
 }
 
 // ---------------------------------------------------------------------------
@@ -413,4 +535,53 @@ export function getPlayerFixtures(player) {
         golFor: isHome ? m.golA : m.golB, golAgainst: isHome ? m.golB : m.golA
       };
     });
+}
+
+// ---------------------------------------------------------------------------
+// Live match playback timeline
+// ---------------------------------------------------------------------------
+// The final score/rating/goals/assists are already decided (by
+// prepareNextDay, above) the moment "Play Match" is pressed - this just
+// builds a plausible minute-by-minute goal sequence so the match can be
+// watched unfold instead of being revealed instantly. It never re-rolls the
+// outcome, only the presentation of it.
+export function buildMatchTimeline(matchInfo) {
+  if (!matchInfo) return [];
+  const { golFor, golAgainst, pStats } = matchInfo;
+  const events = [];
+
+  const usedMinutes = new Set();
+  const rollMinute = () => {
+    let m = randInt(1, 90);
+    while (usedMinutes.has(m)) m = randInt(1, 90);
+    usedMinutes.add(m);
+    return m;
+  };
+
+  for (let i = 0; i < golFor; i += 1) events.push({ minute: rollMinute(), side: 'for' });
+  for (let i = 0; i < golAgainst; i += 1) events.push({ minute: rollMinute(), side: 'against' });
+  events.sort((a, b) => a.minute - b.minute);
+
+  // Tag which of "our" goals are the player's own, and (separately) which
+  // are assisted by the player - both counts come straight from pStats, so
+  // they always add up to what the post-match summary shows.
+  const forEvents = events.filter((e) => e.side === 'for');
+  if (pStats?.played) {
+    const scorerIdx = new Set();
+    const goalCount = Math.min(pStats.goals || 0, forEvents.length);
+    while (scorerIdx.size < goalCount) scorerIdx.add(Math.floor(Math.random() * forEvents.length));
+    scorerIdx.forEach((idx) => { forEvents[idx].isPlayerGoal = true; });
+
+    const assistCount = Math.min(pStats.assists || 0, forEvents.length - scorerIdx.size);
+    const assistIdx = new Set();
+    let guard = 0;
+    while (assistIdx.size < assistCount && guard < 200) {
+      guard += 1;
+      const idx = Math.floor(Math.random() * forEvents.length);
+      if (!scorerIdx.has(idx)) assistIdx.add(idx);
+    }
+    assistIdx.forEach((idx) => { forEvents[idx].isPlayerAssist = true; });
+  }
+
+  return events.map((e, i) => ({ id: `ev_${i}`, ...e }));
 }

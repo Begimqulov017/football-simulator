@@ -1,15 +1,24 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import { useGame } from '../context/GameContext';
 import { getPlayerFixtures } from '../utils/season';
 
 export default function GamesPage() {
-  const { player } = useGame();
+  const { player, matchdayNext, prepareMatchday } = useGame();
+  const navigate = useNavigate();
   if (!player) return null;
 
   const fixtures = getPlayerFixtures(player);
   const played = fixtures.filter((f) => f.played).reverse();
   const upcoming = fixtures.filter((f) => !f.played);
+  const injured = !!player.career.injury;
+
+  const handlePlay = () => {
+    if (injured) return;
+    prepareMatchday();
+    navigate('/play-match');
+  };
 
   return (
     <AppShell>
@@ -25,17 +34,26 @@ export default function GamesPage() {
         <div className="card">
           <div className="card-title">UPCOMING FIXTURES</div>
           {upcoming.length === 0 && <div className="sub" style={{ padding: 12 }}>Season complete.</div>}
-          {upcoming.slice(0, 6).map((f) => (
-            <div key={f.round} className="list-row">
-              <span>{f.opponentLogo} {f.isHome ? 'vs' : '@'} {f.opponent}</span>
-              <span className="badge">{f.date}</span>
-            </div>
-          ))}
+          {upcoming.slice(0, 6).map((f, i) => {
+            const isNext = i === 0 && matchdayNext;
+            return (
+              <div key={f.round} className="list-row">
+                <span>{f.opponentLogo} {f.isHome ? 'vs' : '@'} {f.opponent}</span>
+                {isNext ? (
+                  <button className="btn btn-primary" style={{ padding: '4px 14px', fontSize: 12 }} disabled={injured} onClick={handlePlay}>
+                    {injured ? 'Injured' : '▶ Play'}
+                  </button>
+                ) : (
+                  <span className="badge">{f.date}</span>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <div className="card">
           <div className="card-title">RESULTS</div>
-          {played.length === 0 && <div className="sub" style={{ padding: 12 }}>No matches played yet - hit Next Day on Home.</div>}
+          {played.length === 0 && <div className="sub" style={{ padding: 12 }}>No matches played yet - hit Play on your next fixture.</div>}
           {played.slice(0, 10).map((f) => {
             const won = f.golFor > f.golAgainst;
             const drew = f.golFor === f.golAgainst;

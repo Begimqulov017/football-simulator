@@ -11,19 +11,18 @@ function formatMoney(n) {
 export default function UsersPage({ currentUser }) {
   const [state, setState] = useState({ loading: true, error: null, users: [] });
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const res = await fetchAllCareerUsers();
-      if (cancelled) return;
+  const load = () => {
+    setState((s) => ({ ...s, loading: true, error: null }));
+    fetchAllCareerUsers().then((res) => {
       if (!res.ok) {
         setState({ loading: false, error: res.error || "Yuklab bo'lmadi", users: [] });
       } else {
         setState({ loading: false, error: null, users: res.users });
       }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+    });
+  };
+
+  useEffect(() => { load(); }, []);
 
   return (
     <AppShell>
@@ -44,6 +43,7 @@ export default function UsersPage({ currentUser }) {
         <div className="card" style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--accent-red)' }}>
           <Icon name="lock" size={22} />
           <div style={{ marginTop: 8 }}>{state.error}</div>
+          <button className="btn" style={{ marginTop: 14 }} onClick={load}>Qayta urinish</button>
         </div>
       )}
 

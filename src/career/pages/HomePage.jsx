@@ -11,7 +11,7 @@ function formatDate(iso) {
 }
 
 export default function HomePage() {
-  const { player, nextDay } = useGame();
+  const { player, nextDay, matchdayNext, prepareMatchday } = useGame();
   const navigate = useNavigate();
 
   if (!player) return null;
@@ -20,6 +20,17 @@ export default function HomePage() {
   const scorers = getTopScorers(player).slice(0, 5);
   const upcoming = getPlayerFixtures(player).filter((f) => !f.played).slice(0, 3);
   const injured = !!player.career.injury;
+  const nextOpponent = upcoming[0];
+
+  const handlePrimaryAction = () => {
+    if (injured) return;
+    if (matchdayNext) {
+      prepareMatchday();
+      navigate('/play-match');
+    } else {
+      nextDay();
+    }
+  };
 
   return (
     <AppShell>
@@ -36,7 +47,14 @@ export default function HomePage() {
         <div className="card card--glow-green">
           <div className="card-title">TIME</div>
           <div className="next-day-cta" style={{ marginBottom: 18 }}>
-            <button className="next-day-btn" onClick={nextDay}>Next Day =&gt;</button>
+            <button
+              className="next-day-btn"
+              onClick={handlePrimaryAction}
+              disabled={injured}
+              style={matchdayNext ? { background: 'linear-gradient(90deg, var(--accent-gold), var(--accent-gold-dim))' } : undefined}
+            >
+              {matchdayNext ? `▶ Play${nextOpponent ? ` vs ${nextOpponent.opponent}` : ' Match'}` : 'Next Day =>'}
+            </button>
             <div className="indicator">
               <span className="indicator-label">FORM</span>
               <span className="indicator-value">{player.career.form}</span>

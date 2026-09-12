@@ -160,22 +160,26 @@ export const MAIN_STAT_LABELS = {
 // for when it's built).
 // ---------------------------------------------------------------------------
 export const TRAINING_FOCUS = {
-  HIGH_RISK: { id: 'HIGH_RISK', label: 'High Risk / High Reward', statGain: 2.5, staminaCost: 20, injuryRisk: 0.12 },
-  BALANCED: { id: 'BALANCED', label: 'Balanced', statGain: 1, staminaCost: 10, injuryRisk: 0.04 },
-  LIGHT: { id: 'LIGHT', label: 'Light', statGain: 0.5, staminaCost: 5, injuryRisk: 0.01 }
+  HIGH_RISK: { id: 'HIGH_RISK', label: 'High Risk / High Reward', statGain: 1.7, staminaCost: 20, injuryRisk: 0.12 },
+  BALANCED: { id: 'BALANCED', label: 'Balanced', statGain: 0.7, staminaCost: 10, injuryRisk: 0.04 },
+  LIGHT: { id: 'LIGHT', label: 'Light', statGain: 0.35, staminaCost: 5, injuryRisk: 0.01 }
 };
 
 // Training gain isn't a flat "+1/+2/+3" - it scales with training intensity,
 // age (growth years train faster), and how much headroom is left before the
-// player's potential ceiling (gains slow down the closer you get to it), with
-// some randomness on top so no two sessions feel identical.
+// player's potential ceiling. That last part now falls off MUCH more sharply
+// than a simple straight line: with 15+ OVR of headroom you train at close
+// to full speed, but the last handful of points before your Potential ceiling
+// are noticeably slow to earn (e.g. only 2 OVR of room left trains at
+// roughly a tenth of full speed) - climbing all the way to your ceiling
+// should feel like a season-long grind, not a couple of weeks.
 export function computeTrainingGain(focusId, age, potential, currentOvr) {
   const focus = TRAINING_FOCUS[focusId];
   if (!focus) return 0;
   const ageMult = age <= 29 ? (getAgeMultiplier(age) || 0.3) : 0.3;
   const room = Math.max(0, potential - currentOvr);
-  const roomFactor = 0.25 + Math.min(1, room / 20) * 0.75;
-  const variance = 0.6 + Math.random() * 0.8;
+  const roomFactor = Math.pow(Math.min(1, room / 15), 1.7) * 0.9 + 0.05;
+  const variance = 0.55 + Math.random() * 0.7;
   return Math.round(focus.statGain * ageMult * roomFactor * variance * 100) / 100;
 }
 
@@ -195,4 +199,11 @@ export function resolveVeteranProgression(age, recentAvgRating) {
   if (age < 30) return { multiplier: getAgeMultiplier(age), regressing: false };
   if (recentAvgRating > 7.5) return { multiplier: 1.0, regressing: false };
   return { multiplier: -0.5, regressing: true };
+}
+
+// A rating of 8.3+ in a played match is treated as a Man of the Match
+// performance - shown on the post-match summary and counted on All Stats.
+export const MVP_RATING_THRESHOLD = 8.3;
+export function isMvpPerformance(pStats) {
+  return !!pStats && pStats.played && pStats.rating >= MVP_RATING_THRESHOLD;
 }

@@ -2,7 +2,7 @@ import React from 'react';
 import AppShell from '../components/AppShell';
 import { useGame } from '../context/GameContext';
 
-const TYPE_ICON = { club: '🏟️', transfer: '💸', contract: '📄' };
+const TYPE_ICON = { club: '🏟️', transfer: '💸', contract: '📄', scout: '🔎', teammate: '🗣️' };
 
 export default function MessagesPage() {
   const { player, markMessageRead, acceptTransferOffer, acceptContractOffer, declineOffer } = useGame();
