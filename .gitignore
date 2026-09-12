@@ -4,6 +4,10 @@
 /node_modules
 /.pnp
 .pnp.js
+/server/node_modules
+
+# server runtime data — parollar/foydalanuvchilar shu yerda, GitHub'ga tushmasin
+/server/data
 
 # testing
 /coverage

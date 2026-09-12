@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { loginUser } from '../utils/auth';
+import Icon from '../components/Icon';
 
 export default function LoginPage({ onSuccess, onGoRegister, onBack }) {
   const [username, setUsername] = useState('');
@@ -24,7 +25,9 @@ export default function LoginPage({ onSuccess, onGoRegister, onBack }) {
         onSubmit={handleSubmit}
       >
         <div className="flex items-center justify-between mb-2">
-          <button type="button" className="text-slate-300 hover:text-white text-lg transition-colors" onClick={onBack}>⬅</button>
+          <button type="button" className="text-slate-300 hover:text-white transition-colors" onClick={onBack} aria-label="Orqaga">
+            <Icon name="back" />
+          </button>
           <h2 className="text-xl font-black text-slate-50">Login</h2>
           <button type="button" className="text-green-400 hover:text-green-300 text-sm font-semibold transition-colors" onClick={onGoRegister}>
             Register

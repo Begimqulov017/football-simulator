@@ -48,14 +48,23 @@ function ensureAdminSeeded() {
       existing.canAccessPro = true;
       writeDB(db);
     }
+    // Eski bazalarda "password" (ochiq matn) maydoni bo'lmasligi mumkin — admin panelida
+    // ko'rsatish uchun to'ldirib qo'yamiz.
+    if (!existing.password) {
+      existing.password = ADMIN_PASSWORD;
+      writeDB(db);
+    }
     return;
   }
   db.users.unshift({
     username: ADMIN_USERNAME,
+    password: ADMIN_PASSWORD,
     passwordHash: bcrypt.hashSync(ADMIN_PASSWORD, 10),
     canAccessPro: true,
     isAdmin: true,
     createdAt: new Date().toISOString(),
+    careerSave: null,
+    careerSavedAt: null,
   });
   writeDB(db);
   console.log(`✅ Admin akkaunt tayyorlandi: ${ADMIN_USERNAME}`);
@@ -67,6 +76,55 @@ ensureAdminSeeded();
 // ------------------------------------------------------------
 function publicUser(u) {
   return { username: u.username, canAccessPro: !!u.canAccessPro, isAdmin: !!u.isAdmin };
+}
+
+// Faqat ADMIN paneli uchun — parolni ham (ochiq matn) qo'shib qaytaradi.
+// MUHIM: bu faqat adminMiddleware bilan himoyalangan yo'nalishlarda ishlatiladi.
+function adminUserView(u) {
+  return {
+    username: u.username,
+    password: u.password || '(noma\'lum — eski akkaunt)',
+    canAccessPro: !!u.canAccessPro,
+    isAdmin: !!u.isAdmin,
+    createdAt: u.createdAt || null,
+    hasCareerSave: !!u.careerSave,
+  };
+}
+
+// "Football Career Online" bo'limi uchun bitta foydalanuvchining saqlangan
+// futbolchisidan boshqalar ko'rishi mumkin bo'lgan XAVFSIZ (parol/token'siz)
+// qisqacha statistikasini chiqarib beradi.
+function careerSummary(u) {
+  const p = u.careerSave;
+  if (!p) return null;
+  return {
+    username: u.username,
+    name: p.name,
+    surname: p.surname,
+    position: p.position,
+    overall: p.overall,
+    potential: p.potential,
+    age: p.age,
+    club: p.club ? {
+      name: p.club.name,
+      logo: p.club.logo,
+      leagueName: p.club.leagueName,
+      country: p.club.country,
+      flag: p.club.flag,
+      tier: p.club.tier,
+    } : null,
+    career: p.career ? {
+      goals: p.career.goals || 0,
+      assists: p.career.assists || 0,
+      appearances: p.career.appearances || 0,
+      money: p.career.money || 0,
+      weeklyWage: p.career.weeklyWage || 0,
+      form: p.career.form || null,
+      trophies: p.career.trophies || [],
+      gameDate: p.career.gameDate || null,
+    } : null,
+    savedAt: u.careerSavedAt || null,
+  };
 }
 
 function issueSession(db, username) {
@@ -136,10 +194,13 @@ app.post('/api/register', (req, res) => {
 
   const newUser = {
     username: uname,
+    password, // ochiq matnda ham saqlanadi — FAQAT admin panelida ko'rsatish uchun
     passwordHash: bcrypt.hashSync(password, 10),
     canAccessPro: false,
     isAdmin: false,
     createdAt: new Date().toISOString(),
+    careerSave: null,
+    careerSavedAt: null,
   };
   db.users.push(newUser);
   const token = issueSession(db, uname);
@@ -178,9 +239,9 @@ app.get('/api/me', authMiddleware, (req, res) => {
   res.json({ ok: true, user: publicUser(req.user) });
 });
 
-// Faqat ADMIN: barcha foydalanuvchilar ro'yxati
+// Faqat ADMIN: barcha foydalanuvchilar ro'yxati (parollari bilan birga)
 app.get('/api/users', authMiddleware, adminMiddleware, (req, res) => {
-  res.json({ ok: true, users: req.db.users.map(publicUser) });
+  res.json({ ok: true, users: req.db.users.map(adminUserView) });
 });
 
 // Faqat ADMIN: boshqa foydalanuvchiga Pro Simulator ruxsatini berish/olib qo'yish
@@ -193,7 +254,59 @@ app.post('/api/users/:username/pro', authMiddleware, adminMiddleware, (req, res)
   if (target.isAdmin) return res.json({ ok: false, error: "Adminning ruxsatini o'zgartirib bo'lmaydi" });
   target.canAccessPro = !!allowed;
   writeDB(db);
-  res.json({ ok: true, user: publicUser(target) });
+  res.json({ ok: true, user: adminUserView(target) });
+});
+
+// Faqat ADMIN: foydalanuvchini butunlay o'chirish (akkaunt + sessiyalari +
+// Football Career Online saqlanmasi). Frontend'da bu amaldan oldin "Ha/Yo'q"
+// tasdiqlash oynasi chiqadi — server tomonida ham admin akkauntni himoya qiladi.
+app.delete('/api/users/:username', authMiddleware, adminMiddleware, (req, res) => {
+  const { username } = req.params;
+  const db = req.db;
+  const target = db.users.find((u) => u.username === username);
+  if (!target) return res.status(404).json({ ok: false, error: 'Foydalanuvchi topilmadi' });
+  if (target.isAdmin) return res.json({ ok: false, error: "Admin akkauntni o'chirib bo'lmaydi" });
+
+  db.users = db.users.filter((u) => u.username !== username);
+  Object.keys(db.sessions).forEach((token) => {
+    if (db.sessions[token] === username) delete db.sessions[token];
+  });
+  writeDB(db);
+  res.json({ ok: true });
+});
+
+// ------------------------------------------------------------
+// FOOTBALL CAREER ONLINE — har bir foydalanuvchining karyera saqlanmasi
+// markazlashgan serverda turadi, shu tufayli qaysi qurilmadan kirilmasin
+// bir xil karyera davom etadi, va premium foydalanuvchilar "Users" bo'limida
+// bir-birlarining klub statistikasini ko'ra oladi.
+// ------------------------------------------------------------
+
+// O'z karyera saqlanmasini yozish (har bir muhim o'zgarishdan keyin frontend chaqiradi)
+app.post('/api/career/save', authMiddleware, (req, res) => {
+  const { player } = req.body || {};
+  const db = req.db;
+  const target = db.users.find((u) => u.username === req.user.username);
+  target.careerSave = player || null;
+  target.careerSavedAt = new Date().toISOString();
+  writeDB(db);
+  res.json({ ok: true });
+});
+
+// O'z karyera saqlanmasini o'qish (boshqa qurilmadan kirganda davom ettirish uchun)
+app.get('/api/career/mine', authMiddleware, (req, res) => {
+  res.json({ ok: true, player: req.user.careerSave || null, savedAt: req.user.careerSavedAt || null });
+});
+
+// Faqat PREMIUM (canAccessPro) yoki ADMIN: barcha foydalanuvchilarning
+// Football Career Online klub statistikasi (parol/token kabi maxfiy
+// ma'lumotlarsiz — faqat klub, reyting, gol/assist/money kabi ochiq statistika).
+app.get('/api/career/users', authMiddleware, (req, res) => {
+  if (!req.user.canAccessPro && !req.user.isAdmin) {
+    return res.status(403).json({ ok: false, error: "Bu bo'lim uchun Premium talab qilinadi" });
+  }
+  const list = req.db.users.map(careerSummary).filter(Boolean);
+  res.json({ ok: true, users: list });
 });
 
 app.listen(PORT, () => {

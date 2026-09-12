@@ -28,3 +28,4 @@ export const logout = (...args) => activeAdapter.logout(...args);
 export const getCurrentUser = (...args) => activeAdapter.getCurrentUser(...args);
 export const canAccessPro = (...args) => activeAdapter.canAccessPro(...args);
 export const setProAccess = (...args) => activeAdapter.setProAccess(...args);
+export const deleteUser = (...args) => activeAdapter.deleteUser(...args);

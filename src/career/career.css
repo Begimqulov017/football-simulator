@@ -1,0 +1,491 @@
+/* =========================================================================
+   FOOTBALL PLAYER CAREER SIMULATOR — DESIGN SYSTEM
+   Deep navy / midnight charcoal theme with electric-green, cyber-gold and
+   crimson accents. Glassmorphic cards, condensed sport-tech type.
+   ========================================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  /* --- base surfaces (aligned to the site-wide slate/green/amber palette) --- */
+  --bg-base: #0f172a;
+  --bg-elevated: #131f38;
+  --bg-panel: #16213c;
+  --bg-panel-2: #1b2743;
+
+  /* --- glass --- */
+  --glass-fill: rgba(255, 255, 255, 0.045);
+  --glass-fill-strong: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(148, 163, 184, 0.18);
+  --glass-border-strong: rgba(148, 163, 184, 0.30);
+
+  /* --- accents (matched to Tailwind green-500 / amber-500 / red-500 used elsewhere) --- */
+  --accent-green: #22c55e;
+  --accent-green-dim: #16a34a;
+  --accent-gold: #f59e0b;
+  --accent-gold-dim: #d97706;
+  --accent-red: #ef4444;
+  --accent-red-dim: #dc2626;
+  --accent-blue: #3ea6ff;
+
+  /* --- text --- */
+  --text-primary: #eef2fb;
+  --text-secondary: #a8b0c4;
+  --text-muted: #616a82;
+
+  /* --- radii / shadows --- */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --shadow-card: 0 8px 30px rgba(0, 0, 0, 0.35);
+  --glow-green: 0 0 24px rgba(0, 255, 135, 0.35);
+  --glow-gold: 0 0 24px rgba(255, 215, 0, 0.30);
+  --glow-red: 0 0 24px rgba(255, 59, 87, 0.30);
+
+  /* --- type --- */
+  --font-display: 'Chakra Petch', 'Inter', sans-serif;
+  --font-body: 'Inter', sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+
+.career-app {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(1200px 700px at 15% -10%, rgba(34, 197, 94, 0.06), transparent 60%),
+    radial-gradient(900px 600px at 110% 10%, rgba(245, 158, 11, 0.05), transparent 55%),
+    var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.career-app h1, .career-app h2, .career-app h3, .career-app h4, .career-app .display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  margin: 0;
+}
+
+.career-app p { margin: 0; }
+.career-app a { color: inherit; text-decoration: none; }
+.career-app button { font-family: inherit; }
+
+::selection { background: rgba(0, 255, 135, 0.25); }
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--glass-border-strong); border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* =========================================================================
+   LAYOUT
+   ========================================================================= */
+
+.career-app .app-shell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+}
+
+@media (max-width: 900px) {
+  .career-app .app-shell { grid-template-columns: 1fr; }
+  .career-app .sidebar { position: sticky; top: 0; z-index: 20; }
+}
+
+.career-app .sidebar {
+  background: linear-gradient(180deg, var(--bg-elevated), var(--bg-base));
+  border-right: 1px solid var(--glass-border);
+  padding: 20px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.career-app .sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px 20px;
+}
+
+.career-app .sidebar-header .club-badge {
+  font-size: 26px;
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+}
+
+.career-app .sidebar-header .name { font-family: var(--font-display); font-size: 15px; line-height: 1.15; }
+.career-app .sidebar-header .rating { color: var(--accent-gold); font-size: 12px; font-weight: 600; }
+
+.career-app .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.career-app .nav-item:hover {
+  background: var(--glass-fill);
+  color: var(--text-primary);
+}
+
+.career-app .nav-item.active {
+  background: rgba(0, 255, 135, 0.08);
+  border-color: rgba(0, 255, 135, 0.35);
+  color: var(--accent-green);
+}
+
+.career-app .nav-item .icon { font-size: 17px; width: 20px; text-align: center; }
+
+.career-app .main-area {
+  padding: 28px 34px 60px;
+  max-width: 1200px;
+  width: 100%;
+}
+
+@media (max-width: 640px) {
+  .career-app .main-area { padding: 18px 16px 60px; }
+}
+
+.career-app .page-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.career-app .page-header h1 { font-size: 26px; }
+.career-app .page-header .sub { color: var(--text-secondary); font-size: 13px; }
+
+.career-app .grid {
+  display: grid;
+  gap: 18px;
+}
+
+.career-app .grid-2 { grid-template-columns: repeat(2, 1fr); }
+.career-app .grid-3 { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+/* =========================================================================
+   CARDS
+   ========================================================================= */
+
+.career-app .card {
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-card);
+  padding: 20px;
+}
+
+.career-app .card-title {
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+}
+
+.career-app .card--glow-green { border-color: rgba(0, 255, 135, 0.35); box-shadow: var(--shadow-card), var(--glow-green); }
+.career-app .card--glow-gold { border-color: rgba(255, 215, 0, 0.35); box-shadow: var(--shadow-card), var(--glow-gold); }
+.career-app .card--glow-red { border-color: rgba(255, 59, 87, 0.35); box-shadow: var(--shadow-card), var(--glow-red); }
+
+/* =========================================================================
+   BUTTONS
+   ========================================================================= */
+
+.career-app .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 22px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-fill);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.career-app .btn:hover { transform: translateY(-1px); background: var(--glass-fill-strong); }
+.career-app .btn:active { transform: translateY(0); }
+.career-app .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+.career-app .btn-primary {
+  background: linear-gradient(135deg, var(--accent-green), #00c46e);
+  color: #06170f;
+  border: none;
+  box-shadow: 0 0 0 1px rgba(0, 255, 135, 0.4), 0 10px 30px rgba(0, 255, 135, 0.25);
+}
+.career-app .btn-primary:hover { box-shadow: 0 0 0 1px rgba(0, 255, 135, 0.6), 0 12px 36px rgba(0, 255, 135, 0.4); }
+
+.career-app .btn-gold {
+  background: linear-gradient(135deg, var(--accent-gold), #e0b400);
+  color: #241c00;
+  border: none;
+  box-shadow: 0 0 0 1px rgba(255, 215, 0, 0.4), 0 10px 30px rgba(255, 215, 0, 0.2);
+}
+
+.career-app .btn-ghost { background: transparent; }
+.career-app .btn-block { width: 100%; }
+
+/* =========================================================================
+   FORM FIELDS
+   ========================================================================= */
+
+.career-app .field { display: flex; flex-direction: column; gap: 6px; }
+.career-app .field label { font-size: 12px; color: var(--text-secondary); letter-spacing: 0.04em; }
+
+.career-app .field input, .career-app .field select {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 13px 14px;
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.career-app .field input:focus, .career-app .field select:focus {
+  border-color: var(--accent-green);
+  box-shadow: 0 0 0 3px rgba(0, 255, 135, 0.15);
+}
+
+/* =========================================================================
+   PROGRESS / STAT BARS
+   ========================================================================= */
+
+.career-app .stat-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.career-app .stat-row .stat-label { width: 42px; font-family: var(--font-display); font-size: 12px; color: var(--text-secondary); }
+.career-app .stat-row .stat-track {
+  flex: 1;
+  height: 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+.career-app .stat-row .stat-fill {
+  height: 100%;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--accent-green-dim), var(--accent-green));
+  transition: width 0.5s ease;
+}
+.career-app .stat-row .stat-fill.gold { background: linear-gradient(90deg, var(--accent-gold-dim), var(--accent-gold)); }
+.career-app .stat-row .stat-fill.red { background: linear-gradient(90deg, var(--accent-red-dim), var(--accent-red)); }
+.career-app .stat-row .stat-value { width: 26px; text-align: right; font-family: var(--font-display); font-size: 13px; }
+
+.career-app .ring {
+  --ring-size: 76px;
+  --ring-pct: 70;
+  width: var(--ring-size);
+  height: var(--ring-size);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: conic-gradient(var(--accent-green) calc(var(--ring-pct) * 1%), rgba(255, 255, 255, 0.08) 0);
+  position: relative;
+}
+.career-app .ring::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: var(--bg-panel);
+}
+.career-app .ring .ring-value { position: relative; font-family: var(--font-display); font-size: 18px; font-weight: 700; }
+
+/* =========================================================================
+   BADGES / TAGS
+   ========================================================================= */
+
+.career-app .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-fill);
+  color: var(--text-secondary);
+}
+
+.career-app .badge-green { color: var(--accent-green); border-color: rgba(0, 255, 135, 0.4); background: rgba(0, 255, 135, 0.08); }
+.career-app .badge-gold { color: var(--accent-gold); border-color: rgba(255, 215, 0, 0.4); background: rgba(255, 215, 0, 0.08); }
+.career-app .badge-red { color: var(--accent-red); border-color: rgba(255, 59, 87, 0.4); background: rgba(255, 59, 87, 0.08); }
+
+/* =========================================================================
+   NOT STARTED / EMPTY STATE
+   ========================================================================= */
+
+.career-app .not-started {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+  padding: 60px 20px;
+  color: var(--text-secondary);
+}
+
+.career-app .not-started .icon { font-size: 34px; opacity: 0.7; }
+.career-app .not-started .title { font-family: var(--font-display); font-size: 16px; color: var(--text-primary); }
+.career-app .not-started .desc { font-size: 13px; max-width: 340px; color: var(--text-muted); }
+
+.career-app .list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--glass-border);
+  font-size: 13px;
+}
+.career-app .list-row:last-child { border-bottom: none; }
+
+/* =========================================================================
+   START PAGE SPECIFIC
+   ========================================================================= */
+
+.career-app .start-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.career-app .start-card {
+  width: 100%;
+  max-width: 640px;
+  padding: 34px;
+}
+
+.career-app .start-card h1 {
+  text-align: center;
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+
+.career-app .start-card .tagline {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-bottom: 26px;
+}
+
+.career-app .roll-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 560px) { .roll-grid { grid-template-columns: 1fr; } }
+
+.career-app .roll-slot {
+  border: 1px dashed var(--glass-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 14px 10px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.career-app .roll-slot:hover { background: var(--glass-fill); }
+.career-app .roll-slot.done { border-style: solid; border-color: rgba(0, 255, 135, 0.4); }
+.career-app .roll-slot .roll-label { font-size: 11px; color: var(--text-secondary); letter-spacing: 0.04em; margin-bottom: 6px; }
+.career-app .roll-slot .roll-value { font-family: var(--font-display); font-size: 16px; font-weight: 700; }
+.career-app .roll-slot.spinning .roll-value { color: var(--accent-green); animation: pulse 0.4s infinite alternate; }
+
+@keyframes pulse { from { opacity: 0.4; } to { opacity: 1; } }
+
+.career-app .result-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 6px 0 26px;
+}
+
+@media (max-width: 560px) { .result-grid { grid-template-columns: 1fr; } }
+
+.career-app .result-card {
+  border-radius: var(--radius-sm);
+  padding: 16px 10px;
+  text-align: center;
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-border);
+}
+
+.career-app .result-card .logo { font-size: 28px; margin-bottom: 6px; }
+.career-app .result-card .value { font-family: var(--font-display); font-size: 20px; font-weight: 700; }
+.career-app .result-card .label { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+.career-app .result-card.gold .value { color: var(--accent-gold); }
+.career-app .result-card.green .value { color: var(--accent-green); }
+
+/* =========================================================================
+   NEXT DAY CTA (Home page)
+   ========================================================================= */
+
+.career-app .next-day-cta {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.career-app .next-day-btn {
+  padding: 18px 30px;
+  font-size: 15px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--accent-green), #00c46e);
+  color: #06170f;
+  border: none;
+  box-shadow: 0 0 0 1px rgba(0, 255, 135, 0.5), 0 0 30px rgba(0, 255, 135, 0.45);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.career-app .next-day-btn:hover { transform: translateY(-2px); box-shadow: 0 0 0 1px rgba(0, 255, 135, 0.7), 0 0 42px rgba(0, 255, 135, 0.6); }
+
+.career-app .indicator { display: flex; flex-direction: column; gap: 4px; min-width: 120px; }
+.career-app .indicator .indicator-label { font-size: 11px; color: var(--text-secondary); letter-spacing: 0.04em; }
+.career-app .indicator .indicator-value { font-family: var(--font-display); font-size: 15px; }
+
+.career-app .stamina-track {
+  width: 120px;
+  height: 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.career-app .stamina-fill { height: 100%; background: linear-gradient(90deg, var(--accent-green-dim), var(--accent-green)); }

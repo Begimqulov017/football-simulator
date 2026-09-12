@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { registerUser, getMeta } from '../utils/auth';
+import Icon from '../components/Icon';
 
 export default function RegisterPage({ onSuccess, onGoLogin, onBack }) {
   const [username, setUsername] = useState('');
@@ -34,7 +35,9 @@ export default function RegisterPage({ onSuccess, onGoLogin, onBack }) {
     <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4 py-10">
       <form className="w-full max-w-sm rounded-2xl bg-slate-900/80 backdrop-blur-md border border-slate-700 p-6 shadow-2xl flex flex-col gap-3" onSubmit={handleSubmit}>
         <div className="flex items-center justify-between mb-2">
-          <button type="button" className="text-slate-300 hover:text-white text-lg transition-colors" onClick={onBack}>⬅</button>
+          <button type="button" className="text-slate-300 hover:text-white transition-colors" onClick={onBack} aria-label="Orqaga">
+            <Icon name="back" />
+          </button>
           <h2 className="text-xl font-black text-slate-50">Register</h2>
           <button type="button" className="text-green-400 hover:text-green-300 text-sm font-semibold transition-colors" onClick={onGoLogin}>
             Login

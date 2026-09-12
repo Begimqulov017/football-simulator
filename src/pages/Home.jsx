@@ -6,6 +6,7 @@ import Tournament from './Tournament';
 import Customization from './Customization';
 import { getEffectiveTeams } from '../utils/customization';
 import { calculatePreMatchChances } from '../utils/engine';
+import Icon from '../components/Icon';
 
 export default function Home({ onExitToStart }) {
   const [activeMenu, setActiveMenu] = useState('quick-match');
@@ -36,7 +37,9 @@ export default function Home({ onExitToStart }) {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-logo sidebar-logo-row">
-          <button className="sidebar-back-btn" onClick={onExitToStart} title="Bosh sahifaga qaytish">⬅</button>
+          <button className="sidebar-back-btn" onClick={onExitToStart} title="Bosh sahifaga qaytish">
+            <Icon name="back" size={16} />
+          </button>
           <span>MENU</span>
         </div>
         <nav className="sidebar-nav">

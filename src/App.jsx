@@ -3,11 +3,11 @@ import Home from './pages/Home';
 import StartPage from './pages/StartPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
-import ProSimulatorPage from './pages/ProSimulatorPage';
+import FootballCareerOnline from './pages/FootballCareerOnline';
 import { getCurrentUser, logout as authLogout } from './utils/auth';
 
 export default function App() {
-  const [screen, setScreen] = useState('start'); // 'start' | 'login' | 'register' | 'matchsimulator' | 'pro'
+  const [screen, setScreen] = useState('start'); // 'start' | 'login' | 'register' | 'matchsimulator' | 'career'
   const [currentUser, setCurrentUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
 
@@ -27,7 +27,7 @@ export default function App() {
   const handleAuthSuccess = async () => {
     const user = await getCurrentUser();
     setCurrentUser(user);
-    setScreen('pro'); // login/register Pro Simulatorga kirish uchun so'ralgan bo'lardi
+    setScreen('career'); // login/register Pro Simulatorga kirish uchun so'ralgan bo'lardi
   };
 
   const handleLogout = async () => {
@@ -42,7 +42,7 @@ export default function App() {
       setScreen('login');
       return;
     }
-    setScreen('pro');
+    setScreen('career');
   };
 
   if (screen === 'matchsimulator') {
@@ -69,10 +69,10 @@ export default function App() {
     );
   }
 
-  if (screen === 'pro') {
+  if (screen === 'career') {
     if (!authChecked) return null; // sessiya hali tekshirilmoqda — miltillashning oldini olamiz
     if (!currentUser) { setScreen('login'); return null; }
-    return <ProSimulatorPage currentUser={currentUser} onBack={() => setScreen('start')} />;
+    return <FootballCareerOnline currentUser={currentUser} onBack={() => setScreen('start')} />;
   }
 
   return (

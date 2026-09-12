@@ -129,6 +129,12 @@ const apiAdapter = {
     });
     return !!data.ok;
   },
+
+  // Faqat admin sessiyasi bilan ishlaydi (server tekshiradi) — akkauntni butunlay o'chiradi
+  async deleteUser(targetUsername) {
+    const data = await apiFetch(`/api/users/${encodeURIComponent(targetUsername)}`, { method: 'DELETE' });
+    return data.ok ? { ok: true } : { ok: false, error: data.error };
+  },
 };
 
 export default apiAdapter;
