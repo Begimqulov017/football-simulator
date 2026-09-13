@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getAllUsers, setProAccess, deleteUser } from '../utils/auth';
+import { checkBackendVersion, REQUIRED_SERVER_VERSION } from '../career/utils/careerApi';
 import Icon from './Icon';
 
 export default function AdminPanel({ currentUser }) {
@@ -8,12 +9,27 @@ export default function AdminPanel({ currentUser }) {
   const [confirmTarget, setConfirmTarget] = useState(null); // username pending delete confirmation
   const [busy, setBusy] = useState(false);
   const [showPasswords, setShowPasswords] = useState(false);
+  const [versionWarning, setVersionWarning] = useState(null);
 
   const loadUsers = useCallback(() => {
     setLoading(true);
     getAllUsers().then((list) => {
       setUsers(list);
       setLoading(false);
+      // If any account is missing its (admin-only) plaintext password field,
+      // the backend hasn't actually been redeployed with the current
+      // server/index.js yet - surface that clearly instead of a blank field.
+      if (list.some((u) => !u.password)) {
+        checkBackendVersion().then((v) => {
+          setVersionWarning(
+            v.ok
+              ? `Backend eski versiyada (v${v.serverVersion}, kerak: v${REQUIRED_SERVER_VERSION}). Render'dagi backend'ni eng so'nggi server/index.js bilan qayta deploy qiling.`
+              : "Backend'ga ulanib bo'lmadi."
+          );
+        });
+      } else {
+        setVersionWarning(null);
+      }
     });
   }, []);
 
@@ -55,6 +71,13 @@ export default function AdminPanel({ currentUser }) {
 
       {loading && <div className="text-slate-400 text-sm">Yuklanmoqda...</div>}
 
+      {versionWarning && (
+        <div className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-300 text-xs px-3 py-2 flex items-start gap-1.5">
+          <Icon name="warning" size={14} className="shrink-0 mt-0.5" />
+          <span>{versionWarning}</span>
+        </div>
+      )}
+
       <div className="flex flex-col gap-2">
         {users.map((u) => {
           const isSelf = u.username === currentUser.username;
@@ -72,7 +95,7 @@ export default function AdminPanel({ currentUser }) {
                     {u.isAdmin && <Icon name="shield" size={13} className="text-amber-400 shrink-0" />}
                   </span>
                   <span className="text-slate-500 text-xs font-mono truncate">
-                    parol: {showPasswords ? u.password : '••••••••'}
+                    parol: {showPasswords ? (u.password || '(backend eski — ko\'rinmaydi)') : '••••••••'}
                   </span>
                 </div>
 

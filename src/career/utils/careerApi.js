@@ -13,6 +13,23 @@
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:4000';
 const TOKEN_KEY = 'ms_token';
 
+// Bump this alongside server/index.js's SERVER_VERSION whenever the backend
+// gains endpoints/fields the frontend depends on (career save/sync, admin
+// passwords, delete-user, etc). Lets us show a precise "backend hali
+// yangilanmagan" message instead of a confusing generic error.
+export const REQUIRED_SERVER_VERSION = 4;
+
+export async function checkBackendVersion() {
+  try {
+    const res = await fetch(`${API_BASE}/api/meta`);
+    const data = await res.json();
+    const serverVersion = data?.serverVersion || 0;
+    return { ok: true, upToDate: serverVersion >= REQUIRED_SERVER_VERSION, serverVersion };
+  } catch (err) {
+    return { ok: false, upToDate: false, serverVersion: 0 };
+  }
+}
+
 function getToken() {
   try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }
 }
@@ -58,4 +75,13 @@ export async function fetchAllCareerUsers() {
   const data = await apiFetch('/api/career/users');
   if (!data.ok) return { ok: false, error: data.error, users: [] };
   return { ok: true, users: data.users };
+}
+
+// Real (server-shared) teammates at this club - if a friend logged in on
+// another device/browser picked the same club, they show up here too,
+// alongside the built-in squad. Requires login, not premium.
+export async function fetchClubRoster(clubId) {
+  const data = await apiFetch(`/api/career/club-roster/${encodeURIComponent(clubId)}`);
+  if (!data.ok) return { ok: false, players: [] };
+  return { ok: true, players: data.players };
 }

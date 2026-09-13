@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import AppShell from '../components/AppShell';
-import { fetchAllCareerUsers } from '../utils/careerApi';
+import { fetchAllCareerUsers, checkBackendVersion, REQUIRED_SERVER_VERSION } from '../utils/careerApi';
 import Icon from '../../components/Icon';
 
 function formatMoney(n) {
@@ -13,9 +13,13 @@ export default function UsersPage({ currentUser }) {
 
   const load = () => {
     setState((s) => ({ ...s, loading: true, error: null }));
-    fetchAllCareerUsers().then((res) => {
+    fetchAllCareerUsers().then(async (res) => {
       if (!res.ok) {
-        setState({ loading: false, error: res.error || "Yuklab bo'lmadi", users: [] });
+        const version = await checkBackendVersion();
+        const error = version.ok && !version.upToDate
+          ? `Backend eski versiyada ishlamoqda (v${version.serverVersion}, kerak: v${REQUIRED_SERVER_VERSION}). Render'dagi backend'ni server/index.js bilan qayta deploy qiling.`
+          : (res.error || "Yuklab bo'lmadi");
+        setState({ loading: false, error, users: [] });
       } else {
         setState({ loading: false, error: null, users: res.users });
       }

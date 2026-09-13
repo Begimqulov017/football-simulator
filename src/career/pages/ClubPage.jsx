@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
-import NotStarted from '../components/NotStarted';
 import { useGame } from '../context/GameContext';
 import { INITIAL_TEAMS } from '../data/teamsData';
 import { getMergedSquad } from '../data/clubRosterStore';
+import { getPlayerFixtures } from '../utils/season';
+import { fetchClubRoster } from '../utils/careerApi';
 
 function initials(fullName) {
   return fullName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
@@ -49,13 +51,42 @@ function buildFormation(squad) {
 
 export default function ClubPage() {
   const { player } = useGame();
+  const navigate = useNavigate();
+  const [remoteTeammates, setRemoteTeammates] = useState([]);
+
+  // Real (server-shared) teammates - if a friend logged in on another
+  // device/browser has also joined this exact club, they show up here too,
+  // not just built-in NPC squad members.
+  useEffect(() => {
+    if (!player) return;
+    let cancelled = false;
+    fetchClubRoster(player.club.id).then((res) => {
+      if (!cancelled && res.ok) {
+        setRemoteTeammates(res.players.filter((p) => !p.isYou).map((p) => ({
+          id: `user:${p.username}`, name: `${p.name} (${p.username})`, pos: p.position, ovr: p.overall, isUser: true, isRemote: true
+        })));
+      }
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [player?.club?.id]);
+
   if (!player) return null;
 
   const team = INITIAL_TEAMS.find((t) => t.id === player.club.id);
   // Built-in squad + every human-created player (anyone, from any save on
-  // this browser) who has ever joined this club - a shared/global roster,
-  // not just this player's own view of it.
-  const squad = team ? getMergedSquad(team) : [];
+  // this browser, OR any other real logged-in user on the server) who has
+  // ever joined this club. The current player's own entry is always
+  // overridden with their LIVE overall/position/tier so this never
+  // shows a stale snapshot from whenever they first joined.
+  const squad = [
+    ...(team ? getMergedSquad(team) : []).map((p) =>
+      p.id === player.id
+        ? { ...p, name: `${player.name} ${player.surname}`, pos: player.position, ovr: player.overall }
+        : p
+    ),
+    ...remoteTeammates
+  ];
   const { rows, bench } = buildFormation(squad);
 
   const cardStyle = (p) => ({
@@ -126,9 +157,37 @@ export default function ClubPage() {
           </div>
 
           <div className="card">
-            <div className="card-title">NEXT THREE GAMES</div>
-            <NotStarted icon="📅" title="Fixtures not started" desc="Matchday goes live from 1 August 2026." />
+            <div className="card-title">TROPHIES</div>
+            {(!player.career.trophies || player.career.trophies.length === 0) ? (
+              <div className="sub" style={{ padding: 8 }}>No trophies won at this club yet.</div>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {[...player.career.trophies].reverse().map((t, i) => (
+                  <span key={i} className="badge badge-gold" title={`${t.name} (${t.year})`}>
+                    {t.icon || '🏆'} {t.year}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
+
+          <button
+            type="button"
+            className="card"
+            onClick={() => navigate('/games')}
+            style={{ textAlign: 'left', cursor: 'pointer', width: '100%' }}
+          >
+            <div className="card-title">NEXT THREE GAMES <span className="sub" style={{ float: 'right' }}>See full schedule →</span></div>
+            {getPlayerFixtures(player).filter((f) => !f.played).slice(0, 3).map((f) => (
+              <div key={f.round} className="list-row">
+                <span>{f.opponentLogo} {f.isHome ? 'vs' : '@'} {f.opponent}</span>
+                <span className="badge">{f.date}</span>
+              </div>
+            ))}
+            {getPlayerFixtures(player).filter((f) => !f.played).length === 0 && (
+              <div className="sub" style={{ padding: 8 }}>Season complete - new fixtures coming soon.</div>
+            )}
+          </button>
         </div>
       </div>
     </AppShell>

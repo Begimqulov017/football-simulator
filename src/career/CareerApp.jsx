@@ -17,6 +17,7 @@ import GamesPage from './pages/GamesPage';
 import UsersPage from './pages/UsersPage';
 import AdminPage from './pages/AdminPage';
 import PlayMatchPage from './pages/PlayMatchPage';
+import NewsPage from './pages/NewsPage';
 import { ExitProvider } from './context/ExitContext';
 
 // Sends the player to /start if no save exists yet, or /home if one does.
@@ -80,6 +81,7 @@ export default function CareerApp({ currentUser, onExit }) {
                 <Route path="/games" element={<RequirePlayer><GamesPage /></RequirePlayer>} />
                 <Route path="/play-match" element={<RequirePlayer><PlayMatchPage /></RequirePlayer>} />
                 <Route path="/users" element={<RequirePlayer><UsersPage currentUser={currentUser} /></RequirePlayer>} />
+                <Route path="/news" element={<RequirePlayer><NewsPage /></RequirePlayer>} />
                 {currentUser.isAdmin && (
                   <Route path="/admin" element={<RequirePlayer><AdminPage currentUser={currentUser} /></RequirePlayer>} />
                 )}

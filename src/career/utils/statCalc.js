@@ -159,6 +159,21 @@ export const MAIN_STAT_LABELS = {
 // started" per current scope — but the mechanics are specified here ready
 // for when it's built).
 // ---------------------------------------------------------------------------
+// A player's OVR can't just race up to their Potential in a few weeks of
+// training - real development takes years. This caps how much total OVR a
+// player can gain in a single in-game year, tuned so a typical prospect
+// (gap of ~20-30 OVR between starting rating and Potential) doesn't actually
+// reach their ceiling until somewhere around age 27-30 (a rare, very high
+// potential wonderkid might still be closing the gap into their early 30s),
+// matching how development actually tails off with age in real football.
+export function yearlyOvrCap(age) {
+  if (age <= 20) return 3.4;
+  if (age <= 23) return 2.2;
+  if (age <= 27) return 1.1;
+  if (age <= 30) return 0.5;
+  return 0.15;
+}
+
 export const TRAINING_FOCUS = {
   HIGH_RISK: { id: 'HIGH_RISK', label: 'High Risk / High Reward', statGain: 1.7, staminaCost: 20, injuryRisk: 0.12 },
   BALANCED: { id: 'BALANCED', label: 'Balanced', statGain: 0.7, staminaCost: 10, injuryRisk: 0.04 },

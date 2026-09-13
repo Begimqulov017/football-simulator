@@ -11,6 +11,12 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
 
+  // Where login/register should send the person back to once they're signed
+  // in - 'start' for the plain Login/Register buttons on the home screen,
+  // 'career' only when they were sent to login *because* they tried to open
+  // Football Career Online while logged out.
+  const [postAuthDestination, setPostAuthDestination] = useState('start');
+
   // Sessiyani serverdan tekshiramiz (token localStorage'da, LEKIN haqiqiyligini
   // markazlashgan backend tasdiqlaydi — shuning uchun asinxron).
   useEffect(() => {
@@ -27,7 +33,7 @@ export default function App() {
   const handleAuthSuccess = async () => {
     const user = await getCurrentUser();
     setCurrentUser(user);
-    setScreen('career'); // login/register Pro Simulatorga kirish uchun so'ralgan bo'lardi
+    setScreen(postAuthDestination);
   };
 
   const handleLogout = async () => {
@@ -39,11 +45,18 @@ export default function App() {
   const handleOpenPro = () => {
     // Matchsimulator uchun login shart emas, lekin Pro Simulator uchun MAJBURIY
     if (!currentUser) {
+      setPostAuthDestination('career');
       setScreen('login');
       return;
     }
     setScreen('career');
   };
+
+  // The plain Login/Register buttons on the home screen should always land
+  // back on the home screen after signing in - never straight into Football
+  // Career Online, since that wasn't what was asked for.
+  const handleGoLogin = () => { setPostAuthDestination('start'); setScreen('login'); };
+  const handleGoRegister = () => { setPostAuthDestination('start'); setScreen('register'); };
 
   if (screen === 'matchsimulator') {
     return <Home onExitToStart={() => setScreen('start')} />;
@@ -80,8 +93,8 @@ export default function App() {
       currentUser={currentUser}
       onOpenMatchSimulator={() => setScreen('matchsimulator')}
       onOpenProSimulator={handleOpenPro}
-      onGoLogin={() => setScreen('login')}
-      onGoRegister={() => setScreen('register')}
+      onGoLogin={handleGoLogin}
+      onGoRegister={handleGoRegister}
       onLogout={handleLogout}
     />
   );

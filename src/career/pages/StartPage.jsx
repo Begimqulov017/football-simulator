@@ -4,7 +4,7 @@ import { useGame } from '../context/GameContext';
 import { rollFirstRating, rollPotential, rollClub, buildStartingStats } from '../utils/playerGen';
 import { NATIONALITIES } from '../data/leaguesData';
 import { joinClubRoster, previewClubTier } from '../data/clubRosterStore';
-import { buildSeasonSchedule, initStandings, computeStartingWage } from '../utils/season';
+import { buildSeasonSchedule, initStandings, computeStartingWage, setupSeasonCups } from '../utils/season';
 
 const SPIN_MS = 900;
 
@@ -94,6 +94,10 @@ export default function StartPage() {
     const schedule = buildSeasonSchedule(clubResult.league, '2026-08-01');
     const standings = initStandings(clubResult.league.teamIds);
     const weeklyWage = computeStartingWage(ovr, tier, clubResult.league.id);
+    const { domesticCup } = setupSeasonCups(
+      { id: playerId, club: { id: clubResult.team.id, leagueId: clubResult.league.id }, career: {} },
+      clubResult.league, '2026-08-01', schedule
+    );
 
     const player = {
       id: playerId,
@@ -120,13 +124,22 @@ export default function StartPage() {
         tier
       },
       career: {
-        gameDate: '2026-08-01',
+        // One day BEFORE kickoff: prepareNextDay always advances by exactly
+        // one day before checking the schedule, so starting here means the
+        // very first "Next Day" press correctly lands on 1 Aug (Round 1) -
+        // starting ON 1 Aug itself would skip Round 1 forever.
+        gameDate: '2026-07-31',
         day: 1,
+        lastAgeUpDay: 1,
+        growthUsedThisYear: 0,
         money: 1000,
         weeklyWage,
         form: 'Average',
         stamina: 100,
         trophies: [],
+        domesticCup,
+        continentalCup: null,
+        qualifiedContinentalNextSeason: null,
         goals: 0,
         assists: 0,
         appearances: 0,

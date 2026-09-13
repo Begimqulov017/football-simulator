@@ -18,18 +18,36 @@ export default function PlayMatchPage() {
   const [minute, setMinute] = useState(0);
   const [speed, setSpeed] = useState(1);
   const [finished, setFinished] = useState(false);
+  const [loadError, setLoadError] = useState(null);
   const timerRef = useRef(null);
 
   // If someone lands here directly (refresh, back button) without a pending
   // matchday prepared yet, prepare one on mount - never during render itself.
-  // If it turns out there genuinely isn't a matchday to play, bounce home.
+  // If it turns out there genuinely isn't a matchday to play, bounce home. If
+  // preparing it throws for any reason, show a clear recoverable error
+  // instead of leaving the page stuck on "Loading..." forever.
   useEffect(() => {
     if (!pendingMatchday) {
-      const prepared = prepareMatchday();
-      if (!prepared || !prepared.matchInfo) navigate('/home', { replace: true });
+      try {
+        const prepared = prepareMatchday();
+        if (!prepared || !prepared.matchInfo) navigate('/home', { replace: true });
+      } catch (err) {
+        console.error('Failed to prepare matchday', err);
+        setLoadError("O'yinni tayyorlashda xatolik yuz berdi. Iltimos, bosh sahifaga qaytib qayta urinib ko'ring.");
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Safety net: if nothing has resolved (no record, no redirect, no error)
+  // within a few seconds, don't leave the person staring at a spinner.
+  useEffect(() => {
+    if (pendingMatchday) return undefined;
+    const t = setTimeout(() => {
+      setLoadError((prev) => prev || "O'yin yuklanmadi. Internetni tekshiring yoki bosh sahifaga qaytib qayta urinib ko'ring.");
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [pendingMatchday]);
 
   const record = pendingMatchday;
   const matchInfo = record?.matchInfo;
@@ -58,6 +76,20 @@ export default function PlayMatchPage() {
   }, [speed, matchInfo, finalMinute]);
 
   if (!player) return null;
+
+  if (loadError) {
+    return (
+      <AppShell>
+        <div className="card" style={{ textAlign: 'center', padding: 32 }}>
+          <p style={{ color: 'var(--accent-red)', marginBottom: 16 }}>{loadError}</p>
+          <button className="btn btn-primary" onClick={() => navigate('/home', { replace: true })}>
+            Bosh sahifaga qaytish
+          </button>
+        </div>
+      </AppShell>
+    );
+  }
+
   if (!record || !matchInfo) {
     return (
       <AppShell>

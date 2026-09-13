@@ -29,6 +29,7 @@ const PATHS = {
   eye: 'M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
   spinner: 'M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8',
   star: 'M12 2l3 7 7 .5-5.3 4.9L18 22l-6-4-6 4 1.3-7.6L2 9.5 9 9l3-7Z',
+  news: 'M4 4h13a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3V4ZM4 4v13a3 3 0 0 0 3 3M8 8h8M8 12h8M8 16h4M17 8v9',
 };
 
 export default function Icon({ name, size = 18, className = '', strokeWidth = 2, ...rest }) {

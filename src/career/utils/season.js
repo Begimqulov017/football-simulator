@@ -15,7 +15,6 @@ import { getMergedSquad } from '../data/clubRosterStore';
 import { isMvpPerformance } from './statCalc';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const GAP_DAYS = 4; // days between rounds
 
 const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -57,9 +56,36 @@ export function generateRoundRobinRounds(teamIds) {
   return [...firstLeg, ...secondLeg];
 }
 
-export function buildSeasonSchedule(league, startDate = '2026-08-01', gapDays = GAP_DAYS) {
-  const rounds = generateRoundRobinRounds(league.teamIds);
-  return rounds.map((matches, i) => ({
+// Leagues vary wildly in size (3 teams up to 20), so a single double
+// round-robin would make tiny leagues finish in a couple of weeks while big
+// ones run for months. To keep every league running roughly Aug -> ~May (one
+// full season) regardless of size, small leagues repeat their round-robin
+// cycle enough times to fill out a comparable number of matchdays.
+export const SEASON_TARGET_DAYS = 270; // ~1 Aug -> ~28 Apr
+const TARGET_GAP_DAYS = 7;
+
+export function buildSeasonSchedule(league, startDate = '2026-08-01') {
+  const baseRounds = generateRoundRobinRounds(league.teamIds);
+  const roundsPerCycle = Math.max(1, baseRounds.length);
+  const targetRoundCount = Math.max(roundsPerCycle, Math.round(SEASON_TARGET_DAYS / TARGET_GAP_DAYS));
+  // Only repeat the cycle for leagues that are SIGNIFICANTLY smaller than the
+  // target (e.g. a 4-team league) - a big league that's already close to a
+  // full season's worth of rounds (e.g. 20 teams = 38) shouldn't get doubled
+  // to 76 just because it's a handful of rounds short of the target.
+  const cyclesNeeded = roundsPerCycle >= targetRoundCount * 0.8 ? 1 : Math.max(1, Math.ceil(targetRoundCount / roundsPerCycle));
+
+  let allRounds = [];
+  for (let c = 0; c < cyclesNeeded; c += 1) {
+    // Every other cycle flips home/away so a repeated cycle isn't a literal
+    // copy of the one before it.
+    const cycle = c % 2 === 0 ? baseRounds : baseRounds.map((round) => round.map(({ home, away }) => ({ home: away, away: home })));
+    allRounds = allRounds.concat(cycle);
+  }
+
+  const totalRounds = allRounds.length;
+  const gapDays = clamp(Math.round(SEASON_TARGET_DAYS / totalRounds), 3, 10);
+
+  return allRounds.map((matches, i) => ({
     round: i + 1,
     date: addDays(startDate, i * gapDays),
     matches: matches.map((m) => ({ ...m, played: false, golA: null, golB: null }))
@@ -185,6 +211,20 @@ function formFromRatings(ratings) {
   if (avg >= 7) return 'Good';
   if (avg >= 5.5) return 'Average';
   return 'Poor';
+}
+
+// Recomputes whether the player is currently good enough for the Starting
+// XI or should be on the bench, based on their CURRENT OVR against the rest
+// of the club's current squad - called before every matchday so someone who
+// has trained their way up (or fallen behind) actually gets promoted or
+// dropped, instead of being stuck with whatever tier they were assigned the
+// day they signed.
+export function recomputeTier(player) {
+  const team = INITIAL_TEAMS.find((t) => t.id === player.club.id);
+  if (!team) return player.club.tier;
+  const squad = getMergedSquad(team).filter((p) => p.id !== player.id);
+  const betterCount = squad.filter((p) => (p.ovr || 0) > (player.overall || 0)).length;
+  return betterCount < 11 ? 'starter' : 'bench';
 }
 
 function maybeGenerateTransferOffer(player, league, gameDate) {
@@ -368,6 +408,9 @@ function processRound(round, player, standings, topScorers) {
         appearances: player.career.appearances + 1,
         goals: player.career.goals + pStats.goals,
         assists: player.career.assists + pStats.assists,
+        seasonAppearances: (player.career.seasonAppearances || 0) + 1,
+        seasonGoals: (player.career.seasonGoals || 0) + pStats.goals,
+        seasonAssists: (player.career.seasonAssists || 0) + pStats.assists,
         matchRatings: ratings,
         matchHistory: [...(player.career.matchHistory || []), historyEntry].slice(-40),
         mvpCount: (player.career.mvpCount || 0) + (mvp ? 1 : 0),
@@ -395,11 +438,317 @@ function processRound(round, player, standings, topScorers) {
 // to swap the Home page's "Next Day" button for a "Play Match" button, and
 // to flag the right fixture on the Games page.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Cups: a domestic knockout cup (every season, same-country opponents) plus
+// continental competitions (Champions League / Europa League for European
+// leagues, AFC Champions League for Asian leagues) for clubs that qualify by
+// league position. Both are modelled as a personal knockout ladder: the
+// player is drawn against one opponent per round; win and advance, lose (or
+// draw, decided on penalties) and the run ends for the season. This keeps
+// the feature honest and safe to run without simulating every other club's
+// entire bracket in parallel.
+// ---------------------------------------------------------------------------
+const UEFA_LEAGUE_IDS = ['la_liga', 'premier_league', 'bundesliga', 'ligue_1', 'serie_a', 'primeira_liga', 'eredivisie', 'belgian_pro_league', 'super_lig', 'swiss_super_league'];
+const AFC_LEAGUE_IDS = ['uzbekistan_super_league', 'saudi_pro_league', 'j1_league', 'k_league', 'qatar_stars_league', 'uae_pro_league', 'iran_pro_league', 'iraqi_premier_league', 'chinese_super_league'];
+
+function getConfederation(leagueId) {
+  if (UEFA_LEAGUE_IDS.includes(leagueId)) return 'UEFA';
+  if (AFC_LEAGUE_IDS.includes(leagueId)) return 'AFC';
+  return null;
+}
+
+function confederationClubPool(confederation, excludeClubId) {
+  const leagueIds = confederation === 'UEFA' ? UEFA_LEAGUE_IDS : AFC_LEAGUE_IDS;
+  const pool = [];
+  LEAGUES.filter((l) => leagueIds.includes(l.id)).forEach((l) => l.teamIds.forEach((id) => { if (id !== excludeClubId) pool.push(id); }));
+  return pool;
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Finds the next date on/after `fromDate` that isn't already taken by a
+// league round or another cup fixture, so cup matches never collide with a
+// league matchday (or with each other).
+function pickFreeDate(fromDate, takenDates) {
+  let d = fromDate;
+  let guard = 0;
+  while (takenDates.has(d) && guard < 60) {
+    d = addDays(d, 1);
+    guard += 1;
+  }
+  takenDates.add(d);
+  return d;
+}
+
+const DOMESTIC_CUP_ROUND_NAMES = ['Round of 16', 'Quarterfinal', 'Semifinal', 'Final'];
+const CONTINENTAL_ROUND_NAMES = ['Quarterfinal', 'Semifinal', 'Final'];
+
+// Builds this season's domestic cup run (every club's league re-enters every
+// year) and, if the player qualified last season, their continental cup run.
+export function setupSeasonCups(player, league, seasonStartDate, leagueSchedule) {
+  const takenDates = new Set(leagueSchedule.map((r) => r.date));
+
+  const domesticPool = league.teamIds.filter((id) => id !== player.club.id);
+  const domesticRounds = Math.min(DOMESTIC_CUP_ROUND_NAMES.length, Math.max(1, domesticPool.length));
+  const domesticNames = DOMESTIC_CUP_ROUND_NAMES.slice(DOMESTIC_CUP_ROUND_NAMES.length - domesticRounds);
+  const domesticCup = initCupRun(
+    `${league.country || league.name} Cup`, domesticPool, domesticRounds,
+    pickFreeDate(addDays(seasonStartDate, 24), takenDates), 1, domesticNames
+  );
+  // Re-roll each subsequent fixture's date to avoid collisions too.
+  domesticCup.fixtures = domesticCup.fixtures.map((f, i) => (
+    i === 0 ? f : { ...f, date: pickFreeDate(addDays(seasonStartDate, 24 + i * 40), takenDates) }
+  ));
+
+  let continentalCup = null;
+  const qualifiedFor = player.career.qualifiedContinentalNextSeason;
+  if (qualifiedFor) {
+    const pool = confederationClubPool(qualifiedFor.confederation, player.club.id);
+    const rounds = Math.min(CONTINENTAL_ROUND_NAMES.length, Math.max(1, pool.length));
+    const names = CONTINENTAL_ROUND_NAMES.slice(CONTINENTAL_ROUND_NAMES.length - rounds);
+    continentalCup = initCupRun(qualifiedFor.name, pool, rounds, pickFreeDate(addDays(seasonStartDate, 40), takenDates), 1, names);
+    continentalCup.fixtures = continentalCup.fixtures.map((f, i) => (
+      i === 0 ? f : { ...f, date: pickFreeDate(addDays(seasonStartDate, 40 + i * 45), takenDates) }
+    ));
+  }
+
+  return { domesticCup, continentalCup };
+}
+
+function initCupRun(name, opponentPool, rounds, startDate, gapDays, roundNames) {
+  const picks = shuffle(opponentPool).slice(0, rounds);
+  return {
+    name,
+    roundNames,
+    stage: 0,
+    eliminated: false,
+    won: false,
+    fixtures: picks.map((teamId, i) => ({
+      round: i + 1, opponentId: teamId, date: addDays(startDate, i * gapDays), played: false, golFor: null, golAgainst: null
+    }))
+  };
+}
+
+// Simulates one cup fixture (uses the same team/player match engine as the
+// league) and returns the outcome plus an updated cup-run object.
+function resolveCupFixture(player, cupRun, career, standings /* unused, kept for symmetry */, topScorers, gameDate) {
+  const fixture = cupRun.fixtures[cupRun.stage];
+  if (!fixture || fixture.date !== gameDate || fixture.played) return null;
+  const opponent = INITIAL_TEAMS.find((t) => t.id === fixture.opponentId);
+  const playerTeam = INITIAL_TEAMS.find((t) => t.id === player.club.id);
+  if (!opponent || !playerTeam) return null;
+
+  let { golA, golB } = simulateTeamMatch(playerTeam, opponent); // golA = player's club
+  let pStats = null;
+  if (!player.career.injury) {
+    pStats = simulatePlayerMatch(player, opponent);
+    if (pStats.played) golA = Math.max(golA, pStats.goals);
+  }
+  if (pStats?.played && pStats.goals > 0) {
+    if (!topScorers[player.id]) topScorers[player.id] = { id: player.id, name: `${player.name} ${player.surname}`, teamId: player.club.id, teamName: player.club.name, goals: 0 };
+    topScorers[player.id].goals += pStats.goals;
+  }
+
+  let won = golA > golB;
+  if (golA === golB) won = Math.random() < 0.5; // decided on penalties
+
+  const roundName = cupRun.roundNames[cupRun.stage] || `Round ${fixture.round}`;
+  const updatedFixtures = cupRun.fixtures.map((f, i) => (i === cupRun.stage ? { ...f, played: true, golFor: golA, golAgainst: golB, won } : f));
+  const isLastRound = cupRun.stage === cupRun.fixtures.length - 1;
+
+  const message = {
+    id: newId('msg'), type: 'club', date: gameDate, from: cupRun.name,
+    subject: won ? `${roundName} won!` : `${roundName}: eliminated`,
+    body: `${cupRun.name} ${roundName}: ${player.club.name} ${golA}-${golB} ${opponent.name}${golA === golB ? ' (won on penalties)' : ''}. ${
+      won ? (isLastRound ? `You've won the ${cupRun.name}!` : 'You advance to the next round.') : 'Your run in this competition ends here.'
+    }`,
+    read: false, resolved: true
+  };
+
+  return {
+    pStats,
+    message,
+    nextCupRun: {
+      ...cupRun,
+      fixtures: updatedFixtures,
+      stage: won ? cupRun.stage + 1 : cupRun.stage,
+      eliminated: !won,
+      won: won && isLastRound
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Is the very next day a scheduled matchday for the player's own club? Used
+// to swap the Home page's "Next Day" button for a "Play Match" button, and
+// to flag the right fixture on the Games page. Checks the league, domestic
+// cup, and continental cup schedules.
+// ---------------------------------------------------------------------------
+export function getNextFixtureLabel(player) {
+  if (!player) return null;
+  const newDate = addDays(player.career.gameDate, 1);
+  const round = (player.career.schedule || []).find((r) => r.date === newDate && !r.matches.every((m) => m.played));
+  if (round) {
+    const clubId = player.club.id;
+    const m = round.matches.find((mm) => mm.home === clubId || mm.away === clubId);
+    if (m) {
+      const oppId = m.home === clubId ? m.away : m.home;
+      const opp = INITIAL_TEAMS.find((t) => t.id === oppId);
+      return opp ? opp.name : null;
+    }
+  }
+  for (const cupKey of ['domesticCup', 'continentalCup']) {
+    const cup = player.career[cupKey];
+    if (!cup || cup.eliminated) continue;
+    const fixture = cup.fixtures[cup.stage];
+    if (fixture && fixture.date === newDate && !fixture.played) {
+      const opp = INITIAL_TEAMS.find((t) => t.id === fixture.opponentId);
+      return opp ? `${opp.name} (${cup.name})` : cup.name;
+    }
+  }
+  return null;
+}
+
 export function isMatchdayNext(player) {
   if (!player) return false;
   const newDate = addDays(player.career.gameDate, 1);
   const schedule = player.career.schedule || [];
-  return schedule.some((r) => r.date === newDate && !r.matches.every((m) => m.played));
+  if (schedule.some((r) => r.date === newDate && !r.matches.every((m) => m.played))) return true;
+  const cups = [player.career.domesticCup, player.career.continentalCup].filter(Boolean);
+  return cups.some((cup) => cup.fixtures[cup.stage] && cup.fixtures[cup.stage].date === newDate && !cup.fixtures[cup.stage].played);
+}
+
+// ---------------------------------------------------------------------------
+// Season end: crowns a champion, hands out the Golden Boot, records a
+// seasonHistory entry (used by the All Stats page's year-by-year
+// breakdown), and rolls straight into a freshly-generated next season.
+// ---------------------------------------------------------------------------
+function rankStandings(standings) {
+  return Object.values(standings).sort((a, b) => (b.pts - a.pts) || ((b.gf - b.ga) - (a.gf - a.ga)) || (b.gf - a.gf));
+}
+
+function finalizeSeason(player, career, standings, topScorers, schedule, messages) {
+  const league = LEAGUES.find((l) => l.id === player.club.leagueId);
+  const ranking = rankStandings(standings);
+  const championId = ranking[0]?.teamId;
+  const championTeam = INITIAL_TEAMS.find((t) => t.id === championId);
+  const playerPosition = ranking.findIndex((r) => r.teamId === player.club.id) + 1;
+  const scorersSorted = Object.values(topScorers).sort((a, b) => b.goals - a.goals);
+  const goldenBoot = scorersSorted[0];
+  const seasonYear = Number(career.gameDate.slice(0, 4));
+
+  const trophies = [...(career.trophies || [])];
+  let newMessages = [...messages];
+
+  const wonLeague = championId === player.club.id;
+  if (wonLeague) {
+    trophies.push({ name: `${league?.name || 'League'} Champion`, year: seasonYear, icon: '🏆' });
+    newMessages.push({
+      id: newId('msg'), type: 'club', date: career.gameDate, from: player.club.name,
+      subject: 'CHAMPIONS!', body: `${player.club.name} have won the ${league?.name || 'league'} title! An unforgettable season.`,
+      read: false, resolved: true
+    });
+  }
+
+  const wonGoldenBoot = goldenBoot && goldenBoot.id === player.id && goldenBoot.goals > 0;
+  if (wonGoldenBoot) {
+    trophies.push({ name: `${league?.name || 'League'} Golden Boot`, year: seasonYear, icon: '⚽' });
+    newMessages.push({
+      id: newId('msg'), type: 'club', date: career.gameDate, from: 'League Awards',
+      subject: 'Golden Boot!', body: `You finished the season as top scorer with ${goldenBoot.goals} goals - the Golden Boot is yours!`,
+      read: false, resolved: true
+    });
+  }
+
+  // Cup silverware from the season that's ending (career.domesticCup /
+  // continentalCup are about to be replaced with fresh ones for next season).
+  if (career.domesticCup?.won) {
+    trophies.push({ name: career.domesticCup.name, year: seasonYear, icon: '🏆' });
+  }
+  if (career.continentalCup?.won) {
+    trophies.push({ name: career.continentalCup.name, year: seasonYear, icon: '🌍' });
+  }
+
+  // Continental qualification for NEXT season, based on where the club
+  // finished in its own league this season.
+  const confederation = getConfederation(player.club.leagueId);
+  let qualifiedContinentalNextSeason = null;
+  if (confederation && playerPosition > 0) {
+    if (playerPosition <= 2) qualifiedContinentalNextSeason = { confederation, name: confederation === 'UEFA' ? 'UEFA Champions League' : 'AFC Champions League' };
+    else if (playerPosition <= 4 && confederation === 'UEFA') qualifiedContinentalNextSeason = { confederation, name: 'UEFA Europa League' };
+  }
+  if (qualifiedContinentalNextSeason && !career.continentalCup) {
+    newMessages.push({
+      id: newId('msg'), type: 'club', date: career.gameDate, from: player.club.name,
+      subject: 'Continental qualification!',
+      body: `Finishing ${playerPosition}${['th','st','nd','rd'][((playerPosition%100)-20)%10] || 'th'} means ${player.club.name} have qualified for the ${qualifiedContinentalNextSeason.name} next season!`,
+      read: false, resolved: true
+    });
+  }
+
+  if (!wonLeague) {
+    newMessages.push({
+      id: newId('msg'), type: 'club', date: career.gameDate, from: player.club.name,
+      subject: 'Season Review',
+      body: `The season has ended - ${player.club.name} finished ${playerPosition}${['th','st','nd','rd'][((playerPosition%100)-20)%10] || 'th'} in the ${league?.name || 'league'}, with ${championTeam?.name || 'a rival'} taking the title.`,
+      read: false, resolved: true
+    });
+  }
+
+  const seasonHistory = [...(career.seasonHistory || []), {
+    year: seasonYear,
+    league: league?.name || '',
+    club: player.club.name,
+    position: playerPosition,
+    appearances: career.seasonAppearances || 0,
+    goals: career.seasonGoals || 0,
+    assists: career.seasonAssists || 0,
+    wonLeague,
+    wonGoldenBoot
+  }];
+
+  // Straight into next season: fresh schedule, standings, top scorers - but
+  // trophies/history/lifetime totals/money all carry over. gameDate is set
+  // to the day BEFORE the new season's kickoff, since prepareNextDay always
+  // advances by exactly one day before checking the schedule - setting it to
+  // kickoff day itself would skip the new season's very first round.
+  // A season that starts in August of year Y always ends in the spring of
+  // year Y+1 - so seasonYear (taken from the end-of-season date) IS the
+  // year the next season's August kickoff falls in. Using seasonYear + 1
+  // here would skip an entire year between seasons.
+  const nextStartDate = `${seasonYear}-08-01`;
+  const newSchedule = buildSeasonSchedule(league, nextStartDate);
+  const newStandings = initStandings(league.teamIds);
+  const { domesticCup, continentalCup } = setupSeasonCups(player, league, nextStartDate, newSchedule);
+
+  newMessages.push({
+    id: newId('msg'), type: 'club', date: nextStartDate, from: player.club.name,
+    subject: 'New Season Begins', body: `A new season kicks off today at ${player.club.name}. Good luck!`,
+    read: false, resolved: true
+  });
+
+  return {
+    trophies,
+    seasonHistory,
+    schedule: newSchedule,
+    standings: newStandings,
+    topScorers: {},
+    domesticCup,
+    continentalCup,
+    qualifiedContinentalNextSeason,
+    seasonAppearances: 0,
+    seasonGoals: 0,
+    seasonAssists: 0,
+    gameDate: addDays(nextStartDate, -1),
+    messages: newMessages
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -420,16 +769,57 @@ export function prepareNextDay(player) {
   let career = { ...player.career, gameDate: newDate, day: newDay };
   let potential = player.potential;
   let matchInfo = null;
+  let age = player.age;
 
+  // Birthdays: once a full in-game year (365 days) has passed since the last
+  // age-up, the player turns a year older and their yearly OVR growth
+  // allowance (see yearlyOvrCap in statCalc.js) resets for the new year.
+  const lastAgeUpDay = career.lastAgeUpDay ?? 1;
+  if (newDay - lastAgeUpDay >= 365) {
+    age = player.age + 1;
+    career.lastAgeUpDay = newDay;
+    career.growthUsedThisYear = 0;
+    messages = [...messages, {
+      id: newId('msg'), type: 'club', date: newDate, from: player.club.name,
+      subject: 'Happy Birthday!', body: `You've turned ${age} today. Here's to another year of your career.`,
+      read: false, resolved: true
+    }];
+  }
+
+  let clubTier = player.club.tier;
   const roundIdx = schedule.findIndex((r) => r.date === newDate && !r.matches.every((m) => m.played));
   if (roundIdx !== -1) {
-    const { updatedMatches, messages: roundMessages, playerPatch } = processRound(schedule[roundIdx], player, standings, topScorers);
+    // Re-check Starting XI vs Bench against the player's CURRENT OVR right
+    // before this match is simulated - training/improving (or falling
+    // behind) actually moves you, instead of being stuck at whatever tier
+    // you were assigned on day one.
+    clubTier = recomputeTier(player);
+    if (clubTier !== player.club.tier) {
+      messages = [...messages, {
+        id: newId('msg'), type: 'club', date: newDate, from: player.club.name,
+        subject: clubTier === 'starter' ? "You're in the Starting XI!" : 'Squad update',
+        body: clubTier === 'starter'
+          ? "Your recent form and improvement have earned you a place in the Starting XI - go show what you can do."
+          : "The manager has decided to rotate the squad - you're back among the substitutes for now. Keep training.",
+        read: false, resolved: true
+      }];
+    }
+    const effectivePlayer = clubTier === player.club.tier ? player : { ...player, club: { ...player.club, tier: clubTier } };
+
+    const { updatedMatches, messages: roundMessages, playerPatch } = processRound(schedule[roundIdx], effectivePlayer, standings, topScorers);
     schedule = schedule.map((r, i) => (i === roundIdx ? { ...r, matches: updatedMatches } : r));
     messages = [...messages, ...roundMessages];
     if (playerPatch?.careerUpdate) career = { ...career, ...playerPatch.careerUpdate };
     if (playerPatch?.potential !== undefined) potential = playerPatch.potential;
 
-    if (playerPatch) {
+    // Full round results (every match, not just the player's own) - powers
+    // the League page's "browse any round" view and the News feed.
+    career.roundResultsLog = [
+      ...(career.roundResultsLog || []),
+      { round: schedule[roundIdx].round, date: newDate, matches: updatedMatches }
+    ].slice(-20);
+
+    if (playerPatch && playerPatch.opponent) {
       const { pStats, opponent, isHome, golA, golB } = playerPatch;
       matchInfo = {
         opponentName: opponent.name,
@@ -441,18 +831,50 @@ export function prepareNextDay(player) {
       };
     }
   } else {
-    // Quiet day: stamina trickles back, injuries heal a little, and there's
-    // a small chance of a flavour message (scout interest / teammate banter)
-    // to keep the inbox from going completely silent between matchdays.
-    career.stamina = clamp(career.stamina + 8, 0, 100);
-    const league = LEAGUES.find((l) => l.id === player.club.leagueId);
-    if (league && Math.random() < 0.10) {
-      const scout = maybeGenerateScoutInterest(player, league, newDate);
-      if (scout) messages = [...messages, scout];
+    // No league round today - check for a domestic/continental cup fixture
+    // before falling back to a fully quiet day.
+    let cupPlayed = false;
+    for (const cupKey of ['domesticCup', 'continentalCup']) {
+      const cupRun = career[cupKey];
+      if (!cupRun || cupRun.eliminated || cupRun.stage >= cupRun.fixtures.length) continue;
+      const outcome = resolveCupFixture(player, cupRun, career, standings, topScorers, newDate);
+      if (!outcome) continue;
+      cupPlayed = true;
+      career[cupKey] = outcome.nextCupRun;
+      messages = [...messages, outcome.message];
+      const fixture = cupRun.fixtures[cupRun.stage];
+      const opponent = INITIAL_TEAMS.find((t) => t.id === fixture.opponentId);
+      matchInfo = {
+        opponentName: opponent?.name || 'Cup opponent',
+        opponentLogo: opponent?.logo || '⚽',
+        isHome: true,
+        golFor: outcome.nextCupRun.fixtures[cupRun.stage].golFor,
+        golAgainst: outcome.nextCupRun.fixtures[cupRun.stage].golAgainst,
+        pStats: outcome.pStats || { played: false }
+      };
+      break;
     }
-    if (Math.random() < 0.10) {
-      const teammateMsg = maybeGenerateTeammateMessage(player, newDate);
-      if (teammateMsg) messages = [...messages, teammateMsg];
+
+    if (!cupPlayed) {
+      // Fully quiet day: stamina trickles back, injuries heal a little, and
+      // there's a small chance of a flavour message (scout interest /
+      // teammate banter) to keep the inbox from going completely silent.
+      career.stamina = clamp(career.stamina + 8, 0, 100);
+      const league = LEAGUES.find((l) => l.id === player.club.leagueId);
+      if (league && Math.random() < 0.10) {
+        const scout = maybeGenerateScoutInterest(player, league, newDate);
+        if (scout) messages = [...messages, scout];
+      }
+      if (Math.random() < 0.10) {
+        const teammateMsg = maybeGenerateTeammateMessage(player, newDate);
+        if (teammateMsg) messages = [...messages, teammateMsg];
+      }
+      if (Math.random() < 0.35) {
+        const transfers = maybeGenerateTransferMarketActivity(newDate);
+        if (transfers.length) {
+          career.transferLog = [...(career.transferLog || []), ...transfers].slice(-150);
+        }
+      }
     }
   }
 
@@ -465,9 +887,23 @@ export function prepareNextDay(player) {
     career.money = (career.money || 0) + (career.weeklyWage || 0);
   }
 
+  // Season end: once every fixture in the schedule has been played, crown a
+  // champion, hand out the Golden Boot, record this season in history, and
+  // generate the next one - seasons run indefinitely, one after another.
+  if (schedule.length && schedule.every((r) => r.matches.every((m) => m.played))) {
+    const seasonResult = finalizeSeason(player, career, standings, topScorers, schedule, messages);
+    career = { ...career, ...seasonResult };
+    schedule = seasonResult.schedule;
+    standings = seasonResult.standings;
+    topScorers = seasonResult.topScorers;
+    messages = seasonResult.messages;
+  }
+
   const nextPlayer = {
     ...player,
+    age,
     potential,
+    club: { ...player.club, tier: clubTier },
     career: { ...career, schedule, standings, topScorers, messages }
   };
 
@@ -584,4 +1020,126 @@ export function buildMatchTimeline(matchInfo) {
   }
 
   return events.map((e, i) => ({ id: `ev_${i}`, ...e }));
+}
+
+// ---------------------------------------------------------------------------
+// News feed - scans recent round results, the player's own match history,
+// and their trophy cabinet for storylines worth surfacing: big scorelines,
+// upsets (a much weaker side beating a much stronger one), streaks, MVP
+// performances and silverware.
+// ---------------------------------------------------------------------------
+export function generateNews(player) {
+  if (!player) return [];
+  const items = [];
+  const log = player.career.roundResultsLog || [];
+
+  log.forEach((round) => {
+    round.matches.forEach((m) => {
+      const home = INITIAL_TEAMS.find((t) => t.id === m.home);
+      const away = INITIAL_TEAMS.find((t) => t.id === m.away);
+      if (!home || !away) return;
+      const totalGoals = m.golA + m.golB;
+      const margin = Math.abs(m.golA - m.golB);
+      const homeStrength = teamStrength(home);
+      const awayStrength = teamStrength(away);
+
+      if (totalGoals >= 6) {
+        items.push({
+          id: `news_goalfest_${round.round}_${m.home}_${m.away}`, date: round.date, icon: '🔥',
+          headline: 'Goal-fest!',
+          body: `${home.name} ${m.golA}-${m.golB} ${away.name} - a thriller with ${totalGoals} goals.`
+        });
+      } else if (margin >= 4) {
+        items.push({
+          id: `news_thrash_${round.round}_${m.home}_${m.away}`, date: round.date, icon: '💥',
+          headline: 'One-sided affair',
+          body: `${home.name} ${m.golA}-${m.golB} ${away.name} - a heavy result for one side to take.`
+        });
+      }
+
+      // Upset: the much weaker side (by squad strength) won outright.
+      const diff = homeStrength - awayStrength;
+      if (m.golA > m.golB && diff <= -6) {
+        items.push({
+          id: `news_upset_${round.round}_${m.home}_${m.away}`, date: round.date, icon: '😱',
+          headline: 'Shock result!',
+          body: `${home.name} were massive underdogs but beat ${away.name} ${m.golA}-${m.golB}.`
+        });
+      } else if (m.golB > m.golA && diff >= 6) {
+        items.push({
+          id: `news_upset2_${round.round}_${m.home}_${m.away}`, date: round.date, icon: '😱',
+          headline: 'Shock result!',
+          body: `${away.name} pulled off a huge upset, beating ${home.name} ${m.golB}-${m.golA} away from home.`
+        });
+      }
+    });
+  });
+
+  // Player's own storylines: MVP awards and win/unbeaten streaks.
+  const history = player.career.matchHistory || [];
+  history.filter((h) => h.mvp).forEach((h) => {
+    items.push({
+      id: `news_mvp_${h.id}`, date: h.date, icon: '⭐',
+      headline: 'Man of the Match',
+      body: `${player.name} ${player.surname} was named Man of the Match after a ${h.rating.toFixed(1)}-rated display (${h.golFor}-${h.golAgainst} vs ${h.opponent}).`
+    });
+  });
+
+  let streak = 0;
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    if (history[i].golFor > history[i].golAgainst) streak += 1; else break;
+  }
+  if (streak >= 3) {
+    items.push({
+      id: `news_streak_${history.length}`, date: history[history.length - 1]?.date, icon: '📈',
+      headline: 'On a run!',
+      body: `${player.club.name} have now won ${streak} matches in a row with ${player.name} ${player.surname} in the side.`
+    });
+  }
+
+  (player.career.trophies || []).slice(-3).forEach((t) => {
+    items.push({
+      id: `news_trophy_${t.name}_${t.year}`, date: `${t.year}-05-01`, icon: t.icon || '🏆',
+      headline: t.name, body: `${player.name} ${player.surname} won the ${t.name} in ${t.year}.`
+    });
+  });
+
+  return items.sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 40);
+}
+
+// ---------------------------------------------------------------------------
+// Transfer market flavour - clubs across the game world are always dealing:
+// bigger/more ambitious clubs periodically buy players from smaller ones.
+// This is presentation only (the News/Transfers feed) - it doesn't move
+// players between the static squad data used for match simulation, so
+// nothing about team strength or the player's own squad changes because of
+// it; it exists to make the world feel alive.
+// ---------------------------------------------------------------------------
+function estimateFee(ovr, age) {
+  const base = Math.max(0.5, (ovr - 60) * 1.8);
+  const ageMult = age <= 24 ? 1.4 : age <= 29 ? 1 : 0.5;
+  const noise = 0.7 + Math.random() * 0.8;
+  return Math.max(0.3, Math.round(base * ageMult * noise * 10) / 10); // in millions
+}
+
+export function maybeGenerateTransferMarketActivity(gameDate) {
+  const transfers = [];
+  const count = Math.random() < 0.5 ? 1 : (Math.random() < 0.7 ? 2 : 3);
+  for (let i = 0; i < count; i += 1) {
+    const fromTeam = pick(INITIAL_TEAMS);
+    let toTeam = pick(INITIAL_TEAMS);
+    let guard = 0;
+    while (toTeam.id === fromTeam.id && guard < 10) { toTeam = pick(INITIAL_TEAMS); guard += 1; }
+    if (toTeam.id === fromTeam.id || !fromTeam.squad?.length) continue;
+    const player = pick(fromTeam.squad);
+    if (!player) continue;
+    const age = randInt(19, 31);
+    const fee = estimateFee(player.ovr || 70, age);
+    transfers.push({
+      id: newId('transfer'), date: gameDate, playerName: player.name, playerPos: player.pos,
+      ovr: player.ovr, fromClub: fromTeam.name, fromLogo: fromTeam.logo,
+      toClub: toTeam.name, toLogo: toTeam.logo, fee
+    });
+  }
+  return transfers;
 }

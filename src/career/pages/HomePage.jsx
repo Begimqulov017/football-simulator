@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import NotStarted from '../components/NotStarted';
 import { useGame } from '../context/GameContext';
-import { getLeagueTable, getTopScorers, getPlayerFixtures } from '../utils/season';
+import { getLeagueTable, getTopScorers, getPlayerFixtures, getNextFixtureLabel } from '../utils/season';
 
 function formatDate(iso) {
   const d = new Date(iso);
@@ -20,13 +20,18 @@ export default function HomePage() {
   const scorers = getTopScorers(player).slice(0, 5);
   const upcoming = getPlayerFixtures(player).filter((f) => !f.played).slice(0, 3);
   const injured = !!player.career.injury;
-  const nextOpponent = upcoming[0];
+  const nextOpponent = getNextFixtureLabel(player);
 
   const handlePrimaryAction = () => {
     if (injured) return;
     if (matchdayNext) {
-      prepareMatchday();
-      navigate('/play-match');
+      try {
+        prepareMatchday();
+        navigate('/play-match');
+      } catch (err) {
+        console.error('Failed to prepare matchday', err);
+        alert("O'yinni tayyorlashda xatolik yuz berdi. Iltimos qayta urinib ko'ring.");
+      }
     } else {
       nextDay();
     }
@@ -53,7 +58,7 @@ export default function HomePage() {
               disabled={injured}
               style={matchdayNext ? { background: 'linear-gradient(90deg, var(--accent-gold), var(--accent-gold-dim))' } : undefined}
             >
-              {matchdayNext ? `▶ Play${nextOpponent ? ` vs ${nextOpponent.opponent}` : ' Match'}` : 'Next Day =>'}
+              {matchdayNext ? `▶ Play${nextOpponent ? ` vs ${nextOpponent}` : ' Match'}` : 'Next Day =>'}
             </button>
             <div className="indicator">
               <span className="indicator-label">FORM</span>

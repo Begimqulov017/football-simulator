@@ -62,6 +62,20 @@ export function removePlayerFromClubRoster(clubId, playerId) {
   saveRosters(rosters);
 }
 
+// Keeps a human player's roster entry (OVR, tier, stats) in sync as they
+// train and improve - without this, the shared squad list (and anyone
+// else's Club page view) would keep showing whatever OVR/tier they had the
+// day they joined, forever.
+export function updatePlayerInClubRoster(clubId, playerId, patch) {
+  const rosters = loadRosters();
+  const list = rosters[clubId] || [];
+  const idx = list.findIndex((p) => p.id === playerId);
+  if (idx === -1) return;
+  list[idx] = { ...list[idx], ...patch };
+  rosters[clubId] = list;
+  saveRosters(rosters);
+}
+
 // Built-in squad + every human-added extra for a club, ranked by OVR just
 // like the Club Page already does (top 11 = starting XI, rest = bench).
 export function getMergedSquad(team) {

@@ -101,6 +101,30 @@ export default function AllStatsPage() {
       </div>
 
       <div className="card" style={{ marginTop: 18 }}>
+        <div className="card-title">SEASON BY SEASON</div>
+        {(!c.seasonHistory || c.seasonHistory.length === 0) && (
+          <div className="sub" style={{ padding: 12 }}>No completed seasons yet - finish your first season to see a year-by-year breakdown here.</div>
+        )}
+        {c.seasonHistory && c.seasonHistory.length > 0 && (
+          <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+            {[...c.seasonHistory].reverse().map((s, i) => (
+              <div key={i} className="list-row">
+                <span>
+                  {s.year} · {s.club}
+                  <span className="sub" style={{ marginLeft: 8 }}>{s.league} · #{s.position}</span>
+                </span>
+                <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <span className="badge">{s.appearances} GP · {s.goals}G {s.assists}A</span>
+                  {s.wonLeague && <span className="badge badge-gold">🏆 Champion</span>}
+                  {s.wonGoldenBoot && <span className="badge badge-green">⚽ Golden Boot</span>}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card" style={{ marginTop: 18 }}>
         <div className="card-title">MATCH HISTORY</div>
         {history.length === 0 && <div className="sub" style={{ padding: 12 }}>No matches played yet.</div>}
         <div style={{ maxHeight: 420, overflowY: 'auto' }}>

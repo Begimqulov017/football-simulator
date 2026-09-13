@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { removePlayerFromClubRoster, joinClubRoster } from '../data/clubRosterStore';
+import { removePlayerFromClubRoster, joinClubRoster, updatePlayerInClubRoster } from '../data/clubRosterStore';
 import { INITIAL_TEAMS } from '../data/teamsData';
 import { advanceOneDay, prepareNextDay, isMatchdayNext, computeContractOffer } from '../utils/season';
 import { saveCareerToServer, loadCareerFromServer } from '../utils/careerApi';
@@ -77,6 +77,20 @@ export function GameProvider({ children, username }) {
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player]);
+
+  // Keeps this player's entry in the shared/global club roster (used by the
+  // Club page's squad grid, and by tier promotion/relegation checks) in sync
+  // with their live OVR/name/position/tier - otherwise it would keep showing
+  // whatever they had the day they joined, forever.
+  useEffect(() => {
+    if (!player) return;
+    updatePlayerInClubRoster(player.club.id, player.id, {
+      name: `${player.name} ${player.surname}`,
+      pos: player.position,
+      ovr: player.overall,
+      tier: player.club.tier
+    });
+  }, [player?.overall, player?.club?.tier, player?.club?.id, player?.id, player?.name, player?.surname, player?.position]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const createPlayer = useCallback((newPlayer) => {
     setPlayer(newPlayer);

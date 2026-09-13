@@ -25,6 +25,11 @@ const crypto = require('crypto');
 const { readDB, writeDB } = require('./db');
 
 const PORT = process.env.PORT || 4000;
+
+// Bumped every time server/index.js gets new endpoints/fields the frontend
+// depends on, so the frontend can detect "siz eski backend'ni ishlatyapsiz,
+// qayta deploy qiling" instead of showing a confusing generic network error.
+const SERVER_VERSION = 4;
 const MAX_USERS = 10; // admin ham shu songa kiradi
 
 const ADMIN_USERNAME = 'Begimqulov017';
@@ -167,6 +172,7 @@ app.get('/api/meta', (req, res) => {
   const db = readDB();
   res.json({
     ok: true,
+    serverVersion: SERVER_VERSION,
     userCount: db.users.length,
     maxUsers: MAX_USERS,
     registrationOpen: db.users.length < MAX_USERS,
@@ -307,6 +313,26 @@ app.get('/api/career/users', authMiddleware, (req, res) => {
   }
   const list = req.db.users.map(careerSummary).filter(Boolean);
   res.json({ ok: true, users: list });
+});
+
+// Har bir real (login qilgan) foydalanuvchi qaysi klubda ekanini serverning
+// o'zi biladi — shu tufayli ikkita do'st bir xil klubni tanlasa, ular
+// haqiqatan HAM (har xil qurilma/brauzerdan bo'lsa ham) bir-birlarining
+// jonli statistikasini shu klub tarkibida ko'ra oladi. Login talab qilinadi,
+// lekin premium shart emas — klub tarkibini ko'rish uchun premium kerak emas.
+app.get('/api/career/club-roster/:clubId', authMiddleware, (req, res) => {
+  const { clubId } = req.params;
+  const list = req.db.users
+    .filter((u) => u.careerSave && u.careerSave.club?.id === clubId)
+    .map((u) => ({
+      username: u.username,
+      name: `${u.careerSave.name} ${u.careerSave.surname}`,
+      position: u.careerSave.position,
+      overall: u.careerSave.overall,
+      tier: u.careerSave.club?.tier || 'bench',
+      isYou: u.username === req.user.username
+    }));
+  res.json({ ok: true, players: list });
 });
 
 app.listen(PORT, () => {

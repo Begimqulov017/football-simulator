@@ -3,7 +3,7 @@ import AppShell from '../components/AppShell';
 import { useGame } from '../context/GameContext';
 import {
   MAIN_STAT_LABELS, TRAINING_FOCUS, SUB_STAT_WEIGHTS,
-  computeTrainingGain, clampStat, calcMainStats, calcOVR, calcGoalkeeperOVR
+  computeTrainingGain, clampStat, calcMainStats, calcOVR, calcGoalkeeperOVR, yearlyOvrCap
 } from '../utils/statCalc';
 
 const FOCUS_TONES = { HIGH_RISK: 'badge-red', BALANCED: 'badge-gold', LIGHT: 'badge-green' };
@@ -35,21 +35,38 @@ export default function TrainingPage() {
     updatePlayer((prev) => {
       const gain = computeTrainingGain(focus, prev.age, prev.potential, prev.overall);
       const bonus = prev.career.perks?.fitnessTrainer ? gain * 0.25 : 0;
-      const totalGain = gain + bonus;
-      const newSubStats = { ...prev.subStats };
+      const fullGain = gain + bonus;
 
-      selected.forEach((key) => {
-        if (isGk) {
-          newSubStats[key] = clampStat((newSubStats[key] || 0) + totalGain);
-        } else {
-          Object.keys(SUB_STAT_WEIGHTS[key] || {}).forEach((subKey) => {
-            newSubStats[subKey] = clampStat((newSubStats[subKey] || 0) + totalGain);
-          });
-        }
-      });
+      const applyGain = (amount) => {
+        const stats = { ...prev.subStats };
+        selected.forEach((key) => {
+          if (isGk) {
+            stats[key] = clampStat((stats[key] || 0) + amount);
+          } else {
+            Object.keys(SUB_STAT_WEIGHTS[key] || {}).forEach((subKey) => {
+              stats[subKey] = clampStat((stats[subKey] || 0) + amount);
+            });
+          }
+        });
+        const mainStats = isGk ? stats : calcMainStats(stats);
+        const ovr = isGk ? calcGoalkeeperOVR(stats) : calcOVR(prev.position, mainStats);
+        return { stats, mainStats, ovr };
+      };
 
-      const newMainStats = isGk ? newSubStats : calcMainStats(newSubStats);
-      const newOvr = isGk ? calcGoalkeeperOVR(newSubStats) : calcOVR(prev.position, newMainStats);
+      // Real player development takes years, not weeks - see yearlyOvrCap.
+      // Preview the full-strength session first to see how much OVR it
+      // WOULD add, then scale the whole session (substats included, so
+      // numbers stay consistent) down to whatever's left of this year's cap.
+      const preview = applyGain(fullGain);
+      const rawDelta = Math.max(0, preview.ovr - prev.overall);
+      const cap = yearlyOvrCap(prev.age);
+      const used = prev.career.growthUsedThisYear || 0;
+      const remaining = Math.max(0, cap - used);
+      const scale = rawDelta > 0 ? Math.min(1, remaining / rawDelta) : 1;
+
+      const result = scale >= 1 ? preview : applyGain(fullGain * scale);
+      const newOvr = Math.min(result.ovr, prev.potential);
+      const actualDelta = Math.max(0, newOvr - prev.overall);
 
       const focusDef = TRAINING_FOCUS[focus];
       let injury = prev.career.injury;
@@ -58,13 +75,14 @@ export default function TrainingPage() {
       }
 
       return {
-        overall: Math.min(newOvr, prev.potential),
-        subStats: newSubStats,
-        mainStats: newMainStats,
+        overall: newOvr,
+        subStats: result.stats,
+        mainStats: result.mainStats,
         career: {
           ...prev.career,
           trainingDate: prev.career.gameDate,
           stamina: clampStat(prev.career.stamina - focusDef.staminaCost, 0, 100),
+          growthUsedThisYear: used + actualDelta,
           injury
         }
       };
@@ -140,9 +158,13 @@ export default function TrainingPage() {
           Gains aren't a flat number - they scale with your training intensity, your age
           (17-23 trains at 150%, 24-29 prime at 100%, 30+ slows down a lot), and how much
           room is left before your Potential ({player.potential}) - the closer you get, the
-          slower it climbs. A Fitness Trainer from the Money page adds +25% to every session.
-          Bad match performances and injuries can knock Potential down; great games in your
-          prime years (24-29) can push it back up.
+          slower it climbs. On top of that, real development takes years: your OVR can only
+          rise by up to <b>{yearlyOvrCap(player.age)} points this year</b> (you've used{' '}
+          {(player.career.growthUsedThisYear || 0).toFixed(1)} of it so far) - younger players get a
+          bigger yearly allowance than veterans, so reaching your Potential is a season-by-season
+          climb, not a two-week grind. A Fitness Trainer from the Money page adds +25% to every
+          session. Bad match performances and injuries can knock Potential down; great games in
+          your prime years (24-29) can push it back up.
         </p>
       </div>
     </AppShell>
