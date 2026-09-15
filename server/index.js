@@ -718,6 +718,11 @@ app.get('/api/international/nation/:country', authMiddleware, (req, res) => {
     }
   });
 });
+app.get('/api/admin/export-db', authMiddleware, (req, res) => {
+  if (!req.user.isAdmin) return res.status(403).json({ ok: false, error: 'Faqat admin' });
+  const db = readDB();
+  res.json(db);
+});
 
 app.listen(PORT, () => {
   console.log(`🚀 Match Simulator auth server: http://localhost:${PORT}`);
