@@ -17,7 +17,7 @@ const TOKEN_KEY = 'ms_token';
 // gains endpoints/fields the frontend depends on (career save/sync, admin
 // passwords, delete-user, etc). Lets us show a precise "backend hali
 // yangilanmagan" message instead of a confusing generic error.
-export const REQUIRED_SERVER_VERSION = 4;
+export const REQUIRED_SERVER_VERSION = 8;
 
 export async function checkBackendVersion() {
   try {
@@ -64,9 +64,30 @@ export async function saveCareerToServer(player) {
 }
 
 // Boshqa qurilmadan kirilganda serverdagi saqlanmani tortib olish uchun.
+// Endi umumiy dunyoning joriy sanasini ham qaytaradi.
 export async function loadCareerFromServer() {
   const data = await apiFetch('/api/career/mine');
-  return data.ok ? data.player : null;
+  if (!data.ok) return { player: null, worldDate: null };
+  return { player: data.player, worldDate: data.worldDate };
+}
+
+// Umumiy dunyodagi so'nggi o'yin natijasi "ko'rildi" deb belgilanadi - shu
+// orqali Live Match ekrani takror-takror chiqavermaydi.
+export async function ackMatchResult() {
+  return apiFetch('/api/career/ack-result', { method: 'POST' });
+}
+
+// ADMIN ONLY: advances the shared world (every active league's calendar) by
+// one day, resolving that day's fixtures for everyone at once.
+export async function advanceWorldDay() {
+  return apiFetch('/api/admin/advance-world-day', { method: 'POST' });
+}
+
+// Current shared schedule/standings for a league - anyone logged in can view.
+export async function fetchWorld(leagueId) {
+  const data = await apiFetch(`/api/world/${encodeURIComponent(leagueId)}`);
+  if (!data.ok) return { ok: false, world: null };
+  return { ok: true, world: data.world };
 }
 
 // Faqat premium/admin foydalanuvchilar uchun — barcha o'yinchilarning klub
@@ -84,4 +105,24 @@ export async function fetchClubRoster(clubId) {
   const data = await apiFetch(`/api/career/club-roster/${encodeURIComponent(clubId)}`);
   if (!data.ok) return { ok: false, players: [] };
   return { ok: true, players: data.players };
+}
+
+// ------------------------------------------------------------
+// NATIONAL TEAMS / INTERNATIONAL TOURNAMENTS
+// ------------------------------------------------------------
+
+// Everything happening internationally right now: live tournaments (group
+// tables, brackets, top scorers), past winners and the international news log.
+export async function fetchInternational() {
+  const data = await apiFetch('/api/international');
+  if (!data.ok) return { ok: false, tournaments: [], history: [], news: [] };
+  return data;
+}
+
+// The current call-up list for one nation. The squad is re-picked by the
+// server every time, so this always reflects who would be selected today.
+export async function fetchNationSquad(country) {
+  const data = await apiFetch(`/api/international/nation/${encodeURIComponent(country)}`);
+  if (!data.ok) return { ok: false, error: data.error, team: null };
+  return { ok: true, team: data.team };
 }

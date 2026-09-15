@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { removePlayerFromClubRoster, joinClubRoster, updatePlayerInClubRoster } from '../data/clubRosterStore';
 import { INITIAL_TEAMS } from '../data/teamsData';
-import { advanceOneDay, prepareNextDay, isMatchdayNext, computeContractOffer } from '../utils/season';
-import { saveCareerToServer, loadCareerFromServer } from '../utils/careerApi';
+import { advanceOneDay, prepareNextDay, isMatchdayNext, computeContractOffer, buildSeasonSchedule, initStandings, setupSeasonCups } from '../utils/season';
+import { LEAGUES } from '../data/leaguesData';
+import { saveCareerToServer, loadCareerFromServer, ackMatchResult } from '../utils/careerApi';
 
 const GameContext = createContext(null);
 
@@ -39,6 +40,7 @@ function persistLocalSave(username, player) {
 export function GameProvider({ children, username }) {
   const [player, setPlayer] = useState(() => loadLocalSave(username));
   const [ready, setReady] = useState(false);
+  const [worldDate, setWorldDate] = useState(null);
   const saveTimer = useRef(null);
   const firstLoad = useRef(true);
 
@@ -50,7 +52,7 @@ export function GameProvider({ children, username }) {
     firstLoad.current = true;
     setReady(false);
     (async () => {
-      const serverPlayer = await loadCareerFromServer();
+      const { player: serverPlayer, worldDate: wd } = await loadCareerFromServer();
       if (cancelled) return;
       if (serverPlayer) {
         setPlayer(serverPlayer);
@@ -58,12 +60,28 @@ export function GameProvider({ children, username }) {
       } else {
         setPlayer(loadLocalSave(username));
       }
+      if (wd) setWorldDate(wd);
       firstLoad.current = false;
       setReady(true);
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username]);
+
+  // Umumiy dunyo admin tomonidan istalgan vaqt oldinga surilishi mumkin -
+  // ilova ochiq turganda ham yangi natijani ko'rish uchun vaqti-vaqti bilan
+  // serverdan tekshirib turamiz (har 20 soniyada).
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (firstLoad.current) return;
+      const { player: serverPlayer, worldDate: wd } = await loadCareerFromServer();
+      if (wd) setWorldDate(wd);
+      if (serverPlayer?.career?.lastMatchResult && !serverPlayer.career.lastMatchResult.seenAt) {
+        setPlayer((prev) => (prev ? { ...prev, career: { ...prev.career, lastMatchResult: serverPlayer.career.lastMatchResult } } : prev));
+      }
+    }, 20000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Har bir o'zgarishda: darhol mahalliy (localStorage), va bir oz kechikish
   // bilan serverga (debounce) — tarmoq so'rovlarini kamaytirish uchun.
@@ -161,17 +179,17 @@ export function GameProvider({ children, username }) {
       if (!prev) return prev;
       const hasPending = prev.career.messages.some((m) => m.type === 'contract' && !m.resolved);
       if (hasPending) return prev;
-      const offerWage = computeContractOffer(prev);
+      const offer = computeContractOffer(prev);
       const message = {
         id: `msg_${Date.now()}`,
         type: 'contract',
         date: prev.career.gameDate,
         from: prev.club.name,
         subject: 'New contract offer',
-        body: `Based on your recent form, ${prev.club.name} are offering a new deal at $${offerWage.toLocaleString()}/week (currently $${(prev.career.weeklyWage || 0).toLocaleString()}/week).`,
+        body: `Based on your recent form, ${prev.club.name} are offering a new ${offer.years}-year deal at $${offer.wage.toLocaleString()}/week (currently $${(prev.career.weeklyWage || 0).toLocaleString()}/week).`,
         read: false,
         resolved: false,
-        offer: { wage: offerWage }
+        offer
       };
       return { ...prev, career: { ...prev.career, messages: [...prev.career.messages, message] } };
     });
@@ -187,6 +205,9 @@ export function GameProvider({ children, username }) {
         career: {
           ...prev.career,
           weeklyWage: msg.offer.wage,
+          contract: { yearsTotal: msg.offer.years || 4, signedDay: prev.career.day },
+          contractTalksOpened: false,
+          contractFailedNegotiations: 0,
           messages: prev.career.messages.map((m) => (m.id === messageId ? { ...m, resolved: true, read: true, outcome: 'accepted' } : m))
         }
       };
@@ -195,9 +216,10 @@ export function GameProvider({ children, username }) {
 
   // Accepting a transfer offer moves the player into the shared/global
   // roster of the new club (top XI or bench, worked out fresh there) and
-  // pulls them out of the old club's roster - the rest of the league
-  // schedule/table stay valid since offers only ever come from clubs in the
-  // same league.
+  // pulls them out of the old club's roster. If this is a free-agent
+  // signing, the player also joins that club's LEAGUE (fresh schedule/
+  // standings/cups), since a free agent might land anywhere, not just a
+  // club in their old league.
   const acceptTransferOffer = useCallback((messageId) => {
     setPlayer((prev) => {
       if (!prev) return prev;
@@ -206,11 +228,37 @@ export function GameProvider({ children, username }) {
       const newTeam = INITIAL_TEAMS.find((t) => t.id === msg.offer.teamId);
       if (!newTeam) return prev;
 
-      removePlayerFromClubRoster(prev.club.id, prev.id);
+      if (prev.club?.id) removePlayerFromClubRoster(prev.club.id, prev.id);
       const tier = joinClubRoster(newTeam, {
         id: prev.id, name: `${prev.name} ${prev.surname}`, pos: prev.position, ovr: prev.overall,
         stats: prev.mainStats, nationality: prev.nationality
       });
+
+      const resolvedMessages = prev.career.messages.map((m) => (m.id === messageId ? { ...m, resolved: true, read: true, outcome: 'accepted' } : m));
+
+      if (msg.offer.freeAgentSigning) {
+        // Signing as a free agent - could be a different league entirely,
+        // so the whole season needs regenerating for the new club.
+        const league = LEAGUES.find((l) => l.id === msg.offer.leagueId) || LEAGUES.find((l) => l.teamIds.includes(newTeam.id));
+        const startDate = prev.career.gameDate;
+        const schedule = buildSeasonSchedule(league, startDate);
+        const { domesticCup, continentalCup } = setupSeasonCups(prev, league, startDate, schedule);
+        return {
+          ...prev,
+          club: { id: newTeam.id, name: newTeam.name, logo: newTeam.logo, leagueId: league.id, leagueName: league.name, flag: newTeam.flag, country: league.country, tier },
+          career: {
+            ...prev.career,
+            weeklyWage: msg.offer.wage,
+            contract: { yearsTotal: msg.offer.years || 4, signedDay: prev.career.day },
+            contractTalksOpened: false,
+            contractFailedNegotiations: 0,
+            freeAgent: false,
+            schedule, standings: initStandings(league.teamIds), topScorers: {},
+            domesticCup, continentalCup,
+            messages: resolvedMessages
+          }
+        };
+      }
 
       return {
         ...prev,
@@ -218,7 +266,7 @@ export function GameProvider({ children, username }) {
         career: {
           ...prev.career,
           weeklyWage: msg.offer.wage,
-          messages: prev.career.messages.map((m) => (m.id === messageId ? { ...m, resolved: true, read: true, outcome: 'accepted' } : m))
+          messages: resolvedMessages
         }
       };
     });
@@ -227,11 +275,26 @@ export function GameProvider({ children, username }) {
   const declineOffer = useCallback((messageId) => {
     setPlayer((prev) => {
       if (!prev) return prev;
+      const msg = prev.career.messages.find((m) => m.id === messageId);
+      const wasContractTalk = msg?.type === 'contract';
+      const failedCount = (prev.career.contractFailedNegotiations || 0) + (wasContractTalk ? 1 : 0);
+      const forcedFreeAgent = wasContractTalk && failedCount >= 5;
       return {
         ...prev,
         career: {
           ...prev.career,
-          messages: prev.career.messages.map((m) => (m.id === messageId ? { ...m, resolved: true, read: true, outcome: 'declined' } : m))
+          contractFailedNegotiations: failedCount,
+          freeAgent: forcedFreeAgent ? true : prev.career.freeAgent,
+          contract: forcedFreeAgent ? null : prev.career.contract,
+          messages: [
+            ...prev.career.messages.map((m) => (m.id === messageId ? { ...m, resolved: true, read: true, outcome: 'declined' } : m)),
+            ...(forcedFreeAgent ? [{
+              id: `msg_${Date.now()}`, type: 'club', date: prev.career.gameDate, from: prev.club.name,
+              subject: 'Released',
+              body: `After ${failedCount} failed rounds of contract talks, ${prev.club.name} have decided to let you go. You're now a free agent.`,
+              read: false, resolved: true
+            }] : [])
+          ]
         }
       };
     });
@@ -264,9 +327,20 @@ export function GameProvider({ children, username }) {
     saveCareerToServer(null).catch(() => {});
   }, []);
 
+  const hasUnwatchedResult = !!(player?.career?.lastMatchResult && !player.career.lastMatchResult.seenAt);
+
+  const acknowledgeResult = useCallback(async () => {
+    setPlayer((prev) => {
+      if (!prev?.career?.lastMatchResult) return prev;
+      return { ...prev, career: { ...prev.career, lastMatchResult: { ...prev.career.lastMatchResult, seenAt: new Date().toISOString() } } };
+    });
+    await ackMatchResult().catch(() => {});
+  }, []);
+
   const value = {
     player, ready, createPlayer, updatePlayer, nextDay, resetSave,
     matchdayNext, pendingMatchday, prepareMatchday, commitMatchday,
+    worldDate, hasUnwatchedResult, acknowledgeResult,
     markMessageRead, requestNewContract, acceptContractOffer, acceptTransferOffer, declineOffer,
     purchasePerk
   };

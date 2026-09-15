@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getAllUsers, setProAccess, deleteUser } from '../utils/auth';
-import { checkBackendVersion, REQUIRED_SERVER_VERSION } from '../career/utils/careerApi';
+import { checkBackendVersion, REQUIRED_SERVER_VERSION, advanceWorldDay } from '../career/utils/careerApi';
 import Icon from './Icon';
 
 export default function AdminPanel({ currentUser }) {
@@ -10,6 +10,8 @@ export default function AdminPanel({ currentUser }) {
   const [busy, setBusy] = useState(false);
   const [showPasswords, setShowPasswords] = useState(false);
   const [versionWarning, setVersionWarning] = useState(null);
+  const [worldBusy, setWorldBusy] = useState(false);
+  const [worldResult, setWorldResult] = useState(null);
 
   const loadUsers = useCallback(() => {
     setLoading(true);
@@ -52,6 +54,23 @@ export default function AdminPanel({ currentUser }) {
     }
   };
 
+  const handleAdvanceWorld = async () => {
+    setWorldBusy(true);
+    setWorldResult(null);
+    const res = await advanceWorldDay();
+    setWorldBusy(false);
+    if (res.ok) {
+      setWorldResult({
+        ok: true,
+        date: res.worldDate,
+        count: res.resolvedMatches,
+        matches: res.matches || []
+      });
+    } else {
+      setWorldResult({ ok: false, error: res.error || "Kunni o'tkazib bo'lmadi" });
+    }
+  };
+
   return (
     <div className="w-full rounded-xl border border-slate-700 bg-slate-800/60 p-4 text-left">
       <div className="flex items-center justify-between mb-3">
@@ -77,6 +96,48 @@ export default function AdminPanel({ currentUser }) {
           <span>{versionWarning}</span>
         </div>
       )}
+
+      <div className="mb-4 rounded-lg border border-green-500/40 bg-green-500/10 p-3">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="text-green-300 text-sm font-bold flex items-center gap-1.5">
+            🌍 Umumiy dunyo kalendari
+          </div>
+          <button
+            type="button"
+            disabled={worldBusy}
+            className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold text-xs transition-colors disabled:opacity-50"
+            onClick={handleAdvanceWorld}
+          >
+            {worldBusy ? "O'tkazilmoqda..." : "▶ Kunni o'tkazish (hammaga)"}
+          </button>
+        </div>
+        <p className="text-green-200/70 text-xs mb-2">
+          Bosilganda barcha faol ligalar bir kunga siljiydi va shu kundagi barcha o'yinlar hal qilinadi — bu foydalanuvchilarning yagona umumiy kalendari, ular o'zlari kun o'tkaza olmaydi.
+        </p>
+        {worldResult && (
+          worldResult.ok ? (
+            <div className="text-xs text-slate-300">
+              <div className="font-semibold mb-1">
+                Sana: {worldResult.date} · {worldResult.count} ta o'yin hal qilindi
+              </div>
+              {worldResult.matches.length > 0 && (
+                <div className="max-h-32 overflow-y-auto flex flex-col gap-0.5">
+                  {worldResult.matches.map((m, i) => (
+                    <div key={i} className="flex justify-between">
+                      <span>{m.league}: {m.home} vs {m.away}</span>
+                      <span className="font-mono">
+                        {m.score}{m.humanPlayers > 0 ? ` (${m.humanPlayers} user)` : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-xs text-red-300">{worldResult.error}</div>
+          )
+        )}
+      </div>
 
       <div className="flex flex-col gap-2">
         {users.map((u) => {

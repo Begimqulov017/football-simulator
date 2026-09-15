@@ -394,3 +394,249 @@ xavfli qayta qurishni talab qiladigan keyingi bosqich (agar xohlasangiz).
 ## O'zgargan fayllar
 `server/index.js` (yangi endpoint + versiya 4), `src/career/utils/careerApi.js`,
 `src/career/utils/season.js` (juda ko'p — kuboklar), `src/career/pages/{StartPage,GamesPage,HomePage,ClubPage,ProfilePage}.jsx`.
+
+---
+
+# YANGILANISH #6 (2026-09-14) — 1-BOSQICH: UMUMIY DUNYO (SHARED WORLD) — ADMIN BOSHQARADIGAN KALENDAR
+
+## ⚠️ BU ENG KATTA O'ZGARISH. Backend versiyasi 4 → 5.
+
+## Nima qilindi
+Bu — siz so'ragan "hammasi bitta serverda, admin kunni o'tkazadi, real userlar
+bir-biriga duch kelishi mumkin" g'oyasining **1-bosqichi** (asos qismi):
+
+1. **`server/engine.js`** (yangi) — mavjud `season.js` mantig'ining serverga
+   ko'chirilgan (portlangan) versiyasi: jamoa kuchi, o'yin natijasi, o'yinchi
+   shaxsiy statistikasi, jadval tuzish, standings yangilash.
+2. **`server/gamedata/`** (yangi) — barcha 172 klub va 21 liga ma'lumoti
+   (`teamsData.js`, `leaguesData.js`) serverga ko'chirildi.
+3. **`GET /api/world/:leagueId`** — istalgan foydalanuvchi ligadagi umumiy
+   jadval/turnir jadvalini ko'rishi mumkin.
+4. **`POST /api/admin/advance-world-day`** — FAQAT ADMIN. Bosilganda:
+   - Kamida bitta faol (foydalanuvchisi bor) HAR BIR liga uchun umumiy
+     kalendar 1 kunga siljiydi.
+   - O'sha kunga to'g'ri keladigan barcha o'yinlar hal qilinadi (jamoa
+     kuchiga qarab).
+   - Agar biror o'yinda REAL foydalanuvchi(lar) qatnashsa (o'z klubi shu
+     o'yinda bo'lsa) — ularning shaxsiy statistikasi (gol/assist/reyting)
+     avtomatik hisoblab, career saqlanmasiga yoziladi.
+   - **Bir xil klubdagi ikkita do'st ham, ikki xil (raqib) klubdagi ikkita
+     do'st ham — bittasi o'yinda ikkalasi ham qatnashadi.** Bu real test
+     bilan tasdiqlangan: "Manchester City 2-1 Liverpool FC" o'yinida 4 ta
+     real foydalanuvchi (2 tasi har tomonda) birga qatnashdi.
+5. Admin panelida yangi **"🌍 Kunni o'tkazish (hammaga)"** tugmasi — bosilganda
+   necha liga, necha o'yin hal qilingani va har birining natijasi ko'rinadi.
+
+## 🐛 Ikkita JIDDIY bug topildi va tuzatildi (real test orqali)
+1. **`db.js`ning kritik xatosi**: server ma'lumot o'qiganda faqat
+   `users`/`sessions`ni saqlab, YANGI `leagueWorlds` maydonini har safar
+   **jimgina o'chirib tashlar edi** — shuning uchun admin "kunni o'tkazsa"
+   ham, dunyo hech qachon 1-kundan oldinga siljimasdi. Tuzatildi.
+2. **Race condition (poyga holati)**: tez-tez so'rov kelganda (masalan bir
+   nechta admin/foydalanuvchi bir vaqtda harakat qilsa), ma'lumotlar
+   bir-birini "yeb qo'yishi" (session yo'qolishi, dunyo orqaga qaytishi)
+   mumkin edi. Butun so'rov jarayonini ketma-ket qayta ishlaydigan qulf
+   (lock) mexanizmi qo'shildi — 40 marta bir zumda ketma-ket so'rov yuborib
+   stress-test qilindi, barchasi to'g'ri ishladi.
+
+## MUHIM: Bu hali frontend bilan TO'LIQ ulanmagan
+Backend (server) to'liq ishlaydi va test qilingan. Lekin hozircha:
+- Frontend (o'yinchi tomoni) hali BU YANGI umumiy dunyoni ko'rsatmaydi —
+  har bir user hamon o'zining ESKI, shaxsiy simulyatsiyasida o'ynaydi
+  (avvalgi "Play Match", "Next Day" va h.k. hammasi eskicha ishlayapti).
+- Bu ataylab qilingan: avval ASOSNI (backend, admin nazorati, ikki real
+  user bitta o'yinda uchrashishi) mustahkam va xatosiz qilib qurish kerak
+  edi — bu tayyor va sinovdan o'tgan. Keyingi safar frontendni shu yangi
+  tizimga ulaymiz (Home sahifasi "Next Day" o'rniga umumiy dunyo sanasini
+  ko'rsatadi, o'z natijangizni ko'rish uchun interfeys va h.k.)
+
+## O'zgargan/qo'shilgan fayllar
+`server/engine.js` (yangi), `server/gamedata/` (yangi), `server/db.js`
+(kritik bug tuzatildi), `server/index.js` (yangi endpointlar + lock
+mexanizmi, versiya 5), `src/career/utils/careerApi.js`,
+`src/components/AdminPanel.jsx`.
+
+**Backend (`server/`) ni albatta almashtiring va push qiling** — bu safar
+frontend ('src') deyarli o'zgarmagan (faqat admin tugmasi qo'shildi), asosiy
+ish backendda.
+
+---
+
+# YANGILANISH #7 (2026-09-14) — FRONTEND UMUMIY DUNYOGA ULANDI + KONTRAKT TIZIMI
+
+## Backend versiyasi 5 → 6.
+
+## 1. Live Match — umumiy dunyo natijasini ko'rish
+- `GET /api/career/mine` endi umumiy dunyoning joriy sanasini (`worldDate`)
+  ham qaytaradi.
+- Yangi `POST /api/career/ack-result` — natijani "ko'rildi" deb belgilaydi.
+- Frontendda **yangi `/live-result` sahifasi** (`LiveResultPage.jsx`) — admin
+  kunni o'tkazganda sizning klubingiz o'ynagan bo'lsa, Home sahifasida
+  **"🌍 Yangi natija tayyor!"** banneri chiqadi. Bosilganda o'sha o'yin
+  daqiqama-daqiqa (tezlik tugmalari bilan) qayta ko'rsatiladi — xuddi avvalgi
+  "Play Match" kabi, lekin natija admin tomonidan ALLAQACHON hal qilingan
+  bo'lib, sizga faqat ko'rsatiladi.
+- GameContext endi har 20 soniyada serverni tekshirib turadi — ilova ochiq
+  turgan payt ham admin yangi kunni o'tkazsa, natija avtomatik ko'rinadi.
+- Home sahifasida umumiy dunyo sanasi ham doim ko'rsatiladi.
+
+## 2. Kontrakt tizimi (yangi)
+Aytilganidek — endi kontrakt **cheksiz emas**:
+- Har bir yangi karyera 3-8 yillik shartnoma bilan boshlanadi (liga
+  darajasiga qarab — katta ligalar uzunroq shartnoma taklif qiladi).
+- Shartnoma tugashiga ~2.5 oy qolganda avtomatik "Contract renewal talks"
+  xabari keladi (yangi yillik shartnoma + maosh taklifi bilan).
+- Agar 5 marta ketma-ket rad javob qilinsa — klub sizni **ozod qiladi**
+  ("Released" xabari bilan), va siz **erkin agent** bo'lasiz.
+- Agar shartnoma muddati tugab, yangilanmasa — avtomatik erkin agent
+  bo'lasiz.
+- Erkin agent bo'lganingizda: liga o'yinlari to'xtaydi, lekin vaqti-vaqti
+  bilan (taxminan har 5-6 kunda) turli klublardan (istalgan liga/mamlakatdan)
+  taklif xabarlari kela boshlaydi. Birini qabul qilsangiz — yangi klub,
+  yangi liga (agar boshqa ligadan bo'lsa — yangi jadval/kubok ham avtomatik
+  tuziladi), yangi shartnoma bilan davom etasiz.
+- Profile sahifasida yangi "CONTRACT" bo'limi — qolgan yil soni va maosh
+  ko'rsatiladi (yoki "Free Agent" holati).
+- Test qilib tekshirdim: 3 yillik shartnoma to'g'ri kunlarida tugadi, erkin
+  agentlikda 60 kun ichida 4 ta turli klubdan taklif keldi.
+
+## Eslatma
+Kontrakt tizimi hozircha **shaxsiy** (har bir user o'zining shartnomasi) —
+bu umumiy dunyo bilan bog'liq emas, alohida ishlaydi. Umumiy dunyoda
+(server) esa hali faqat LIGA o'yinlari boshqariladi; kubok/kontrakt/mashg'ulot
+hali mahalliy (client-side) davom etadi. Bu Faza 2ning navbatdagi qismi
+bo'ladi (NPC futbolchilar yoshi/retirement/akademiya, milliy terma jamoalar).
+
+## O'zgargan fayllar
+`server/index.js` (worldDate, ack-result endpoint, versiya 6),
+`src/career/utils/careerApi.js`, `src/career/utils/season.js` (kontrakt
+mantig'i), `src/career/context/GameContext.jsx` (polling, kontrakt/erkin
+agent handling), `src/career/pages/{StartPage,HomePage,ProfilePage}.jsx`,
+`src/career/pages/LiveResultPage.jsx` (yangi), `src/career/CareerApp.jsx`.
+
+---
+
+# 2-QISM (2026-09-15) — NPC hayot sikli + Milliy terma jamoalar
+
+`SERVER_VERSION` 6 → **8**, `REQUIRED_SERVER_VERSION` 6 → **8**.
+
+## A. NPC futbolchilar: yosh, pensiya, akademiya (YAKUNLANDI va ULANDI)
+
+Avval `engine.js` oxirida yozib qo'yilgan, lekin hech qayerdan chaqirilmaydigan
+funksiyalar endi umumiy dunyoga to'liq ulandi.
+
+**`server/engine.js`**
+- `initWorldSquad(team, homeCountry)` — YANGI. Statik `teamsData.js` squad'idan
+  **chuqur nusxa** olib, har bir futbolchiga `age`, `retireAge`, `nationality`
+  qo'shadi. Chuqur nusxa muhim: aks holda barcha league world'lar bitta
+  module-level `INITIAL_TEAMS` massivini o'zgartirar edi.
+- `ageAndRefreshSquad(squad, retirementLog, clubName, homeCountry, releaseLog)` —
+  qayta yozildi. Endi **pure** (kirish massivini o'zgartirmaydi) va squad hajmini
+  cheklaydi (pastda "Topilgan bug'lar"ga qarang).
+- `randomAcademyPlayer(homeCountry)` — id to'qnashuvi tuzatildi (`Date.now()`
+  bitta millisekundda o'nlab futbolchi yaratilganda takrorlanardi), `stats`,
+  `retireAge`, `nationality` qo'shildi.
+- `isSeasonComplete(world)`, `sortedTable(standings)` — YANGI yordamchilar.
+
+**`server/index.js`**
+- `ensureWorldForLeague()` endi `world.squads`, `season`, `seasonStartDate`,
+  `newsLog`, `seasonHistory` yaratadi **va eski (v6) world'larni migratsiya
+  qiladi** — mavjud schedule/standings saqlanib qoladi.
+- `advance-world-day` ichida `engine.resolveMatch(...)` YANGI imzo bilan
+  chaqiriladi: `world.squads[m.home]` / `world.squads[m.away]`.
+- `rolloverSeason(world, league)` — YANGI. **Server endi mavsum tugashini
+  aniqlaydi** (avval schedule hech qachon yangilanmas edi): barcha squadlar bir
+  yilga qariydi, chempion/pensiya/akademiya yangiliklari `newsLog`ga yoziladi
+  (OVR≥80 — alohida sarlavha), tugagan mavsum `seasonHistory`ga arxivlanadi,
+  keyingi mavsum jadvali va standings generatsiya qilinadi.
+- `GET /api/world/:leagueId` endi `squads`ni qaytarmaydi (`?includeSquads=1`
+  bo'lmasa) — har 20 soniyalik polling'ga ~400 futbolchi yubormaslik uchun.
+
+### Test paytida topilgan va tuzatilgan bug'lar
+1. **Tarkiblar cheksiz o'sardi.** 10 mavsumlik test: La Liga 319 → **830**
+   futbolchi (klubda 40+), o'rtacha OVR 73.7 → 68. Sabab: yiliga 2-5 akademiya
+   keladi, lekin atigi ~0.5 kishi pensiyaga chiqadi. **Tuzatildi:** squad hajmi
+   18-26 oralig'ida ushlab turiladi, klub eng kam qiymatli fringe futbolchilarni
+   chiqarib yuboradi (`squadValue()` — reyting + yoshlik bonusi / veteranlik
+   jarimasi). Endi 364 da barqaror, OVR ~73.5 da qoladi. Chiqarilganlarning 94% —
+   70 OVR dan past akademiya yoshlari; 80+ yulduz hech qachon chiqarilmaydi.
+2. **Darvozabonsiz klublar.** `valencia` va `malaga` 1 ta GK bilan keladi;
+   pensiya ustiga qo'shilib 0 ga tushardi. **Tuzatildi:** `MIN_GK = 2` kafolati
+   — zaxira GK bo'lmasa akademiyadan olinadi (`initWorldSquad`da ham).
+3. **Akademiya soni noto'g'ri hisoblanardi** (`age <= 18` o'tgan yilgi yoshlarni
+   ham qo'shardi) — endi id bo'yicha aniq yangi kelganlar sanaladi.
+
+## B. Umumiy kalendar (`db.worldDate`) — MUHIM O'ZGARISH
+
+Avval har bir liga o'zining `gameDate`ini yuritardi. Ligalar uzunligi har xil
+(18 jamoali liga 34 round, 20 jamoali 38, Superliga 52), shuning uchun ular
+turli kunlarda mavsumni tugatib, **sanalari bir-biridan uzilib ketardi**.
+Endi bitta global `db.worldDate` bor, barcha world'lar shundan o'qiydi.
+
+Shu sababli mavsum yakunida sana **sakramaydi** (avvalgi rejadagi "yozni
+o'tkazib yuborish" olib tashlandi) — yoz o'ynaladi, chunki aynan o'shanda
+xalqaro turnirlar bo'ladi.
+
+**Jarohat tiklanishi** ham qo'shildi: server jarohat berardi, lekin hech qachon
+tuzatmasdi — bu futbolchini terma jamoaga **abadiy yaroqsiz** qilib qo'yardi.
+
+## C. Milliy terma jamoalar + xalqaro turnirlar (YANGI MODUL)
+
+**`server/gamedata/nationsData.js`** — YANGI. 77 millat, konfederatsiyasi bilan
+(UEFA/AFC/CONMEBOL/CAF/CONCACAF). Har bir futbolchining millati **id hash'idan
+deterministik** hisoblanadi (`nationalityFor`) — hech narsa saqlanmaydi va
+futbolchi millati hech qachon o'zgarmaydi, liga umumiy dunyoga qo'shilganda ham.
+`NATION_WEIGHT` — millatlar og'irligi (Braziliya 10, Vetnam 2 va h.k.).
+
+**`server/international.js`** — YANGI, ~420 qator.
+- `buildPlayerPool(db)` — **butun o'yindagi har bir futbolchi**: faol umumiy
+  dunyodagi klublar `world.squads`dan, qolgan ~150 klub statik ma'lumotdan,
+  ustiga barcha real userlarning `careerSave`i.
+- `pickSquad()` — pozitsiya kvotalari bilan (3 GK / 7 himoyachi / 6 yarim maydon /
+  5 hujumchi) eng yaxshi 23 kishi. **Har bir o'yin oldidan qaytadan tanlanadi** —
+  doimiy joy yo'q.
+- Turnir davriyligi: `yil % 4 === 2` → Jahon chempionati (2026, 2030, 2034);
+  `yil % 4 === 0` → Yevro + Copa América + Osiyo kubogi + Afrika kubogi
+  (2028, 2032). **Hech qachon bir yilda to'qnashmaydi.**
+- Format: guruhlar (4 kishilik, 3 tur) → pley-off → final; penalti seriyasi bor.
+  Turnir hajmi moslashuvchan (32/16/8) — CONMEBOLda 10 mamlakat bor, hammasi
+  23 kishilik tarkib to'play olmaydi, shuning uchun Copa América 8 jamoada
+  o'tadi, butunlay o'tkazilmay qolishi o'rniga.
+- Xalqaro pauza: har 70 kunda o'rtoqlik o'yinlari (yoz oynasidan tashqari).
+- Real userlar: `careerSave.career.international = { country, caps, goals,
+  assists, trophies, lastCallUp }`; chempion tarkibdagi userlar kubokni oladi.
+- `GET /api/international`, `GET /api/international/nation/:country` — YANGI.
+
+**Frontend:** `src/career/pages/NationalTeamPage.jsx` (YANGI sahifa — tarkib /
+joriy turnirlar / tarix), AppShell'da "National Team" bandi, ProfilePage'da
+"INTERNATIONAL" kartochkasi, `careerApi.js`da `fetchInternational()` va
+`fetchNationSquad()`.
+
+### Bu yerda ham test bug topdi
+- **Deterministik millat taqsimoti tekis edi** → terma jamoa kuchi tasodifiy
+  bo'lib qolgandi (4 yillik testda **Boliviya JCh finaliga chiqdi**). Tuzatildi:
+  `NATION_WEIGHT` bilan og'irlangan taqsimot.
+- **`star_uz` 4 yilda atigi 2 marta chaqirildi** — sabab yuqoridagi tiklanmaydigan
+  jarohat bug'i. Tuzatilgandan keyin: 23 caps, 3 gol, 4 assist.
+- Terma tarkib GK'lar bilan boshlanardi (pozitsiya kvotalari tartibi) — endi
+  reyting bo'yicha saralanadi.
+
+## Test qilish (haqiqiy raqamlar bilan, taxminsiz)
+
+Uch xil test skripti, barchasi **haqiqiy ishlayotgan serverga** qarshi:
+- `test_engine_aging.js` — standalone, 10 mavsum squad evolyutsiyasi.
+- `test_e2e_seasons.js` — 1460 admin bosishi, 4 mavsum → **14/14 PASS**.
+- `test_migration.js` — eski v6 `db.json` → v8 server → **10/10 PASS**.
+- `test_international.js` — 1460 kun, 5 turnir, 603 xalqaro o'yin → **14/14 PASS**.
+- Ko'p ligali test (La Liga + Bundesliga + Superliga, turli uzunlikdagi
+  mavsumlar) → **6/6 PASS**, uchalasi ham bitta sanada qoladi.
+
+## Ma'lum cheklov
+Millat id hash'idan kelib chiqqani uchun real futbolchilar "noto'g'ri"
+mamlakatga tushishi mumkin (masalan Antonio Rüdiger O'zbekiston termasida).
+Buni tuzatish uchun `teamsData.js`dagi 2591 futbolchiga qo'lda `nationality`
+yozib chiqish kerak — hozircha qilinmadi.
+
+## KEYINGI QADAM (3-vazifa — HALI QILINMAGAN)
+Kubok / Training / Xabarlarni umumiy dunyoga ko'chirish. Bu eng xavfli qism;
+reja yozilib, tasdiqlanmaguncha boshlanmaydi.

@@ -24,15 +24,21 @@ function ensureDataDir() {
 function readDB() {
   ensureDataDir();
   if (!fs.existsSync(DB_FILE)) {
-    return { users: [], sessions: {} };
+    return { users: [], sessions: {}, leagueWorlds: {} };
   }
   try {
     const raw = fs.readFileSync(DB_FILE, 'utf-8');
     const parsed = JSON.parse(raw);
-    return { users: parsed.users || [], sessions: parsed.sessions || {} };
+    // MUHIM: parsed'dagi BARCHA maydonlarni saqlab qolamiz (...parsed birinchi),
+    // keyin faqat yo'q bo'lsa standart qiymat beramiz. Avval bu yerda faqat
+    // users/sessions qaytarilardi — shu tufayli leagueWorlds (umumiy dunyo
+    // holati) har bir o'qishda jimgina o'chirilib, hech qachon oldinga
+    // siljimas edi. Kelajakda yangi top-level maydon qo'shsangiz ham, endi
+    // bu funksiyani o'zgartirish shart emas.
+    return { users: [], sessions: {}, leagueWorlds: {}, ...parsed };
   } catch (err) {
     console.error("db.json o'qishda xato, bo'sh baza bilan davom etilmoqda:", err.message);
-    return { users: [], sessions: {} };
+    return { users: [], sessions: {}, leagueWorlds: {} };
   }
 }
 

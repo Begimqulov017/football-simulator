@@ -11,7 +11,7 @@ function formatDate(iso) {
 }
 
 export default function HomePage() {
-  const { player, nextDay, matchdayNext, prepareMatchday } = useGame();
+  const { player, nextDay, matchdayNext, prepareMatchday, worldDate, hasUnwatchedResult } = useGame();
   const navigate = useNavigate();
 
   if (!player) return null;
@@ -46,6 +46,36 @@ export default function HomePage() {
         </div>
         <span className="badge badge-green">Day {player.career.day}</span>
       </div>
+
+      {hasUnwatchedResult && (
+        <div
+          className="card"
+          style={{
+            marginBottom: 18, borderColor: 'var(--accent-gold)', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+          }}
+          onClick={() => navigate('/live-result')}
+        >
+          <div>
+            <div style={{ fontFamily: 'var(--font-display)', color: 'var(--accent-gold)' }}>🌍 Yangi natija tayyor!</div>
+            <div className="sub">Umumiy dunyoda o'yiningiz hal qilindi - ko'rish uchun bosing.</div>
+          </div>
+          <span className="badge badge-gold">▶ Ko'rish</span>
+        </div>
+      )}
+
+      {worldDate && (
+        <div className="sub" style={{ marginBottom: 12 }}>
+          🌍 Umumiy dunyo sanasi: <b>{worldDate}</b> (admin tomonidan boshqariladi)
+        </div>
+      )}
+
+      {player.career.freeAgent && (
+        <div className="card" style={{ marginBottom: 18, borderColor: 'var(--accent-red)', textAlign: 'center' }}>
+          <div style={{ fontFamily: 'var(--font-display)', color: 'var(--accent-red)', marginBottom: 4 }}>🆓 FREE AGENT</div>
+          <div className="sub">You're without a club right now - check Messages for offers coming in.</div>
+        </div>
+      )}
 
       <div className="grid grid-2" style={{ marginBottom: 18 }}>
         {/* Time / Next Day */}

@@ -617,7 +617,7 @@ export function getNextFixtureLabel(player) {
 }
 
 export function isMatchdayNext(player) {
-  if (!player) return false;
+  if (!player || player.career.freeAgent) return false;
   const newDate = addDays(player.career.gameDate, 1);
   const schedule = player.career.schedule || [];
   if (schedule.some((r) => r.date === newDate && !r.matches.every((m) => m.played))) return true;
@@ -786,6 +786,27 @@ export function prepareNextDay(player) {
     }];
   }
 
+  // Free agents don't have a club schedule to advance through - just wait
+  // for offers (generated below) instead of simulating any matches.
+  if (career.freeAgent) {
+    if (Math.random() < 0.18) {
+      const offer = maybeGenerateFreeAgentOffer(player, newDate);
+      if (offer) messages = [...messages, offer];
+    }
+    return {
+      nextPlayer: { ...player, age, career: { ...career, messages } },
+      matchInfo: null
+    };
+  }
+
+  // Contract talks / expiry - checked before anything else, since an
+  // expiring deal should be visible well before matchday logic below.
+  ({ career, messages } = checkContractStatus(player, career, newDay, messages));
+  if (career.freeAgent) {
+    // Just went free THIS tick - no more club-specific logic applies today.
+    return { nextPlayer: { ...player, age, career }, matchInfo: null };
+  }
+
   let clubTier = player.club.tier;
   const roundIdx = schedule.findIndex((r) => r.date === newDate && !r.matches.every((m) => m.played));
   if (roundIdx !== -1) {
@@ -931,13 +952,81 @@ export function computeStartingWage(overall, tier, leagueId) {
   return Math.max(150, Math.round(overall * 6 * tierMult * prestige));
 }
 
+// Contracts run for a FIXED length (3-8 years, bigger/more ambitious clubs
+// offer longer deals) - not indefinitely, and not something you can just
+// keep asking to raise forever. Somewhere around 2-3 months before it
+// expires the club will want to talk about a new one.
+export function rollContractLength(leagueId) {
+  const prestige = LEAGUE_PRESTIGE[leagueId] || 0.55;
+  const base = 3 + Math.round(prestige * 3); // ~3 (small leagues) to ~6 (big leagues)
+  return clamp(base + randInt(-1, 2), 3, 8);
+}
+
 export function computeContractOffer(player) {
   const ratings = player.career.matchRatings;
   const avgRating = ratings.length ? ratings.reduce((a, b) => a + b, 0) / ratings.length : 6;
   const perfMult = 0.9 + Math.max(0, avgRating - 6) * 0.25;
   const growthMult = 1 + Math.max(0, player.overall - player.firstRating) / 60;
   const newWage = Math.round((player.career.weeklyWage || 200) * perfMult * growthMult * (1 + Math.random() * 0.2));
-  return Math.max(newWage, player.career.weeklyWage || 200);
+  return { wage: Math.max(newWage, player.career.weeklyWage || 200), years: rollContractLength(player.club.leagueId) };
+}
+
+const CONTRACT_TALKS_WINDOW_DAYS = 75; // start negotiating ~2.5 months out
+
+// Checks whether it's time to open contract talks or the deal has run out
+// entirely - called once per day from prepareNextDay.
+function checkContractStatus(player, career, newDay, messages) {
+  if (!career.contract || career.freeAgent) return { career, messages };
+  const daysLeft = (career.contract.signedDay + career.contract.yearsTotal * 365) - newDay;
+
+  if (daysLeft <= 0) {
+    // Contract ran out with no renewal - free agency.
+    return {
+      career: { ...career, freeAgent: true, contract: null },
+      messages: [...messages, {
+        id: newId('msg'), type: 'club', date: career.gameDate, from: player.club.name,
+        subject: 'Contract expired',
+        body: `Your contract with ${player.club.name} has run out and wasn't renewed in time - you're now a free agent. Offers from other clubs should start coming in.`,
+        read: false, resolved: true
+      }]
+    };
+  }
+
+  if (daysLeft <= CONTRACT_TALKS_WINDOW_DAYS && !career.contractTalksOpened) {
+    const offer = computeContractOffer(player);
+    return {
+      career: { ...career, contractTalksOpened: true },
+      messages: [...messages, {
+        id: newId('msg'), type: 'contract', date: career.gameDate, from: player.club.name,
+        subject: 'Contract renewal talks',
+        body: `Your deal with ${player.club.name} runs out in a few months. They're offering a new ${offer.years}-year contract at $${offer.wage.toLocaleString()}/week - accept, or negotiate elsewhere before time runs out.`,
+        read: false, resolved: false,
+        offer
+      }]
+    };
+  }
+
+  return { career, messages };
+}
+
+// Free agents get the occasional club offer (from anywhere) until they sign
+// with someone - the equivalent of "waiting by the phone".
+function maybeGenerateFreeAgentOffer(player, gameDate) {
+  if (Math.random() > 0.18) return null;
+  const candidates = INITIAL_TEAMS.filter((t) => t.id !== player.club?.id);
+  if (!candidates.length) return null;
+  const team = pick(candidates);
+  const league = LEAGUES.find((l) => l.teamIds.includes(team.id));
+  if (!league) return null;
+  const wage = Math.max(120, Math.round((player.career.weeklyWage || 250) * (0.7 + Math.random() * 0.5)));
+  const years = rollContractLength(league.id);
+  return {
+    id: newId('msg'), type: 'transfer', date: gameDate, from: team.name,
+    subject: `Contract offer from ${team.name}`,
+    body: `${team.name} want to sign you as a free agent: a ${years}-year deal at $${wage.toLocaleString()}/week.`,
+    read: false, resolved: false,
+    offer: { teamId: team.id, leagueId: league.id, wage, years, freeAgentSigning: true }
+  };
 }
 
 export function getLeagueTable(player) {

@@ -3,7 +3,7 @@
 // the "First Club" roulette on the Start Page (pick a country -> pick a club)
 // and the League / Top Scorers pages later on.
 
-export const LEAGUES = [
+const LEAGUES = [
   {
     id: 'la_liga',
     name: 'La Liga',
@@ -179,7 +179,7 @@ export const LEAGUES = [
   }
 ];
 
-export function getLeagueByTeamId(teamId) {
+function getLeagueByTeamId(teamId) {
   return LEAGUES.find((l) => l.teamIds.includes(teamId));
 }
 
@@ -188,7 +188,7 @@ export function getLeagueByTeamId(teamId) {
 // land), plus a handful of other big footballing nations that don't have a
 // league in this dataset yet — picking one of those just means no home-club
 // boost is applied and the roll stays fully random across all leagues.
-export const NATIONALITIES = [
+const NATIONALITIES = [
   { name: 'Uzbekistan', flag: '🇺🇿' },
   { name: 'Spain', flag: '🇪🇸' },
   { name: 'England', flag: '🏴' },
@@ -232,4 +232,6 @@ export const NATIONALITIES = [
 // leagues currently in the game, picking a home nationality raises the
 // chance of a home-country club from ~5% to ~20-25%), instead of a flat
 // leaguesCount-way random pick.
-export const HOME_COUNTRY_CLUB_BOOST = 6;
+const HOME_COUNTRY_CLUB_BOOST = 6;
+
+module.exports = { LEAGUES, NATIONALITIES, HOME_COUNTRY_CLUB_BOOST, getLeagueByTeamId };

@@ -40,9 +40,48 @@ export default function ProfilePage() {
         </div>
 
         <div className="card">
-          <div className="card-title">TRANSFERS</div>
-          <NotStarted icon="🔁" title="No transfer history" desc="Transfer negotiations aren't live yet." />
+          <div className="card-title">INTERNATIONAL</div>
+          {player.career?.international?.caps ? (
+            <>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 18 }}>
+                {player.career.international.country}
+              </div>
+              <div className="sub" style={{ marginTop: 6 }}>
+                {player.career.international.caps} caps · {player.career.international.goals || 0} gol · {player.career.international.assists || 0} assist
+              </div>
+              {!!(player.career.international.trophies || []).length && (
+                <div style={{ marginTop: 8 }}>
+                  {player.career.international.trophies.map((t, i) => (
+                    <span key={i} className="badge badge-gold" style={{ marginRight: 6, marginBottom: 4, display: 'inline-block' }}>
+                      🏆 {t.name} {t.year}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <NotStarted icon="🌍" title="No caps yet" desc="Terma jamoaga eng yaxshi futbolchilar chaqiriladi — reytingingizni oshiring." />
+          )}
         </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 18 }}>
+        <div className="card-title">CONTRACT</div>
+        {player.career.freeAgent ? (
+          <div style={{ color: 'var(--accent-red)', fontSize: 14 }}>
+            🆓 You're a free agent - waiting for club offers in your Messages.
+          </div>
+        ) : player.career.contract ? (
+          <>
+            <div className="list-row">
+              <span>Years remaining</span>
+              <span>{Math.max(0, Math.ceil((player.career.contract.signedDay + player.career.contract.yearsTotal * 365 - player.career.day) / 365))} / {player.career.contract.yearsTotal}</span>
+            </div>
+            <div className="list-row"><span>Weekly wage</span><span>${player.career.weeklyWage.toLocaleString()}</span></div>
+          </>
+        ) : (
+          <div className="sub">No contract on file.</div>
+        )}
       </div>
 
       <div className="grid grid-2" style={{ marginBottom: 18 }}>

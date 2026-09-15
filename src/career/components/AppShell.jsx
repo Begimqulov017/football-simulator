@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { to: '/messages', icon: 'mail', label: 'Messages & Suggests' },
   { to: '/training', icon: 'dumbbell', label: 'Training' },
   { to: '/transfers', icon: 'transfer', label: 'Transfers' },
+  { to: '/national-team', icon: 'trophy', label: 'National Team' },
   { to: '/news', icon: 'news', label: 'News' },
   { to: '/users', icon: 'users', label: 'Users' }
 ];

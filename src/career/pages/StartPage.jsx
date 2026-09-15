@@ -4,7 +4,7 @@ import { useGame } from '../context/GameContext';
 import { rollFirstRating, rollPotential, rollClub, buildStartingStats } from '../utils/playerGen';
 import { NATIONALITIES } from '../data/leaguesData';
 import { joinClubRoster, previewClubTier } from '../data/clubRosterStore';
-import { buildSeasonSchedule, initStandings, computeStartingWage, setupSeasonCups } from '../utils/season';
+import { buildSeasonSchedule, initStandings, computeStartingWage, setupSeasonCups, rollContractLength } from '../utils/season';
 
 const SPIN_MS = 900;
 
@@ -134,6 +134,10 @@ export default function StartPage() {
         growthUsedThisYear: 0,
         money: 1000,
         weeklyWage,
+        contract: { yearsTotal: rollContractLength(clubResult.league.id), signedDay: 1 },
+        contractTalksOpened: false,
+        contractFailedNegotiations: 0,
+        freeAgent: false,
         form: 'Average',
         stamina: 100,
         trophies: [],

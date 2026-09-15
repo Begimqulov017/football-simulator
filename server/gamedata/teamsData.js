@@ -1,4 +1,4 @@
-export const INITIAL_TEAMS = [
+const INITIAL_TEAMS = [
   {
     id: 'real_madrid',
     name: 'Real Madrid',
@@ -3895,3 +3895,4 @@ export const INITIAL_TEAMS = [
     ]
   },
 ];
+module.exports = { INITIAL_TEAMS };
