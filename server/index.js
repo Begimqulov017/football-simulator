@@ -721,6 +721,11 @@ app.get('/api/international/nation/:country', authMiddleware, (req, res) => {
     }
   });
 });
+app.get('/api/admin/export-db', authMiddleware, (req, res) => {
+  if (!req.user.isAdmin) return res.status(403).json({ ok: false, error: 'Faqat admin' });
+  const db = readDB();
+  res.json(db);
+});
 
 // MongoDB'ga ulanish app.listen()dan OLDIN tugashi shart — aks holda birinchi
 // so'rov readDB()ni cache hali yo'q paytda chaqirib qolishi mumkin edi.
