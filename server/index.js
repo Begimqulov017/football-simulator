@@ -22,7 +22,7 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const { readDB, writeDB } = require('./db');
+const { initDB, readDB, writeDB } = require('./db');
 const engine = require('./engine');
 const international = require('./international');
 
@@ -80,7 +80,10 @@ function ensureAdminSeeded() {
   writeDB(db);
   console.log(`✅ Admin akkaunt tayyorlandi: ${ADMIN_USERNAME}`);
 }
-ensureAdminSeeded();
+// MUHIM: bu endi initDB() muvaffaqiyatli tugagandan KEYIN chaqiriladi (pastda,
+// initDB().then() ichida) — MongoDB'ga o'tishdan oldin bu yerda darhol
+// chaqirilardi, chunki readDB() eski db.js'da har doim sinxron tayyor edi.
+// Endi readDB() faqat initDB() tugagandan keyin ishlaydi.
 
 // ------------------------------------------------------------
 // Yordamchi funksiyalar
@@ -719,6 +722,19 @@ app.get('/api/international/nation/:country', authMiddleware, (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Match Simulator auth server: http://localhost:${PORT}`);
-});
+// MongoDB'ga ulanish app.listen()dan OLDIN tugashi shart — aks holda birinchi
+// so'rov readDB()ni cache hali yo'q paytda chaqirib qolishi mumkin edi.
+// Ulanib bo'lmasa server umuman ishga tushmaydi (process.exit) — noto'g'ri
+// MONGODB_URI bilan "tirik" ko'rinib, aslida hech narsa saqlamaydigan
+// serverdan ko'ra Render logida ochiq xato yaxshiroq.
+initDB()
+  .then(() => {
+    ensureAdminSeeded();
+    app.listen(PORT, () => {
+      console.log(`🚀 Match Simulator auth server: http://localhost:${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("❌ MongoDB'ga ulanib bo'lmadi, server ishga tushmaydi:", err.message);
+    process.exit(1);
+  });

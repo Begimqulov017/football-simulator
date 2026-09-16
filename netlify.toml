@@ -1,0 +1,18 @@
+# Netlify build sozlamalari.
+# REACT_APP_API_BASE_URL bu yerda YOZILMAYDI — uni Netlify UI'dagi
+# Site settings > Environment variables bo'limidan qo'ying (Render'dagi
+# backend manzili). Muhit o'zgaruvchisi loyihadagi .env faylidan ustun turadi.
+[build]
+  command = "npm run build"
+  publish = "build"
+
+[build.environment]
+  # CRA build'da eslint ogohlantirishlari xatoga aylanib build'ni yiqitmasin
+  CI = "false"
+  NODE_VERSION = "20"
+
+# Ilova bitta sahifali (SPA) — har qanday yo'l index.html'ga yo'naltiriladi.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

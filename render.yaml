@@ -1,0 +1,22 @@
+# Render uchun "blueprint". Render dashboard'da New > Blueprint orqali shu
+# faylni tanlasangiz, backend avtomatik shu sozlamalar bilan yaratiladi.
+#
+# DIQQAT: disk (persistent storage) Render'ning PULLIK rejasida ishlaydi.
+# Bepul rejada disk yo'q — u holda pastdagi `disk:` blokini va DATA_DIR
+# o'zgaruvchisini o'chiring, lekin bilingki har deploy/restart'da barcha
+# foydalanuvchilar va umumiy dunyo holati YO'QOLADI.
+services:
+  - type: web
+    name: football-career-api
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/meta
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+    disk:
+      name: football-data
+      mountPath: /var/data
+      sizeGB: 1

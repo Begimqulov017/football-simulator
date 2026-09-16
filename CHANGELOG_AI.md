@@ -640,3 +640,92 @@ yozib chiqish kerak — hozircha qilinmadi.
 ## KEYINGI QADAM (3-vazifa — HALI QILINMAGAN)
 Kubok / Training / Xabarlarni umumiy dunyoga ko'chirish. Bu eng xavfli qism;
 reja yozilib, tasdiqlanmaguncha boshlanmaydi.
+
+---
+
+# 3-QISM (2026-09-16) — MongoDB'ga o'tish (Render Free plan doimiy saqlash muammosi)
+
+## Muammo
+Render Free planda **Persistent Disk yo'q**. Har bir deploy/restart'da
+`server/data/db.json` (users, parollar, karyeralar, umumiy dunyo) butunlay
+o'chib ketardi — chunki fayl tizimi konteyner bilan birga qayta yaratiladi.
+Shell orqali qo'lda backup/restore qilish mumkin edi, lekin bu **har safar**
+qo'lda takrorlanishi kerak edi va xatoga moyil edi.
+
+## Yechim: MongoDB Atlas (bepul, cheksiz muddatga, Render'dan mustaqil)
+
+**`server/db.js`** — TO'LIQ QAYTA YOZILDI:
+- Fayl o'rniga MongoDB Atlas'ga yozadi (`MONGODB_URI` muhit o'zgaruvchisi orqali).
+- `readDB()`/`writeDB()` interfeysi **AYNAN oldingidek** qoldi — sinxron,
+  butun db obyektini qaytaradi/qabul qiladi. Buning siri: butun baza xotirada
+  (`cache`) saqlanadi, Mongo bilan FONDA sinxronlanadi. Bu index.js'dagi
+  **19 ta chaqiruv joyining birortasini ham o'zgartirishga hojat qoldirmadi**.
+- Yozishlar KETMA-KET navbatga qo'yiladi (`writeQueue`) — bir nechta
+  `writeDB()` tez-tez chaqirilsa, Mongo'ga tasodifiy tartibda emas, chaqirilgan
+  tartibda yetib boradi (server/index.js'dagi `withLock()` bilan bir xil
+  maqsad, lekin Mongo tomonida).
+- `MONGODB_URI` topilmasa server **umuman ishga tushmaydi** (ochiq xato) —
+  noto'g'ri sozlangan holda "tirik" ko'rinib, aslida hech narsa saqlamaydigan
+  serverdan ko'ra bu xavfsizroq.
+
+**`server/index.js`** — kichik o'zgarish:
+- `initDB()` endi `app.listen()`dan OLDIN kutiladi (`.then()` ichida).
+- `ensureAdminSeeded()` chaqiruvi (avval modul yuklanganda darhol ishlardi)
+  endi `initDB()` tugagandan KEYIN chaqiriladi.
+
+## Test qilish (haqiqiy MongoDB Atlas'ga bu muhitdan ulanib bo'lmagani uchun, drayverni deterministik soxta versiya bilan almashtirib)
+
+### 1) `test_db_mongo.js` — db.js SHARTNOMASINI tekshiruvchi unit test
+`require('mongodb')`ni Node module tizimi darajasida almashtirib, 5 ta holatni
+tekshirdim:
+1. Birinchi ishga tushirish — bo'sh baza qaytadi va darhol saqlanadi
+2. `writeDB()` haqiqatan "bazaga" yetib boradi (faqat xotiraga emas)
+3. **Server qayta ishga tushishi simulyatsiyasi** (butunlay yangi modul
+   instance, xuddi yangi Render deploy kabi) — oldin yozilgan MA'LUMOT
+   TO'LIQ QAYTIB KELDI (aynan hozirgi asosiy bug shu yerda tuzatiladi)
+4. 20 ta tez-tez yozish ketma-ketligi — hech biri yo'qolmadi, tartib buzilmadi
+5. `MONGODB_URI` yo'q bo'lsa server ochiq xato beradi, jim qolmaydi
+
+**Natija: 5/5 PASS**
+
+### 2) To'liq HTTP darajasidagi end-to-end test
+`node index.js`ni haqiqiy Express bilan, lekin faylga asoslangan soxta
+"Mongo" bilan (bu ham tashqi, process'dan mustaqil — `/tmp` fayliga yozadi,
+xuddi haqiqiy tashqi baza kabi) ishga tushirib:
+1. Admin login qilindi, yangi user (`testuser1`) ro'yxatdan o'tkazildi,
+   karyera saqlandi
+2. Server **o'ldirildi** (`kill`) — bu Render'ning deploy paytida konteynerni
+   yo'q qilishini simulyatsiya qiladi
+3. Server **qaytadan ishga tushirildi** — yangi Node process, mutlaqo yangi
+   xotira
+4. `testuser1` bilan qayta login qilindi — **MUVAFFAQIYATLI**, karyera
+   ma'lumotlari (`Real Madrid`, pozitsiya, statistika) **to'liq saqlanib
+   qolgan**
+
+```
+=== RESTARTING SERVER (simulating Render redeploy) ===
+✅ MongoDB ulandi (football_career.appstate) — 2 user, 0 liga world topildi
+=== VERIFY DATA SURVIVED RESTART ===
+{"ok":true,"token":"...","user":{"username":"testuser1",...}}
+{"ok":true,"player":{"id":"p1","name":"Test","surname":"User",...}}
+```
+
+### 3) Regressiya: 2-qismdagi barcha testlar MongoDB-orqa fon bilan qayta ishga tushirildi
+`test_e2e_seasons.js` (4 mavsum, 1520 o'yin, squad evolyutsiyasi) — **hammasi
+PASS**, hech narsa buzilmagan. Bu MongoDB'ga o'tish faqat saqlash qatlamini
+almashtirganini, o'yin mantig'iga tegmaganini tasdiqlaydi.
+
+## Sizga kerak bo'ladigan qadam (deploy paytida)
+1. MongoDB Atlas'da BEPUL (M0, 512MB, muddatsiz) klaster yarating
+2. Connection string oling
+3. Render → Environment → `MONGODB_URI` muhit o'zgaruvchisini qo'shing
+4. Kodni push qiling — SHU BILAN endi hech qanday deploy ma'lumotni
+   o'chirmaydi, chunki baza Render'dan butunlay mustaqil joyda turadi
+
+## Ma'lum cheklov
+`db.json` (barcha users + har bir liganing to'liq squad'lari + xalqaro
+turnirlar tarixi) bitta MongoDB HUJJATI sifatida saqlanadi. Bu hozirgi
+o'lcham uchun (ehtimol bir necha MB) yaxshi ishlaydi, lekin foydalanuvchilar
+soni juda ko'payib ketsa (ming(lab) faol karyera), MongoDB hujjat hajmi
+chegarasi (16MB) yaqinlashishi mumkin — o'shanda har bir userni/liga world'ni
+ALOHIDA hujjat qilib bo'lish kerak bo'ladi. Hozircha bu muammo emas.
