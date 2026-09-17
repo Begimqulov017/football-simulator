@@ -9,7 +9,7 @@
 // changes tied to age and how the match went.
 // ---------------------------------------------------------------------------
 
-import { INITIAL_TEAMS } from '../data/teamsData';
+import { INITIAL_TEAMS } from '../../data/teamsData';
 import { LEAGUES } from '../data/leaguesData';
 import { getMergedSquad } from '../data/clubRosterStore';
 import { isMvpPerformance } from './statCalc';

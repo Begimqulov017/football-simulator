@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import { useGame } from '../context/GameContext';
 import { getPlayerFixtures } from '../utils/season';
-import { INITIAL_TEAMS } from '../data/teamsData';
+import { INITIAL_TEAMS } from '../../data/teamsData';
 
 export default function GamesPage() {
   const { player, matchdayNext, prepareMatchday } = useGame();

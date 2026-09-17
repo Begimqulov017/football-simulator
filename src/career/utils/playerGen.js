@@ -1,5 +1,5 @@
 import { LEAGUES, HOME_COUNTRY_CLUB_BOOST } from '../data/leaguesData';
-import { INITIAL_TEAMS } from '../data/teamsData';
+import { INITIAL_TEAMS } from '../../data/teamsData';
 import { generateSubStatsForMain, generateGkSubStats, calcMainStats, calcGoalkeeperOVR, calcOVR } from './statCalc';
 
 const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;

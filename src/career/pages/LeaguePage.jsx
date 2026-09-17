@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import AppShell from '../components/AppShell';
 import { useGame } from '../context/GameContext';
 import { getLeagueTable } from '../utils/season';
-import { INITIAL_TEAMS } from '../data/teamsData';
+import { INITIAL_TEAMS } from '../../data/teamsData';
 
 export default function LeaguePage() {
   const { player } = useGame();

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { removePlayerFromClubRoster, joinClubRoster, updatePlayerInClubRoster } from '../data/clubRosterStore';
-import { INITIAL_TEAMS } from '../data/teamsData';
+import { INITIAL_TEAMS } from '../../data/teamsData';
 import { advanceOneDay, prepareNextDay, isMatchdayNext, computeContractOffer, buildSeasonSchedule, initStandings, setupSeasonCups } from '../utils/season';
 import { LEAGUES } from '../data/leaguesData';
 import { saveCareerToServer, loadCareerFromServer, ackMatchResult } from '../utils/careerApi';

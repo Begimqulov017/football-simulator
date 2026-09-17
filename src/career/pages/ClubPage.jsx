@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import { useGame } from '../context/GameContext';
-import { INITIAL_TEAMS } from '../data/teamsData';
+import { INITIAL_TEAMS } from '../../data/teamsData';
 import { getMergedSquad } from '../data/clubRosterStore';
 import { getPlayerFixtures } from '../utils/season';
 import { fetchClubRoster } from '../utils/careerApi';
