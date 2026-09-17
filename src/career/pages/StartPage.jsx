@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGame } from '../context/GameContext';
 import { rollFirstRating, rollPotential, rollClub, buildStartingStats } from '../utils/playerGen';
-import { NATIONALITIES } from '../data/leaguesData';
+import { NATIONALITIES } from '../../data/leaguesData';
 import { joinClubRoster, previewClubTier } from '../data/clubRosterStore';
 import { buildSeasonSchedule, initStandings, computeStartingWage, setupSeasonCups, rollContractLength } from '../utils/season';
 
