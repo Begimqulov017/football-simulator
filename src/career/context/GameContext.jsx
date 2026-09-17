@@ -52,12 +52,20 @@ export function GameProvider({ children, username }) {
     firstLoad.current = true;
     setReady(false);
     (async () => {
-      const { player: serverPlayer, worldDate: wd } = await loadCareerFromServer();
+      const { player: serverPlayer, worldDate: wd, confirmed } = await loadCareerFromServer();
       if (cancelled) return;
-      if (serverPlayer) {
+      if (confirmed) {
+        // The server gave an authoritative answer - trust it completely,
+        // even when it's null. Falling back to a stale local save here is
+        // exactly what let a wiped or never-existing career keep showing up
+        // (e.g. after an admin "Wipe Data", or on a fresh MongoDB-backed
+        // deploy with an old browser cache still lying around).
         setPlayer(serverPlayer);
         persistLocalSave(username, serverPlayer);
       } else {
+        // Could not reach the server (offline, cold start, invalid session)
+        // - fall back to whatever this device has cached so play can
+        // continue rather than losing everything on a blip.
         setPlayer(loadLocalSave(username));
       }
       if (wd) setWorldDate(wd);
@@ -74,13 +82,22 @@ export function GameProvider({ children, username }) {
   useEffect(() => {
     const interval = setInterval(async () => {
       if (firstLoad.current) return;
-      const { player: serverPlayer, worldDate: wd } = await loadCareerFromServer();
+      const { player: serverPlayer, worldDate: wd, confirmed } = await loadCareerFromServer();
       if (wd) setWorldDate(wd);
+      if (confirmed && !serverPlayer) {
+        // The account no longer has a career on the server (e.g. an admin
+        // ran "Wipe Data" while this tab was open) - clear it here too
+        // instead of leaving a now-fictional career on screen.
+        setPlayer(null);
+        persistLocalSave(username, null);
+        return;
+      }
       if (serverPlayer?.career?.lastMatchResult && !serverPlayer.career.lastMatchResult.seenAt) {
         setPlayer((prev) => (prev ? { ...prev, career: { ...prev.career, lastMatchResult: serverPlayer.career.lastMatchResult } } : prev));
       }
     }, 20000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Har bir o'zgarishda: darhol mahalliy (localStorage), va bir oz kechikish

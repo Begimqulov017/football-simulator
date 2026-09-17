@@ -67,8 +67,19 @@ export async function saveCareerToServer(player) {
 // Endi umumiy dunyoning joriy sanasini ham qaytaradi.
 export async function loadCareerFromServer() {
   const data = await apiFetch('/api/career/mine');
-  if (!data.ok) return { player: null, worldDate: null };
-  return { player: data.player, worldDate: data.worldDate };
+  if (!data.ok) {
+    // Couldn't reach the server or the session is invalid - we genuinely
+    // don't know whether a career exists, so the caller should fall back to
+    // whatever it has cached locally rather than treating this as a
+    // confirmed "no career".
+    return { player: null, worldDate: null, confirmed: false };
+  }
+  // The server answered authoritatively: data.player is exactly what exists
+  // for this account right now, including null (no career at all - e.g.
+  // right after an admin "Wipe Data"). confirmed: true tells the caller to
+  // trust this value even when it's null, instead of resurrecting a stale
+  // local save.
+  return { player: data.player, worldDate: data.worldDate, confirmed: true };
 }
 
 // Umumiy dunyodagi so'nggi o'yin natijasi "ko'rildi" deb belgilanadi - shu
@@ -81,6 +92,22 @@ export async function ackMatchResult() {
 // one day, resolving that day's fixtures for everyone at once.
 export async function advanceWorldDay() {
   return apiFetch('/api/admin/advance-world-day', { method: 'POST' });
+}
+
+// TO'LIQ TOZALASH — faqat admin uchun. Barcha userlar, karyeralar, liga
+// world'lari, xalqaro turnirlar tarixi o'chadi. Admin akkauntning o'zi
+// (parol bilan) qoladi, lekin uning ham karyerasi tozalanadi. Server yangi
+// sessiya tokeni qaytaradi, chunki eski tokenlar (shu jumladan chaqiruvchi
+// adminning o'zinikidan tashqari hech biri emas — buning o'zinikisi ham)
+// wipe paytida bekor qilinadi; shu YANGI tokenni localStorage'ga darhol
+// yozib qo'yamiz, aks holda keyingi so'rov "Sessiya topilmadi" bilan
+// muvaffaqiyatsiz tugaydi.
+export async function wipeAllData() {
+  const data = await apiFetch('/api/admin/wipe-data', { method: 'POST' });
+  if (data.ok && data.token) {
+    try { localStorage.setItem(TOKEN_KEY, data.token); } catch { /* e'tiborsiz */ }
+  }
+  return data;
 }
 
 // Current shared schedule/standings for a league - anyone logged in can view.

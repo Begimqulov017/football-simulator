@@ -559,6 +559,47 @@ app.get('/api/world/:leagueId', authMiddleware, (req, res) => {
 // human player whose club is involved gets their own personal match result
 // computed and written straight to their careerSave, plus a `lastMatchResult`
 // they can view next time they open the app.
+// ============================================================
+// TO'LIQ TOZALASH — faqat admin uchun. Barcha userlar (admin bundan mustasno),
+// barcha karyeralar, barcha liga world'lari, xalqaro turnirlar tarixi —
+// HAMMASI o'chadi, o'yin butunlay 0'dan boshlanadi. Buni Manual Deploy yoki
+// server restart bilan aralashtirmaslik kerak — bu ATayLAB, admin so'rovi
+// bilan, MongoDB hujjatining o'zini bo'shatib qayta yozadi.
+//
+// Admin akkauntning o'zi SAQLANIB QOLADI (parol o'zgarmaydi), lekin uning
+// shaxsiy careerSave'i ham tozalanadi — chunki "hammasi 0'dan" degani admin
+// ham mustasno emas. Eski sessiya token'lari (shu jumladan so'rovni
+// yuborayotgan admin'ning o'zinikidan tashqari barchasi) bekor bo'ladi,
+// shuning uchun javobda admin uchun YANGI token qaytariladi — frontend
+// qayta login qilmasdan davom eta oladi.
+// ============================================================
+app.post('/api/admin/wipe-data', authMiddleware, adminMiddleware, (req, res) => {
+  const db = req.db;
+  const adminUser = req.user;
+
+  const freshAdmin = {
+    username: adminUser.username,
+    passwordHash: adminUser.passwordHash,
+    canAccessPro: true,
+    isAdmin: true,
+    createdAt: adminUser.createdAt || new Date().toISOString(),
+    careerSave: null,
+    careerSavedAt: null
+  };
+
+  db.users = [freshAdmin];
+  db.leagueWorlds = {};
+  db.international = { activeTournaments: [], history: [], newsLog: [], lastDate: null };
+  delete db.worldDate;
+  db.sessions = {};
+
+  const newToken = issueSession(db, adminUser.username); // also calls writeDB(db)
+
+  console.log(`⚠️  TO'LIQ TOZALASH bajarildi — admin: ${adminUser.username}`);
+  res.json({ ok: true, token: newToken, message: "Barcha ma'lumotlar tozalandi" });
+});
+
+
 app.post('/api/admin/advance-world-day', authMiddleware, adminMiddleware, (req, res) => {
   const db = req.db;
   db.leagueWorlds = db.leagueWorlds || {};
@@ -720,11 +761,6 @@ app.get('/api/international/nation/:country', authMiddleware, (req, res) => {
       }))
     }
   });
-});
-app.get('/api/admin/export-db', authMiddleware, (req, res) => {
-  if (!req.user.isAdmin) return res.status(403).json({ ok: false, error: 'Faqat admin' });
-  const db = readDB();
-  res.json(db);
 });
 
 // MongoDB'ga ulanish app.listen()dan OLDIN tugashi shart — aks holda birinchi

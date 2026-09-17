@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getAllUsers, setProAccess, deleteUser } from '../utils/auth';
-import { checkBackendVersion, REQUIRED_SERVER_VERSION, advanceWorldDay } from '../career/utils/careerApi';
+import { checkBackendVersion, REQUIRED_SERVER_VERSION, advanceWorldDay, wipeAllData } from '../career/utils/careerApi';
 import Icon from './Icon';
 
 export default function AdminPanel({ currentUser }) {
@@ -12,6 +12,10 @@ export default function AdminPanel({ currentUser }) {
   const [versionWarning, setVersionWarning] = useState(null);
   const [worldBusy, setWorldBusy] = useState(false);
   const [worldResult, setWorldResult] = useState(null);
+  const [wipeStep, setWipeStep] = useState(0); // 0 = idle, 1 = first confirm, 2 = typed confirm
+  const [wipeText, setWipeText] = useState('');
+  const [wipeBusy, setWipeBusy] = useState(false);
+  const [wipeResult, setWipeResult] = useState(null);
 
   const loadUsers = useCallback(() => {
     setLoading(true);
@@ -68,6 +72,22 @@ export default function AdminPanel({ currentUser }) {
       });
     } else {
       setWorldResult({ ok: false, error: res.error || "Kunni o'tkazib bo'lmadi" });
+    }
+  };
+
+  const handleWipe = async () => {
+    setWipeBusy(true);
+    setWipeResult(null);
+    const res = await wipeAllData();
+    setWipeBusy(false);
+    setWipeStep(0);
+    setWipeText('');
+    if (res.ok) {
+      setWipeResult({ ok: true });
+      loadUsers(); // now shows only the admin, with no career
+      setWorldResult(null);
+    } else {
+      setWipeResult({ ok: false, error: res.error || "Tozalab bo'lmadi" });
     }
   };
 
@@ -135,6 +155,69 @@ export default function AdminPanel({ currentUser }) {
             </div>
           ) : (
             <div className="text-xs text-red-300">{worldResult.error}</div>
+          )
+        )}
+      </div>
+
+      <div className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 p-3">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="text-red-300 text-sm font-bold flex items-center gap-1.5">
+            ⚠️ Xavfli hudud — hammasini tozalash
+          </div>
+          {wipeStep === 0 && (
+            <button
+              type="button"
+              disabled={wipeBusy}
+              className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs transition-colors disabled:opacity-50"
+              onClick={() => setWipeStep(1)}
+            >
+              Wipe Data
+            </button>
+          )}
+        </div>
+        <p className="text-red-200/70 text-xs mb-2">
+          Barcha foydalanuvchilar, karyeralar, liga natijalari va xalqaro turnirlar tarixi butunlay o'chadi — bu amalni ortga qaytarib bo'lmaydi. Faqat siz (admin) o'z parolingiz bilan qolasiz, lekin sizning karyerangiz ham tozalanadi.
+        </p>
+
+        {wipeStep === 1 && (
+          <div className="rounded-lg border border-red-500/40 bg-red-950/40 px-3 py-2 flex flex-col gap-2">
+            <div className="flex items-start gap-1.5 text-red-300 text-xs">
+              <Icon name="warning" size={14} className="shrink-0 mt-0.5" />
+              <span>Rostdan ham HAMMASINI o'chirmoqchimisiz? Buni tasdiqlash uchun pastga <b>OCHIRISH</b> deb yozing.</span>
+            </div>
+            <input
+              type="text"
+              value={wipeText}
+              onChange={(e) => setWipeText(e.target.value)}
+              placeholder="OCHIRISH"
+              className="w-full rounded-md bg-slate-900 border border-red-500/40 text-red-100 text-xs px-2 py-1.5 font-mono"
+              autoFocus
+            />
+            <div className="flex items-center gap-2 justify-end">
+              <button
+                type="button"
+                className="px-3 py-1 rounded-md text-xs font-bold bg-slate-700 text-slate-200 hover:bg-slate-600 transition-colors"
+                onClick={() => { setWipeStep(0); setWipeText(''); }}
+              >
+                Bekor qilish
+              </button>
+              <button
+                type="button"
+                disabled={wipeText.trim().toUpperCase() !== 'OCHIRISH' || wipeBusy}
+                className="px-3 py-1 rounded-md text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition-colors disabled:opacity-40"
+                onClick={handleWipe}
+              >
+                {wipeBusy ? 'Tozalanmoqda...' : 'Ha, HAMMASINI OCHIRISH'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {wipeResult && (
+          wipeResult.ok ? (
+            <div className="text-xs text-green-300 mt-1">✅ Barcha ma'lumotlar tozalandi. Endi hammasi 0'dan.</div>
+          ) : (
+            <div className="text-xs text-red-300 mt-1">{wipeResult.error}</div>
           )
         )}
       </div>
