@@ -264,8 +264,11 @@ export default function TournamentView({ tournament, teams, onUpdate, onBack, on
 
   // Bitta fiksturani JONLI (Tezkor O'yindagi kabi) o'ynatadi. `resolve(result)` shu
   // fiksturaning maqomini (score/leg) yangilaydi va turnirni saqlaydi.
-  const playFixtureLive = (homeId, awayId, resolve) => {
-    setLiveFixture({ teamAObj: teamsById[homeId], teamBObj: teamsById[awayId], resolve });
+  // `opts.shootoutOnDraw` — true bo'lsa, hisob teng tugasa LiveMatch penalti
+  // seriyasini JONLI ko'rsatadi (3-band); shu holatda `result.penA/penB/
+  // penWinner` ham keladi va `resolve` shularni bracketga yozishi kerak.
+  const playFixtureLive = (homeId, awayId, resolve, opts) => {
+    setLiveFixture({ teamAObj: teamsById[homeId], teamBObj: teamsById[awayId], resolve, shootoutOnDraw: !!opts?.shootoutOnDraw });
   };
 
   // Jonli o'yin tugagach chaqiriladi: fikstura/bracket holatini yozadi va turnirni
@@ -374,6 +377,12 @@ export default function TournamentView({ tournament, teams, onUpdate, onBack, on
   const handlePlayKnockoutLeg = (fixture, legNumber, useTwoLegged) => {
     const hostId = legNumber === 1 ? fixture.home : fixture.away;
     const guestId = legNumber === 1 ? fixture.away : fixture.home;
+    // Faqat BIR TURLI (single-leg) o'yinda oldindan bilib bo'ladi: durang =
+    // penalti kerak. Ikki turli o'yinlarda YIG'INDI hisobi kerak (leg2ning
+    // o'zi teng bo'lishi shart emas), shuning uchun ular hozircha avvalgidek
+    // (resolveTie ichida, ko'rinmasdan) hal qilinadi - bu YANGI xatolik emas,
+    // shunchaki ko'rinadigan animatsiya hali shu holatga yoyilmagan.
+    const showLiveShootout = !useTwoLegged;
     playFixtureLive(hostId, guestId, (t, result) => {
       const rounds = t.bracket.rounds;
       const currentRound = rounds[rounds.length - 1];
@@ -387,13 +396,16 @@ export default function TournamentView({ tournament, teams, onUpdate, onBack, on
         target.leg2 = { scoreHome: result.scoreB, scoreAway: result.scoreA, events: result.goalEvents || [] };
       }
       if (target.leg1 && (!useTwoLegged || target.leg2)) {
-        const tie = resolveTie(target, teamsById);
+        const precomputed = showLiveShootout && result.penA != null
+          ? { penA: result.penA, penB: result.penB, winner: result.penWinner }
+          : undefined;
+        const tie = resolveTie(target, teamsById, precomputed);
         target.winnerId = tie.winnerId;
         target.aggA = tie.aggA; target.aggB = tie.aggB;
         target.penA = tie.penA; target.penB = tie.penB;
       }
       finalizeKnockoutRoundIfComplete(t);
-    });
+    }, { shootoutOnDraw: showLiveShootout });
   };
 
   const stepOnce = () => {
@@ -525,6 +537,7 @@ export default function TournamentView({ tournament, teams, onUpdate, onBack, on
         teamB={liveFixture.teamBObj}
         onExit={handleLiveExit}
         onFinish={handleLiveFinish}
+        shootoutOnDraw={liveFixture.shootoutOnDraw}
       />
     );
   }

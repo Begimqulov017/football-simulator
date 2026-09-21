@@ -7,6 +7,10 @@ import {
   getPosCategory,
 } from './engine';
 import { pickAutoFormation, selectBestXI, getMatchupModifier } from './formations';
+// 3-BAND: bu yerdagi rand() ham rand()ga o'tkazildi - shootout va
+// tezkor simulyatsiya endi LiveMatch bilan BIR XIL seedlanadigan generatorga
+// tayanadi (seed berilmasa avvalgidek haqiqiy tasodifiy).
+import { rand } from './rng';
 
 // Bitta o'yin uchun HAR bir maydonga chiqqan o'yinchining (zahiradan chiqqanlar
 // ham) taxminiy bali — real jonli o'yindagi Sofascore uslubidagi tizimning
@@ -19,7 +23,7 @@ function computeMatchRatings(players, teamKey, events, goalsFor, goalsAgainst, c
 
   players.forEach((p) => {
     let r = 6.5 + ((p.ovr || 75) - 75) / 50;
-    r += (Math.random() - 0.5) * 0.5;
+    r += (rand() - 0.5) * 0.5;
     if (isWinner) r += 0.2;
     else if (!isDraw) r -= 0.15;
     if (cleanSheet && ['GK', 'CB', 'LB', 'RB', 'CDM'].includes(p.pos)) r += 0.2;
@@ -73,7 +77,7 @@ export function simulateMatchInstant(teamA, teamB) {
   let yellowCards = [];
   let redA = 0, redB = 0, subsA = 0, subsB = 0;
 
-  const addedTime = Math.floor(Math.random() * 6) + 1;
+  const addedTime = Math.floor(rand() * 6) + 1;
   const matchEnd = 90 + addedTime;
 
   const logGoal = (minute, teamKey, o) => {
@@ -87,8 +91,8 @@ export function simulateMatchInstant(teamA, teamB) {
   };
 
   for (let minute = 1; minute <= matchEnd; minute++) {
-    playersA = playersA.map((p) => ({ ...p, stamina: Math.max(30, (p.stamina || 100) - (Math.random() * 0.4 + 0.4)) }));
-    playersB = playersB.map((p) => ({ ...p, stamina: Math.max(30, (p.stamina || 100) - (Math.random() * 0.4 + 0.4)) }));
+    playersA = playersA.map((p) => ({ ...p, stamina: Math.max(30, (p.stamina || 100) - (rand() * 0.4 + 0.4)) }));
+    playersB = playersB.map((p) => ({ ...p, stamina: Math.max(30, (p.stamina || 100) - (rand() * 0.4 + 0.4)) }));
 
     const matchupA = getMatchupModifier(formA, formB);
     const matchupB = getMatchupModifier(formB, formA);
@@ -104,21 +108,21 @@ export function simulateMatchInstant(teamA, teamB) {
     chanceA *= formRatioA; chanceB *= formRatioB;
     regChanceA *= formRatioA; regChanceB *= formRatioB;
 
-    const rand = Math.random() * 100;
-    if (rand < chanceA) {
+    const roll = rand() * 100;
+    if (roll < chanceA) {
       const o = resolveAttackOutcome(playersA, playersB);
       if (o && (o.result === 'GOAL' || o.result === 'PENALTY_GOAL')) { score.a++; logGoal(minute, 'a', o); }
       if (o && o.result === 'OWN_GOAL') { score.a++; }
-    } else if (rand > 100 - chanceB) {
+    } else if (roll > 100 - chanceB) {
       const o = resolveAttackOutcome(playersB, playersA);
       if (o && (o.result === 'GOAL' || o.result === 'PENALTY_GOAL')) { score.b++; logGoal(minute, 'b', o); }
       if (o && o.result === 'OWN_GOAL') { score.b++; }
     }
-    if (Math.random() * 100 < regChanceA) {
+    if (rand() * 100 < regChanceA) {
       const o = resolveRegularShot(playersA, playersB);
       if (o && o.result === 'GOAL') { score.a++; logGoal(minute, 'a', o); }
     }
-    if (Math.random() * 100 < regChanceB) {
+    if (rand() * 100 < regChanceB) {
       const o = resolveRegularShot(playersB, playersA);
       if (o && o.result === 'GOAL') { score.b++; logGoal(minute, 'b', o); }
     }
@@ -164,28 +168,63 @@ export function simulateMatchInstant(teamA, teamB) {
   };
 }
 
-// Penalti seriyasi (pley-offda durang tugagan o'yin uchun)
-export function simulatePenaltyShootout(teamA, teamB) {
+// Penalti seriyasi — TAFSILOTLI versiya (3-band). Avvalgi
+// `simulatePenaltyShootout` faqat yakuniy hisobni (penA/penB) qaytarardi va
+// hisoblash butunlay FONDA, foydalanuvchiga ko'rinmasdan bajarilardi. Bu
+// funksiya har bir zarbani ({side, round, kicker, scored}) alohida
+// qaytaradi, shunda LiveMatch ularni birma-bir animatsiya qilib ko'rsata
+// oladi - foydalanuvchi kim zarba qilayotganini va gol/otkazib
+// yuborganini jonli ko'radi, jadvalga yozilgan yakuniy hisob bilan bir xil
+// bo'lib qoladi (chunki ANA SHU natija jadvalga yoziladi, ikkinchi marta
+// qaytadan hisoblanmaydi).
+export function simulatePenaltyShootoutDetailed(teamA, teamB) {
   const keeperA = teamA.squad.find((p) => p.pos === 'GK');
   const keeperB = teamB.squad.find((p) => p.pos === 'GK');
   const savePowerA = getKeeperSavePower(keeperA);
   const savePowerB = getKeeperSavePower(keeperB);
-
   const kickerScoreChance = (opponentSavePower) => Math.max(0.62, Math.min(0.88, 0.82 - (opponentSavePower - 75) / 300));
 
-  let a = 0, b = 0;
-  for (let round = 1; round <= 5; round++) {
-    if (Math.random() < kickerScoreChance(savePowerB)) a++;
-    if (Math.random() < kickerScoreChance(savePowerA)) b++;
+  // Eng yaxshi (OVR bo'yicha) 5 nafar dala o'yinchisi zarba qiladi;
+  // shundan ko'p kerak bo'lsa (oltin penalti), ro'yxat aylanib davom etadi.
+  const kickersFor = (team) => {
+    const outfield = team.squad.filter((p) => p.pos !== 'GK').sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+    return outfield.length ? outfield : team.squad;
+  };
+  const kickersA = kickersFor(teamA);
+  const kickersB = kickersFor(teamB);
+  const nextKicker = (list, idx) => list[idx % list.length];
+
+  const kicks = [];
+  let a = 0, b = 0, idx = 0;
+
+  const takeKick = (side) => {
+    const kicker = side === 'a' ? nextKicker(kickersA, idx) : nextKicker(kickersB, idx);
+    const chance = side === 'a' ? kickerScoreChance(savePowerB) : kickerScoreChance(savePowerA);
+    const scored = rand() < chance;
+    if (scored) { if (side === 'a') a += 1; else b += 1; }
+    kicks.push({ side, round: kicks.filter((k) => k.side === side).length + 1, kicker: { id: kicker?.id, name: kicker?.name }, scored });
+    return scored;
+  };
+
+  for (let round = 1; round <= 5; round += 1) {
+    takeKick('a');
+    takeKick('b');
+    idx += 1;
   }
-  // Agar durang bo'lsa — "oltin penalti" (kim birinchi xato qilmasa g'olib)
+  // Durang bo'lsa — "oltin penalti": kim birinchi xato qilmasa g'olib.
   while (a === b) {
-    const aScored = Math.random() < kickerScoreChance(savePowerB);
-    const bScored = Math.random() < kickerScoreChance(savePowerA);
-    if (aScored) a++;
-    if (bScored) b++;
+    takeKick('a');
+    takeKick('b');
+    idx += 1;
   }
-  return { penA: a, penB: b, winner: a > b ? 'a' : 'b' };
+  return { penA: a, penB: b, winner: a > b ? 'a' : 'b', kicks };
+}
+
+// Eski (faqat yakuniy hisob) interfeys - resolveTie va boshqa mavjud
+// chaqiruvchilar hech narsani o'zgartirmasdan ishlatishda davom etadi.
+export function simulatePenaltyShootout(teamA, teamB) {
+  const { penA, penB, winner } = simulatePenaltyShootoutDetailed(teamA, teamB);
+  return { penA, penB, winner };
 }
 
 // ============================================================
@@ -258,7 +297,15 @@ export function pairUpForKnockout(teamIds) {
 // Ikki turli (leg) natijalarni yig'indi hisobi bo'yicha, yoki bitta o'yin natijasi
 // bo'yicha g'olibni aniqlaydi. Durang bo'lsa (va bu final bo'lmasa yoki ikkalasi
 // ham durang bo'lsa) — penalti seriyasiga o'tadi.
-export function resolveTie(fixture, teamsById) {
+//
+// `precomputedShootout` (ixtiyoriy) — agar LiveMatch foydalanuvchiga penalti
+// seriyasini JONLI ko'rsatib bergan bo'lsa (3-band), {penA, penB, winner}
+// shu yerga uzatiladi va ANA SHU natija yozib qo'yiladi - resolveTie
+// qaytadan (foydalanuvchi ko'rmagan, mos kelmaydigan) yangi seriya
+// "o'ynamaydi". Berilmasa (masalan hali animatsiya qilinmagan eski
+// chaqiruv joylari), avvalgidek o'zi hisoblab oladi - orqaga qarab to'liq
+// moslashuvchan (backward compatible).
+export function resolveTie(fixture, teamsById, precomputedShootout) {
   const { leg1, leg2 } = fixture;
   let aggA = leg1.scoreHome + (leg2 ? leg2.scoreAway : 0);
   let aggB = leg1.scoreAway + (leg2 ? leg2.scoreHome : 0);
@@ -266,7 +313,7 @@ export function resolveTie(fixture, teamsById) {
   if (aggA === aggB) {
     const teamA = teamsById[fixture.home];
     const teamB = teamsById[fixture.away];
-    const { winner, penA, penB } = simulatePenaltyShootout(teamA, teamB);
+    const { winner, penA, penB } = precomputedShootout || simulatePenaltyShootout(teamA, teamB);
     return { winnerId: winner === 'a' ? fixture.home : fixture.away, aggA, aggB, penA, penB };
   }
   return { winnerId: aggA > aggB ? fixture.home : fixture.away, aggA, aggB, penA: null, penB: null };
@@ -296,7 +343,7 @@ export const FORMAT_INFO = {
 // ============================================================
 export function initializeTournament(config) {
   const base = {
-    id: `t_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
+    id: `t_${Date.now()}_${Math.floor(rand() * 10000)}`,
     createdAt: Date.now(),
     name: config.name,
     format: config.format,
@@ -322,7 +369,7 @@ export function initializeTournament(config) {
   }
 
   if (config.format === 'knockout') {
-    const shuffled = [...config.teamIds].sort(() => Math.random() - 0.5);
+    const shuffled = [...config.teamIds].sort(() => rand() - 0.5);
     const pairs = pairUpForKnockout(shuffled);
     const round1 = pairs.map((p) => ({
       home: p.home, away: p.away, leg1: null, leg2: config.knockoutTwoLegged ? null : undefined, winnerId: null,
@@ -352,7 +399,7 @@ export function initializeTournament(config) {
   }
 
   // group_knockout
-  const shuffledTeams = [...config.teamIds].sort(() => Math.random() - 0.5);
+  const shuffledTeams = [...config.teamIds].sort(() => rand() - 0.5);
   const groups = [];
   for (let g = 0; g < config.groupsCount; g++) {
     const groupTeamIds = shuffledTeams.slice(g * config.teamsPerGroup, (g + 1) * config.teamsPerGroup);
@@ -533,7 +580,7 @@ export function advanceCLLeagueToPlayoff(tournament) {
   const direct = standings.slice(0, tournament.clDirectSlots).map((s) => s.id);
   const playoffTeams = standings.slice(tournament.clDirectSlots, tournament.clDirectSlots + tournament.clPlayoffSlots).map((s) => s.id);
 
-  const shuffled = [...playoffTeams].sort(() => Math.random() - 0.5);
+  const shuffled = [...playoffTeams].sort(() => rand() - 0.5);
   const pairs = pairUpForKnockout(shuffled);
   tournament.playoffBracket = pairs.map((p) => ({ home: p.home, away: p.away, leg1: null, leg2: null, winnerId: null }));
   tournament.clDirectQualifiers = direct;
@@ -547,7 +594,7 @@ export function finalizeCLPlayoffIfComplete(tournament) {
   if (!tournament.playoffBracket.every((f) => f.winnerId)) return false;
   const playoffWinners = tournament.playoffBracket.map((f) => f.winnerId);
   const combined = [...tournament.clDirectQualifiers, ...playoffWinners];
-  const shuffled = [...combined].sort(() => Math.random() - 0.5);
+  const shuffled = [...combined].sort(() => rand() - 0.5);
   const pairs = pairUpForKnockout(shuffled);
   tournament.bracket = {
     rounds: [pairs.map((p) => ({
@@ -589,7 +636,7 @@ export function advanceGroupsToKnockout(tournament, teamsById) {
     qualifiers.push(...standings.slice(0, tournament.advancePerGroup).map((s) => s.id));
   });
   // Aralashtirib, guruhdoshlar birinchi bosqichda to'qnashmasligiga (iloji boricha) harakat qilamiz
-  const shuffled = [...qualifiers].sort(() => Math.random() - 0.5);
+  const shuffled = [...qualifiers].sort(() => rand() - 0.5);
   const pairs = pairUpForKnockout(shuffled);
   const round1 = pairs.map((p) => ({
     home: p.home, away: p.away, leg1: null, leg2: tournament.knockoutTwoLegged ? null : undefined, winnerId: null,

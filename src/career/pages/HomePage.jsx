@@ -11,7 +11,7 @@ function formatDate(iso) {
 }
 
 export default function HomePage() {
-  const { player, nextDay, matchdayNext, prepareMatchday, worldDate, hasUnwatchedResult } = useGame();
+  const { player, nextDay, matchdayNext, prepareMatchday, worldDate, hasUnwatchedResult, pendingWorldMatch } = useGame();
   const navigate = useNavigate();
 
   if (!player) return null;
@@ -22,9 +22,30 @@ export default function HomePage() {
   const injured = !!player.career.injury;
   const nextOpponent = getNextFixtureLabel(player);
 
+  // Jarohat FAQAT o'yin o'ynashga to'sqinlik qiladi, kunni o'tkazishga EMAS.
+  // Avval bu yerda `if (injured) return;` turardi va tugmaning o'zi ham
+  // disabled edi — natijada jarohatlangan foydalanuvchi butunlay qotib
+  // qolardi (kun ham o'tmasdi, ya'ni jarohat ham hech qachon tuzalmasdi).
+  // Endi jarohatda tugma oddiy "Next Day" bo'lib qoladi: o'sha kundagi liga
+  // turi season.js'dagi processRound orqali foydalanuvchisiz (NPC tarkib
+  // bilan) hal qilinadi, jarohat esa har kuni bir kunga kamayadi.
+  const playable = matchdayNext && !injured;
+
+  // 4-BAND: server umumiy dunyodagi o'yinni KUTMOQDA (pending) deb
+  // bildirgan bo'lsa, ANA SHU birinchi o'ringa qo'yiladi - mahalliy
+  // (klient-tomonlama, faqat kubok/mashg'ulot/xabarlar uchun qolgan) tizim
+  // bilan hech qanday bog'liqligi yo'q, shuning uchun ular bir-birining
+  // ustidan chiqmaydi. Eslatma: klientning o'z kalendari (`matchdayNext`)
+  // bilan serverning kalendari orasida siljish bo'lishi mumkin (1-bosqichda
+  // aniqlangan, hali to'liq birlashtirilmagan muammo) - shu sababli bu
+  // tekshiruv HAR DOIM avval qilinadi, klient nima deb o'ylashidan qat'i
+  // nazar.
   const handlePrimaryAction = () => {
-    if (injured) return;
-    if (matchdayNext) {
+    if (pendingWorldMatch) {
+      navigate('/world-match');
+      return;
+    }
+    if (playable) {
       try {
         prepareMatchday();
         navigate('/play-match');
@@ -85,10 +106,9 @@ export default function HomePage() {
             <button
               className="next-day-btn"
               onClick={handlePrimaryAction}
-              disabled={injured}
-              style={matchdayNext ? { background: 'linear-gradient(90deg, var(--accent-gold), var(--accent-gold-dim))' } : undefined}
+              style={(pendingWorldMatch || playable) ? { background: 'linear-gradient(90deg, var(--accent-gold), var(--accent-gold-dim))' } : undefined}
             >
-              {matchdayNext ? `▶ Play${nextOpponent ? ` vs ${nextOpponent}` : ' Match'}` : 'Next Day =>'}
+              {pendingWorldMatch ? `▶ Play (${pendingWorldMatch.competition === 'cup' ? 'Kubok' : 'Liga'} o'yini)` : playable ? `▶ Play${nextOpponent ? ` vs ${nextOpponent}` : ' Match'}` : 'Next Day =>'}
             </button>
             <div className="indicator">
               <span className="indicator-label">FORM</span>
@@ -102,6 +122,12 @@ export default function HomePage() {
           {injured && (
             <div className="badge badge-red" style={{ marginBottom: 10, display: 'inline-block' }}>
               Injured - {player.career.injury.daysLeft} day(s) left
+            </div>
+          )}
+          {injured && matchdayNext && (
+            <div className="sub" style={{ marginBottom: 10 }}>
+              Bugun o'yin bor, lekin siz jarohatlangansiz — o'yin sizsiz o'tadi.
+              "Next Day" bilan kunni o'tkazishingiz mumkin.
             </div>
           )}
           <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 10 }}>

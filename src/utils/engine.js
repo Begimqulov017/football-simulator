@@ -1,6 +1,11 @@
 // ============================================================
 // POZITSIYA GURUHLARI VA KO'PAYTIRUVCHILAR
 // ============================================================
+// 3-BAND: barcha rand() chaqiruvlari `rand()` bilan almashtirildi -
+// odatda bu haqiqiy rand() bilan bir xil ishlaydi, lekin
+// rng.js:setSeed() chaqirilgandan keyin DETERMINISTIK bo'lib qoladi (bir
+// xil seed = bir xil o'yin natijasi, qayta tomosha uchun kerak).
+import { rand } from './rng';
 
 // Gol urish ehtimoliga pozitsiya bo'yicha ko'paytiruvchi
 const GOAL_POS_MULTIPLIER = {
@@ -141,7 +146,7 @@ export const getMarker = (attacker, defendPlayers) => {
     markers = defendPlayers.filter((p) => ['CB', 'LB', 'RB', 'CDM'].includes(p.pos));
   }
   if (markers.length === 0) return null;
-  return markers[Math.floor(Math.random() * markers.length)];
+  return markers[Math.floor(rand() * markers.length)];
 };
 
 export const getMarkerModifier = (attacker, defendPlayers) => {
@@ -262,7 +267,7 @@ export const getRandomScorerAndAssister = (currentPlayers, defendPlayers = null)
   });
   const totalGoalWeight = goalWeights.reduce((acc, w) => acc + w, 0);
 
-  let randomGoal = Math.random() * totalGoalWeight;
+  let randomGoal = rand() * totalGoalWeight;
   let scorer = currentPlayers[0];
 
   for (let i = 0; i < currentPlayers.length; i++) {
@@ -274,7 +279,7 @@ export const getRandomScorerAndAssister = (currentPlayers, defendPlayers = null)
   }
 
   let assister = null;
-  const hasAssist = Math.random() < 0.70;
+  const hasAssist = rand() < 0.70;
 
   if (hasAssist) {
     const possibleAssisters = currentPlayers.filter((p) => p.id !== scorer.id);
@@ -282,7 +287,7 @@ export const getRandomScorerAndAssister = (currentPlayers, defendPlayers = null)
       const assistWeights = possibleAssisters.map((p) => getPlayerAssistWeight(p));
       const totalAssistWeight = assistWeights.reduce((acc, w) => acc + w, 0);
 
-      let randAssist = Math.random() * totalAssistWeight;
+      let randAssist = rand() * totalAssistWeight;
       for (let i = 0; i < possibleAssisters.length; i++) {
         if (randAssist <= assistWeights[i]) {
           assister = possibleAssisters[i];
@@ -311,7 +316,7 @@ const REGULAR_SHOT_POWER_SCALE = 0.4; // oddiy zarba — past sifatli, ko'proq c
 export const resolveAttackOutcome = (attackPlayers, defendPlayers) => {
   if (!attackPlayers || attackPlayers.length === 0) return null;
 
-  const subRand = Math.random() * 100;
+  const subRand = rand() * 100;
   const keeper = (defendPlayers || []).find((p) => p.pos === 'GK');
 
   // 1. OFSAYD — 12%
@@ -322,7 +327,7 @@ export const resolveAttackOutcome = (attackPlayers, defendPlayers) => {
 
   // 2. AVTOGOL — 2%
   if (subRand < 14 && defendPlayers && defendPlayers.length > 0) {
-    const ownGoalPlayer = defendPlayers[Math.floor(Math.random() * defendPlayers.length)];
+    const ownGoalPlayer = defendPlayers[Math.floor(rand() * defendPlayers.length)];
     return { result: 'OWN_GOAL', player: ownGoalPlayer };
   }
 
@@ -332,7 +337,7 @@ export const resolveAttackOutcome = (attackPlayers, defendPlayers) => {
     const savePower = getKeeperSavePower(keeper);
     // Kuchli darvozabon (yuqori save power) penalti gol ehtimolini kamaytiradi (55%–85% oralig'i)
     const scoreChance = Math.max(0.55, Math.min(0.85, 0.82 - (savePower - 75) / 250));
-    if (Math.random() < scoreChance) {
+    if (rand() < scoreChance) {
       return { result: 'PENALTY_GOAL', scorer, keeper };
     }
     return { result: 'PENALTY_MISSED', scorer, keeper };
@@ -348,7 +353,7 @@ export const resolveAttackOutcome = (attackPlayers, defendPlayers) => {
   const MISS_CHANCE = 0.32; // to'p darvoza tashqarisiga ketishi (nishonga tegmaydi)
   const saveChance = savePower / (savePower + shotPower); // nishonga tegsa, ushlanish ehtimoli
 
-  const outcomeRand = Math.random();
+  const outcomeRand = rand();
   if (outcomeRand < MISS_CHANCE) {
     return { result: 'MISSED', scorer, marker };
   }
@@ -377,7 +382,7 @@ export const resolveRegularShot = (attackPlayers, defendPlayers) => {
   const MISS_CHANCE = 0.70; // oddiy zarbalarning aksariyati chetga/bloklanib ketadi (gollarni real darajaga tushirish uchun oshirildi)
   const saveChance = savePower / (savePower + shotPower);
 
-  const outcomeRand = Math.random();
+  const outcomeRand = rand();
   if (outcomeRand < MISS_CHANCE) {
     return { result: 'MISSED', scorer, marker };
   }
@@ -408,13 +413,13 @@ export const rollBackgroundStats = (attackPlayers, defendPlayers) => {
   const avgDef = defenders.length
     ? defenders.reduce((acc, p) => acc + (p.stats?.def || 50), 0) / defenders.length
     : 50;
-  const tackle = Math.random() < (avgDef / 100) * 0.45;
+  const tackle = rand() < (avgDef / 100) * 0.45;
 
   const attackers = (attackPlayers || []).filter((p) => ['ST', 'CF', 'SS', 'LW', 'RW'].includes(p.pos));
   const avgAtkPower = attackers.length
     ? attackers.reduce((acc, p) => acc + (p.stats?.pac || 60) + (p.stats?.dri || 60), 0) / (attackers.length * 2)
     : 60;
-  const corner = Math.random() < (avgAtkPower / 100) * 0.12;
+  const corner = rand() < (avgAtkPower / 100) * 0.12;
 
   return { tackle, corner };
 };
@@ -426,17 +431,17 @@ export const rollOffside = (attackPlayers) => {
   const avgPac = attackers.length
     ? attackers.reduce((acc, p) => acc + (p.stats?.pac || 60), 0) / attackers.length
     : 60;
-  return Math.random() < (avgPac / 100) * 0.02;
+  return rand() < (avgPac / 100) * 0.02;
 };
 
 // Kartochkasiz oddiy foul (statistikaga kiradi, lekin voqealar tasmasida ko'rinmaydi)
 export const checkPlainFoul = (currentPlayers) => {
   if (!currentPlayers || currentPlayers.length === 0) return null;
-  if (Math.random() * 100 >= 11) return null; // ~11% => o'rtacha ~10 foul/jamoa/o'yin (kartochkalar bilan birga)
+  if (rand() * 100 >= 11) return null; // ~11% => o'rtacha ~10 foul/jamoa/o'yin (kartochkalar bilan birga)
 
   const foulWeights = currentPlayers.map((p) => getPlayerFoulWeight(p));
   const total = foulWeights.reduce((acc, w) => acc + w, 0);
-  let r = Math.random() * total;
+  let r = rand() * total;
   for (let i = 0; i < currentPlayers.length; i++) {
     if (r <= foulWeights[i]) return currentPlayers[i];
     r -= foulWeights[i];
@@ -447,8 +452,8 @@ export const checkPlainFoul = (currentPlayers) => {
 // Juda kam uchraydigan jarohat ehtimoli
 export const checkInjuryEvent = (currentPlayers) => {
   if (!currentPlayers || currentPlayers.length === 0) return null;
-  if (Math.random() < 0.0006) {
-    return currentPlayers[Math.floor(Math.random() * currentPlayers.length)];
+  if (rand() < 0.0006) {
+    return currentPlayers[Math.floor(rand() * currentPlayers.length)];
   }
   return null;
 };
@@ -470,20 +475,20 @@ export const checkRandomMatchEvent = (
 ) => {
   if (currentPlayers.length === 0) return null;
 
-  const rand = Math.random() * 100;
+  const roll = rand() * 100;
 
   // Foul qurbonini (raqibning to'p egallagan hujumchisi) jonli sharh uchun tanlash
   const pickVictim = () => {
     if (!opponentPlayers || opponentPlayers.length === 0) return null;
     const attackers = opponentPlayers.filter((p) => ['ST', 'CF', 'SS', 'LW', 'RW', 'CAM', 'RM', 'LM'].includes(p.pos));
     const pool = attackers.length ? attackers : opponentPlayers;
-    return pool[Math.floor(Math.random() * pool.length)];
+    return pool[Math.floor(rand() * pool.length)];
   };
 
   const getFoulPlayer = () => {
     const foulWeights = currentPlayers.map((p) => getPlayerFoulWeight(p));
     const totalFoulWeight = foulWeights.reduce((acc, w) => acc + w, 0);
-    let r = Math.random() * totalFoulWeight;
+    let r = rand() * totalFoulWeight;
     for (let i = 0; i < currentPlayers.length; i++) {
       if (r <= foulWeights[i]) return currentPlayers[i];
       r -= foulWeights[i];
@@ -492,7 +497,7 @@ export const checkRandomMatchEvent = (
   };
 
   // 1. SARIQ KARTOCHKA (real futboldagidek ~3-4 sariq/o'yin bo'lishi uchun oshirilgan)
-  if (rand < 1.80) {
+  if (roll < 1.80) {
     const player = getFoulPlayer();
     const victim = pickVictim();
     const hasYellow = yellowCards.includes(player.id);
@@ -505,7 +510,7 @@ export const checkRandomMatchEvent = (
   }
 
   // 2. TO'G'RIDAN-TO'G'RI QIZIL KARTOCHKA
-  if (rand >= 1.80 && rand < 1.85 && teamRedCardsCount < 4) {
+  if (roll >= 1.80 && roll < 1.85 && teamRedCardsCount < 4) {
     const player = getFoulPlayer();
     const victim = pickVictim();
     return { type: 'DIRECT_RED', player, victim, teamId: team.id };
@@ -515,7 +520,7 @@ export const checkRandomMatchEvent = (
   // shuning uchun Customization orqali transfer qilingan yulduz doim zahirada qolib ketmaydi
   if (benchPlayers.length > 0 && subCount < 5) {
     const isLosing = scoreDiff < 0;
-    if (currentMinute >= 60 && isLosing && !hasUsedRisk && rand > 97.15) {
+    if (currentMinute >= 60 && isLosing && !hasUsedRisk && roll > 97.15) {
       const defenders = currentPlayers.filter((p) => getPosCategory(p.pos) === 'DF');
       const benchAttackers = [...benchPlayers.filter((p) => getPosCategory(p.pos) === 'FW')].sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
 
@@ -527,7 +532,7 @@ export const checkRandomMatchEvent = (
       }
     }
 
-    if (currentMinute >= 45 && rand > 96.2) {
+    if (currentMinute >= 45 && roll > 96.2) {
       const fieldPlayers = currentPlayers.filter((p) => p.pos !== 'GK');
       if (fieldPlayers.length === 0) return null;
 
@@ -561,7 +566,7 @@ export const checkRandomMatchEvent = (
 // xato/to'p yo'qotish). Natijada bali o'yin davomida ~55-65 marta asta-sekin
 // sifatiga qarab siljib boradi — hujumchi ham, "sokin" himoyachi ham baholanadi.
 export const getMinuteMicroDelta = (player) => {
-  if (Math.random() > 0.68) return 0; // har doim emas — real "ishtirok" chastotasi
+  if (rand() > 0.68) return 0; // har doim emas — real "ishtirok" chastotasi
 
   const stats = player.stats || {};
   const cat = getPosCategory(player.pos);
@@ -580,10 +585,10 @@ export const getMinuteMicroDelta = (player) => {
   // 70 — neytral chiziq: undan yuqori bo'lsa ijobiy, past bo'lsa salbiy ehtimol oshadi
   const successProb = Math.max(0.25, Math.min(0.8, 0.5 + (posQuality - 70) / 200));
 
-  if (Math.random() < successProb) {
-    return 0.015 + Math.random() * 0.02;
+  if (rand() < successProb) {
+    return 0.015 + rand() * 0.02;
   }
-  return -(0.01 + Math.random() * 0.02);
+  return -(0.01 + rand() * 0.02);
 };
 
 // ============================================================
@@ -592,7 +597,7 @@ export const getMinuteMicroDelta = (player) => {
 // Summary faqat asosiy hodisalarni (gol, kartochka, ofsayd, almashtirish) ko'rsatishi
 // kerak — shuning uchun bu yerda ortiqcha "badiiy" jumlalar emas, aniq va qisqa
 // standart formatlar ishlatiladi (haqiqiy futbol translyatsiyalaridagidek).
-const pickTemplate = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const pickTemplate = (arr) => arr[Math.floor(rand() * arr.length)];
 
 export const commentaryGoal = (scorerName, assisterName) => ({
   text: `GOOOL! ${scorerName}`,

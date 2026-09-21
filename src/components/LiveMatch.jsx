@@ -29,6 +29,8 @@ import {
   tickerCleanTackle,
 } from '../utils/engine';
 import { pickAutoFormation, buildPitchSlots, getMatchupModifier, selectBestXI } from '../utils/formations';
+import { rand, setSeed, clearSeed } from '../utils/rng';
+import { simulatePenaltyShootoutDetailed } from '../utils/tournamentEngine';
 import MatchTablo from './MatchTablo';
 import EventLog from './EventLog';
 
@@ -44,11 +46,30 @@ const emptyStats = () => ({
   shots: 0, sot: 0, saves: 0, bigChances: 0, offsides: 0, fouls: 0, corners: 0, tackles: 0,
 });
 
-// teamA/teamB — allaqachon tanlangan ikkita jamoa (Tezkor O'yinda TeamSelect orqali,
-// Turnirda esa avtomatik raqiblar). onExit — "Chiqish" bosilganda chaqiriladi.
-// onFinish(result) — o'yin tugaganda (score/statistika bilan) ixtiyoriy chaqiriladi,
-// masalan Turnir fiksturasiga natijani yozib qo'yish uchun.
-export default function LiveMatch({ teamA, teamB, onExit, onFinish }) {
+// seed — IXTIYORIY (3-band). Berilsa, o'yin butunlay DETERMINISTIK bo'ladi:
+// bir xil teamA/teamB/seed bilan boshlangan o'yin har doim AYNAN bir xil
+// daqiqa-daqiqa hodisalar bilan tugaydi - umumiy dunyodagi o'yinni istalgan
+// foydalanuvchi bir xil ko'rishi va "qayta tomosha" qilish uchun kerak.
+// Berilmasa (masalan Tezkor O'yin/eski Turnir), avvalgidek haqiqiy tasodifiy
+// bo'lib qoladi.
+// shootoutOnDraw — IXTIYORIY (3-band). true bo'lsa va 90+qo'shimcha daqiqada
+// hisob teng bo'lsa, natija darhol e'lon qilinmaydi - avval penalti
+// seriyasi ZARBA-ZARBA jonli ko'rsatiladi (avval bu butunlay fonda, jim
+// hisoblanardi), keyin YAKUNIY (foydalanuvchi ko'rgan) natija bilan
+// onFinish chaqiriladi. Berilmasa (ligada durang ruxsat etilgan holatlar),
+// avvalgidek durang bilan tugaydi.
+export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shootoutOnDraw }) {
+  useEffect(() => {
+    if (seed !== undefined && seed !== null) setSeed(seed);
+    else clearSeed();
+    return () => clearSeed(); // boshqa (seedsiz) o'yinlarga sirqib chiqmasin
+  }, [seed]);
+
+  // Penalti seriyasi holati: null = seriya yo'q/hali boshlanmagan.
+  // { kicks, penA, penB, winner, revealed } - `revealed` necha zarba
+  // hozircha ekranda ko'rsatilganini bildiradi (animatsiya uchun).
+  const [shootout, setShootout] = useState(null);
+
   const [isPaused, setIsPaused] = useState(false);
   const [matchTime, setMatchTime] = useState(0);
   const [addedTime, setAddedTime] = useState(0);
@@ -243,7 +264,7 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish }) {
   };
 
   useEffect(() => {
-    const initAdded = Math.floor(Math.random() * 6) + 1;
+    const initAdded = Math.floor(rand() * 6) + 1;
     setAddedTime(initAdded);
 
     const fullSquadA = teamA.squad.map((p) => ({ ...p, stamina: 100 }));
@@ -287,15 +308,15 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish }) {
       }
 
       const nextTime = st.matchTime + 1;
-      const rand = Math.random() * 100;
+      const roll = rand() * 100;
 
       setCurrentPlayersA((prev) => prev.map((p) => ({
         ...p,
-        stamina: Math.max(30, (p.stamina || 100) - (Math.random() * 0.4 + 0.4)),
+        stamina: Math.max(30, (p.stamina || 100) - (rand() * 0.4 + 0.4)),
       })));
       setCurrentPlayersB((prev) => prev.map((p) => ({
         ...p,
-        stamina: Math.max(30, (p.stamina || 100) - (Math.random() * 0.4 + 0.4)),
+        stamina: Math.max(30, (p.stamina || 100) - (rand() * 0.4 + 0.4)),
       })));
 
       const liveOvrA = calculateTeamOvr(st.currentPlayersA) - st.redCardsA * 6;
@@ -333,21 +354,21 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish }) {
         if (result && (!tickerBest || result.priority > tickerBest.priority)) tickerBest = result;
       };
 
-      if (rand < chanceA) {
+      if (roll < chanceA) {
         const outcome = resolveAttackOutcome(st.currentPlayersA, st.currentPlayersB);
         noteTicker(handleAttackOutcome('left', 'a', outcome, nextTime, { isBig: true }));
-      } else if (rand > 100 - chanceB) {
+      } else if (roll > 100 - chanceB) {
         const outcome = resolveAttackOutcome(st.currentPlayersB, st.currentPlayersA);
         noteTicker(handleAttackOutcome('right', 'b', outcome, nextTime, { isBig: true }));
       }
 
-      const randRegA = Math.random() * 100;
-      if (randRegA < regChanceA) {
+      const rollRegA = rand() * 100;
+      if (rollRegA < regChanceA) {
         const outcome = resolveRegularShot(st.currentPlayersA, st.currentPlayersB);
         noteTicker(handleAttackOutcome('left', 'a', outcome, nextTime, { isBig: false }));
       }
-      const randRegB = Math.random() * 100;
-      if (randRegB < regChanceB) {
+      const rollRegB = rand() * 100;
+      if (rollRegB < regChanceB) {
         const outcome = resolveRegularShot(st.currentPlayersB, st.currentPlayersA);
         noteTicker(handleAttackOutcome('right', 'b', outcome, nextTime, { isBig: false }));
       }
@@ -357,7 +378,7 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish }) {
 
       const possWeightA = getPossessionWeight(st.currentPlayersA);
       const possWeightB = getPossessionWeight(st.currentPlayersB);
-      const aHasBall = Math.random() < possWeightA / ((possWeightA + possWeightB) || 1);
+      const aHasBall = rand() < possWeightA / ((possWeightA + possWeightB) || 1);
       setPossessionMin((prev) => ({
         a: prev.a + (aHasBall ? 1 : 0),
         b: prev.b + (aHasBall ? 0 : 1),
@@ -368,12 +389,12 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish }) {
       const { tackle, corner } = rollBackgroundStats(attackingPlayers, defendingPlayers);
       if (tackle) {
         bumpMatchStat(aHasBall ? 'b' : 'a', { tackles: 1 });
-        if (Math.random() < 0.25) {
+        if (rand() < 0.25) {
           const defenders = defendingPlayers.filter((p) => ['CB', 'LB', 'RB', 'CDM'].includes(p.pos));
           const attackers = attackingPlayers.filter((p) => ['ST', 'CF', 'SS', 'LW', 'RW', 'CAM'].includes(p.pos));
           if (defenders.length && attackers.length) {
-            const d = defenders[Math.floor(Math.random() * defenders.length)];
-            const a = attackers[Math.floor(Math.random() * attackers.length)];
+            const d = defenders[Math.floor(rand() * defenders.length)];
+            const a = attackers[Math.floor(rand() * attackers.length)];
             noteTicker({ tickerText: tickerCleanTackle(d.name, a.name), priority: 1 });
           }
         }
@@ -509,9 +530,9 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish }) {
         setLiveTicker(tickerBest.tickerText);
       } else if (nextTime % 2 === 0) {
         const teamName = aHasBall ? st.teamA.name : st.teamB.name;
-        if (Math.random() < 0.4) {
+        if (rand() < 0.4) {
           const pool = attackingPlayers.filter((p) => ['ST', 'CF', 'SS', 'LW', 'RW', 'CAM', 'RM', 'LM'].includes(p.pos));
-          const carrier = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+          const carrier = pool.length ? pool[Math.floor(rand() * pool.length)] : null;
           const markerP = carrier ? defendingPlayers.find((p) => ['CB', 'LB', 'RB', 'CDM'].includes(p.pos)) : null;
           setLiveTicker(carrier ? tickerAttackBuildup(teamName, carrier.name, markerP?.name) : tickerPossession(teamName));
         } else {
@@ -547,8 +568,30 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish }) {
     if (isFinished) setIsFinishing(false);
   }, [isFinished]);
 
+  const shootoutNeeded = !!(shootoutOnDraw && isFinished && score.a === score.b);
+
+  // Penalti seriyasi hisoblanadi (bir marta) - o'yin tugagach, hisob teng
+  // bo'lsa. Seed o'rnatilgan bo'lsa (umumiy dunyo o'yini), bu hisoblash ham
+  // takrorlanuvchan - xuddi shu o'yin qayta ochilsa aynan shu seriya chiqadi.
   useEffect(() => {
-    if (isFinished && onFinish && !finishedNotifiedRef.current) {
+    if (shootoutNeeded && !shootout) {
+      setShootout({ ...simulatePenaltyShootoutDetailed(teamA, teamB), revealed: 0 });
+    }
+  }, [shootoutNeeded, shootout, teamA, teamB]);
+
+  // Zarbalar birma-bir (har 650ms) ochiladi - fondagi "jim" hisoblash o'rniga
+  // foydalanuvchi har bir zarbani jonli kuzatadi.
+  useEffect(() => {
+    if (!shootout || shootout.revealed >= shootout.kicks.length) return;
+    const t = setTimeout(() => {
+      setShootout((s) => (s ? { ...s, revealed: s.revealed + 1 } : s));
+    }, 650);
+    return () => clearTimeout(t);
+  }, [shootout]);
+
+  // Penalti kerak bo'lmagan (yoki durang ruxsat etilgan) holatda - avvalgidek darhol.
+  useEffect(() => {
+    if (isFinished && onFinish && !shootoutNeeded && !finishedNotifiedRef.current) {
       finishedNotifiedRef.current = true;
       onFinish({
         scoreA: score.a,
@@ -559,7 +602,26 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish }) {
         playerEventsMap,
       });
     }
-  }, [isFinished, onFinish, score, matchEvents, playerRatings]);
+  }, [isFinished, onFinish, score, matchEvents, playerRatings, shootoutNeeded]);
+
+  // Penalti seriyasi to'liq ko'rsatilgach, foydalanuvchi "Davom etish"
+  // bosgandan keyin chaqiriladi (pastdagi render bo'limida tugma bor).
+  const finishAfterShootout = () => {
+    if (finishedNotifiedRef.current || !shootout || !onFinish) return;
+    finishedNotifiedRef.current = true;
+    onFinish({
+      scoreA: score.a,
+      scoreB: score.b,
+      matchEvents,
+      goalEvents: goalEventsRef.current,
+      playerRatings,
+      playerEventsMap,
+      penA: shootout.penA,
+      penB: shootout.penB,
+      penWinner: shootout.winner,
+      penKicks: shootout.kicks,
+    });
+  };
 
   const toggleSpeed = () => {
     if (isFinishing) return;
@@ -798,6 +860,47 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish }) {
           </div>
         )}
       </div>
+
+      {shootout && (
+        <div className="card" style={{ marginTop: '16px', textAlign: 'center', padding: '16px' }}>
+          <div style={{ fontWeight: 700, letterSpacing: '0.5px', marginBottom: '6px' }}>⚽ PENALTI SERIYASI</div>
+          <div style={{ fontSize: '28px', fontWeight: 700, margin: '8px 0' }}>
+            {shootout.kicks.slice(0, shootout.revealed).filter((k) => k.side === 'a' && k.scored).length}
+            {' - '}
+            {shootout.kicks.slice(0, shootout.revealed).filter((k) => k.side === 'b' && k.scored).length}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
+            {shootout.kicks.slice(0, shootout.revealed).map((k, i) => (
+              <span
+                key={i}
+                title={`${k.kicker?.name || '?'} (${k.side === 'a' ? teamA.name : teamB.name})`}
+                style={{
+                  display: 'inline-block', width: 22, height: 22, borderRadius: '50%',
+                  lineHeight: '22px', fontSize: 13,
+                  background: k.scored ? '#22c55e' : '#ef4444', color: '#fff',
+                }}
+              >
+                {k.scored ? '✓' : '✗'}
+              </span>
+            ))}
+          </div>
+          {shootout.revealed < shootout.kicks.length ? (
+            <div style={{ opacity: 0.8, fontSize: 13 }}>
+              {(() => {
+                const next = shootout.kicks[shootout.revealed];
+                return next ? `Zarba: ${next.kicker?.name || '?'} (${next.side === 'a' ? teamA.name : teamB.name})` : '';
+              })()}
+            </div>
+          ) : (
+            <>
+              <div style={{ opacity: 0.85, fontSize: 13, marginBottom: 10 }}>
+                G'olib: <b>{shootout.winner === 'a' ? teamA.name : teamB.name}</b> ({shootout.penA} - {shootout.penB})
+              </div>
+              <button onClick={finishAfterShootout} className="secondary-btn">Davom etish →</button>
+            </>
+          )}
+        </div>
+      )}
 
       {isFinished && manOfMatch && (
         <div className="motm-banner">

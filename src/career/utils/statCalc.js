@@ -216,6 +216,21 @@ export function resolveVeteranProgression(age, recentAvgRating) {
   return { multiplier: -0.5, regressing: true };
 }
 
+// 8-BAND: majburiy pensiya. Har tug'ilgan kunda (35 yoshdan boshlab) shu
+// yildagi pensiyaga chiqish EHTIMOLI - foydalanuvchi bergan aniq
+// foizlar bo'yicha. 45 yosh va undan katta - 100% (SHART, kafolatlangan).
+const RETIREMENT_CHANCE_BY_AGE = {
+  35: 0.70, 36: 0.65, 37: 0.45, 38: 0.50,
+  39: 0.70, 40: 0.70, 41: 0.70,
+  42: 0.80, 43: 0.80,
+  44: 0.90,
+};
+export function getRetirementChance(age) {
+  if (age < 35) return 0;
+  if (age >= 45) return 1.0;
+  return RETIREMENT_CHANCE_BY_AGE[age] ?? 1.0;
+}
+
 // A rating of 8.3+ in a played match is treated as a Man of the Match
 // performance - shown on the post-match summary and counted on All Stats.
 export const MVP_RATING_THRESHOLD = 8.3;

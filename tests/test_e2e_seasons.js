@@ -112,7 +112,7 @@ function makePlayer(name, clubId, clubName) {
     ['every club still has >= 2 GKs', Object.values(world1.squads).every((sq) => sq.filter((p) => p.pos === 'GK').length >= 2)],
     ['seasonHistory has 4 archived seasons', (world1.seasonHistory || []).length === TARGET_SEASONS],
     ['newsLog has retirement/champion entries', (world1.newsLog || []).some((n) => n.type === 'champion')],
-    ['static teamsData never mutated', require('/home/claude/work/app/server/gamedata/teamsData').INITIAL_TEAMS
+    ['static teamsData never mutated', require('../server/gamedata/teamsData').INITIAL_TEAMS
       .find((t) => t.id === 'real_madrid').squad.every((p) => p.age === undefined)]
   ];
   let failed = 0;

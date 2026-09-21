@@ -132,7 +132,7 @@ export default function AdminPanel({ currentUser }) {
           </button>
         </div>
         <p className="text-green-200/70 text-xs mb-2">
-          Bosilganda barcha faol ligalar bir kunga siljiydi va shu kundagi barcha o'yinlar hal qilinadi — bu foydalanuvchilarning yagona umumiy kalendari, ular o'zlari kun o'tkaza olmaydi.
+          Bosilganda BARCHA 21 liga (hech kim o'ynamasa ham) bir kunga siljiydi va shu kundagi barcha liga VA kubok o'yinlari hal qilinadi — bu foydalanuvchilarning yagona umumiy kalendari, ular o'zlari kun o'tkaza olmaydi.
         </p>
         {worldResult && (
           worldResult.ok ? (

@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { to: '/home', icon: 'home', label: 'Home' },
   { to: '/profile', icon: 'user', label: 'Profile' },
   { to: '/club', icon: 'club', label: 'Club' },
+  { to: '/leagues', icon: 'trophy', label: "Barcha ligalar" },
   { to: '/all-stats', icon: 'stats', label: 'All Stats' },
   { to: '/messages', icon: 'mail', label: 'Messages & Suggests' },
   { to: '/training', icon: 'dumbbell', label: 'Training' },

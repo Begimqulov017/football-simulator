@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { removePlayerFromClubRoster, joinClubRoster, updatePlayerInClubRoster } from '../data/clubRosterStore';
 import { INITIAL_TEAMS } from '../../data/teamsData';
 import { advanceOneDay, prepareNextDay, isMatchdayNext, computeContractOffer, buildSeasonSchedule, initStandings, setupSeasonCups } from '../utils/season';
-import { LEAGUES } from '../data/leaguesData';
+import { LEAGUES } from '../../data/leaguesData';
 import { saveCareerToServer, loadCareerFromServer, ackMatchResult } from '../utils/careerApi';
 
 const GameContext = createContext(null);
@@ -41,6 +41,7 @@ export function GameProvider({ children, username }) {
   const [player, setPlayer] = useState(() => loadLocalSave(username));
   const [ready, setReady] = useState(false);
   const [worldDate, setWorldDate] = useState(null);
+  const [pendingWorldMatch, setPendingWorldMatch] = useState(null);
   const saveTimer = useRef(null);
   const firstLoad = useRef(true);
 
@@ -52,7 +53,7 @@ export function GameProvider({ children, username }) {
     firstLoad.current = true;
     setReady(false);
     (async () => {
-      const { player: serverPlayer, worldDate: wd, confirmed } = await loadCareerFromServer();
+      const { player: serverPlayer, worldDate: wd, confirmed, pendingWorldMatch: pwm } = await loadCareerFromServer();
       if (cancelled) return;
       if (confirmed) {
         // The server gave an authoritative answer - trust it completely,
@@ -62,6 +63,7 @@ export function GameProvider({ children, username }) {
         // deploy with an old browser cache still lying around).
         setPlayer(serverPlayer);
         persistLocalSave(username, serverPlayer);
+        setPendingWorldMatch(pwm);
       } else {
         // Could not reach the server (offline, cold start, invalid session)
         // - fall back to whatever this device has cached so play can
@@ -82,8 +84,9 @@ export function GameProvider({ children, username }) {
   useEffect(() => {
     const interval = setInterval(async () => {
       if (firstLoad.current) return;
-      const { player: serverPlayer, worldDate: wd, confirmed } = await loadCareerFromServer();
+      const { player: serverPlayer, worldDate: wd, confirmed, pendingWorldMatch: pwm } = await loadCareerFromServer();
       if (wd) setWorldDate(wd);
+      setPendingWorldMatch(pwm);
       if (confirmed && !serverPlayer) {
         // The account no longer has a career on the server (e.g. an admin
         // ran "Wipe Data" while this tab was open) - clear it here too
@@ -94,6 +97,21 @@ export function GameProvider({ children, username }) {
       }
       if (serverPlayer?.career?.lastMatchResult && !serverPlayer.career.lastMatchResult.seenAt) {
         setPlayer((prev) => (prev ? { ...prev, career: { ...prev.career, lastMatchResult: serverPlayer.career.lastMatchResult } } : prev));
+      }
+      // 6-BAND: 15+ kun kutilgan o'yin serverda avtomatik hal qilinganda,
+      // server foydalanuvchining career.messages'iga yangi xabar qo'shadi -
+      // lekin bu poll faqat lastMatchResult'ni ko'chirardi, shuning uchun
+      // o'sha xabar hech qachon MessagesPage'da ko'rinmasdi. Endi serverda
+      // bor, lekin lokal ro'yxatda yo'q xabarlar (id bo'yicha) qo'shib qo'yiladi.
+      const serverMessages = serverPlayer?.career?.messages;
+      if (Array.isArray(serverMessages) && serverMessages.length) {
+        setPlayer((prev) => {
+          if (!prev) return prev;
+          const localIds = new Set((prev.career.messages || []).map((m) => m.id));
+          const newOnes = serverMessages.filter((m) => !localIds.has(m.id));
+          if (!newOnes.length) return prev;
+          return { ...prev, career: { ...prev.career, messages: [...prev.career.messages, ...newOnes] } };
+        });
       }
     }, 20000);
     return () => clearInterval(interval);
@@ -354,10 +372,20 @@ export function GameProvider({ children, username }) {
     await ackMatchResult().catch(() => {});
   }, []);
 
+  // Foydalanuvchi natijani yuborgandan keyin 20 soniya kutmasdan, DARHOL
+  // "hozir pending o'yin bormi" holatini yangilash uchun (WorldMatchPage
+  // natija yuborilgach shuni chaqiradi).
+  const refreshPendingWorldMatch = useCallback(async () => {
+    const { pendingWorldMatch: pwm } = await loadCareerFromServer();
+    setPendingWorldMatch(pwm);
+    return pwm;
+  }, []);
+
   const value = {
     player, ready, createPlayer, updatePlayer, nextDay, resetSave,
     matchdayNext, pendingMatchday, prepareMatchday, commitMatchday,
     worldDate, hasUnwatchedResult, acknowledgeResult,
+    pendingWorldMatch, refreshPendingWorldMatch,
     markMessageRead, requestNewContract, acceptContractOffer, acceptTransferOffer, declineOffer,
     purchasePerk
   };

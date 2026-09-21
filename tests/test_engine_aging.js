@@ -1,6 +1,6 @@
 // Standalone check of the NPC lifecycle: seed a league's squads the way the
 // server does, then age them year by year and print REAL numbers.
-const engine = require('/home/claude/work/app/server/engine.js');
+const engine = require('../server/engine.js');
 
 const league = engine.LEAGUES.find((l) => l.id === 'la_liga');
 const squads = {};

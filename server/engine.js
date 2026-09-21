@@ -14,6 +14,15 @@ const { INITIAL_TEAMS } = require('./gamedata/teamsData');
 const { LEAGUES, NATIONALITIES } = require('./gamedata/leaguesData');
 const { nationalityFor } = require('./gamedata/nationsData');
 
+// 4-BAND: bir odam ishtirok etadigan o'yin uchun DETERMINISTIK seed.
+// Shu leaguega/mavsumga/turga/ikki klubga tayanadi, shuning uchun bir xil
+// fikstura har doim bir xil seedga ega bo'ladi - klient ANA SHU seed bilan
+// src/utils/rng.js:setSeed()ni chaqirib, LiveMatch'ni server bilan bir xil
+// (qayta tomosha qilsa bo'ladigan) natijaga olib keladi.
+function generateMatchSeed(leagueId, season, round, homeId, awayId) {
+  return `${leagueId}:s${season}:r${round}:${homeId}:${awayId}`;
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
@@ -408,11 +417,80 @@ function sortedTable(standings) {
   );
 }
 
+// ============================================================
+// 7-BAND: UMUMIY DOMESTIC KUBOK (server-side, bir xil ligadagi klublar
+// orasida yagona bracket).
+//
+// QASDDAN CHEKLANGAN QAMROV: kontinental kubok (Champions League va h.k.)
+// bu safar SERVERGA KO'CHIRILMADI - u avvalgidek client-local
+// (`src/career/utils/season.js`) holida qoladi. Sabab: kontinental kubok
+// bir nechta MAMLAKAT/LIGA klublaridan yig'ilgan pool talab qiladi, bu
+// butunlay boshqa (ancha katta) integratsiya. Domestic kubok esa BITTA
+// liga ichida, shuning uchun allaqachon mavjud world/league infratuzilmasi
+// ichida tabiiy joylashadi.
+// ============================================================
+
+function shuffleArr(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Toqim son bo'lsa, bittasi "bye" (raqibsiz, avtomatik keyingi turga
+// o'tadi) oladi - xuddi client tomondagi `pairUpForKnockout` (tournamentEngine.js)
+// bilan bir xil mantiq.
+function pairUpForKnockout(teamIds) {
+  const shuffled = shuffleArr(teamIds);
+  const pairs = [];
+  for (let i = 0; i < shuffled.length; i += 2) {
+    pairs.push({ home: shuffled[i], away: shuffled[i + 1] ?? null });
+  }
+  return pairs;
+}
+
+function buildCupRound(teamIds, roundNumber, date) {
+  const pairs = pairUpForKnockout(teamIds);
+  const matches = pairs.map((p) => {
+    if (p.away === null) {
+      // Bye - raqibsiz, darhol keyingi turga o'tadi.
+      return { home: p.home, away: null, played: true, pending: false, golA: null, golB: null, winnerId: p.home, seed: null, bye: true };
+    }
+    return { home: p.home, away: p.away, played: false, pending: false, golA: null, golB: null, winnerId: null, seed: null };
+  });
+  return { round: roundNumber, date, matches };
+}
+
+// Mavsum boshida (yoki mavsum almashganda) yangi kubok yaratadi - 1-tur
+// darhol tayin qilinadi, keyingi turlar oldingi tur tugagach dinamik
+// generatsiya qilinadi (g'oliblar oldindan noma'lum bo'lgani uchun).
+function initDomesticCup(league, seasonStartDate) {
+  const startDate = addDays(seasonStartDate, 20);
+  return {
+    name: `${league.country || league.name} Cup`,
+    rounds: [buildCupRound(league.teamIds, 1, startDate)],
+    championId: null,
+  };
+}
+
+function isCupRoundComplete(round) {
+  return round.matches.every((m) => m.played);
+}
+
+function buildNextCupRound(prevRound) {
+  const winners = prevRound.matches.map((m) => m.winnerId).filter(Boolean);
+  const nextDate = addDays(prevRound.date, 14);
+  return buildCupRound(winners, prevRound.round + 1, nextDate);
+}
+
 module.exports = {
   addDays, generateRoundRobinRounds, buildSeasonSchedule, initStandings,
   teamStrength, simulateTeamMatch, simulateHumanPlayerMatch, distributeGoals,
-  applyResultToStandings, resolveMatch,
+  applyResultToStandings, resolveMatch, generateMatchSeed,
   initWorldSquad, randomAcademyPlayer, ageAndRefreshSquad,
   isSeasonComplete, sortedTable,
+  pairUpForKnockout, initDomesticCup, isCupRoundComplete, buildNextCupRound, buildCupRound,
   INITIAL_TEAMS, LEAGUES, NATIONALITIES
 };

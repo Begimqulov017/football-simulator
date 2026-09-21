@@ -10,9 +10,9 @@
 // ---------------------------------------------------------------------------
 
 import { INITIAL_TEAMS } from '../../data/teamsData';
-import { LEAGUES } from '../data/leaguesData';
+import { LEAGUES } from '../../data/leaguesData';
 import { getMergedSquad } from '../data/clubRosterStore';
-import { isMvpPerformance } from './statCalc';
+import { isMvpPerformance, resolveVeteranProgression, getRetirementChance, calcMainStats, calcGoalkeeperOVR, calcOVR, clampStat } from './statCalc';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -759,6 +759,13 @@ function finalizeSeason(player, career, standings, topScorers, schedule, message
 // playback screen can replay it before the result is committed to the save.
 // ---------------------------------------------------------------------------
 export function prepareNextDay(player) {
+  // 8-BAND: pensiyaga chiqgan karyera to'liq "muzlatiladi" - boshqa hech
+  // qanday kun/o'yin/mashg'ulot davom etmaydi. Foydalanuvchi RetirementPage
+  // orqali yangi ("<Familiya> Jr.") karyera boshlashi kerak.
+  if (player.career.retired) {
+    return { nextPlayer: player, matchInfo: null };
+  }
+
   const newDate = addDays(player.career.gameDate, 1);
   const newDay = player.career.day + 1;
 
@@ -770,6 +777,9 @@ export function prepareNextDay(player) {
   let potential = player.potential;
   let matchInfo = null;
   let age = player.age;
+  let overall = player.overall;
+  let mainStats = player.mainStats;
+  let subStats = player.subStats;
 
   // Birthdays: once a full in-game year (365 days) has passed since the last
   // age-up, the player turns a year older and their yearly OVR growth
@@ -784,6 +794,61 @@ export function prepareNextDay(player) {
       subject: 'Happy Birthday!', body: `You've turned ${age} today. Here's to another year of your career.`,
       read: false, resolved: true
     }];
+
+    // 8-BAND: NPC futbolchilar uchun bu allaqachon ishlaydi
+    // (server/engine.js: ageAndRefreshSquad - 30+ da forma past bo'lsa
+    // pasayadi). Inson o'yinchi uchun ESA bu HECH QAYERDA ishlatilmagan
+    // edi (`resolveVeteranProgression` yozilgan, lekin chaqirilmagan) -
+    // shuning uchun 30+ yoshda past formadagi inson o'yinchi CHEKSIZ
+    // yuqori qolib ketardi. Endi xuddi shu chegara (o'rtacha reyting
+    // <= 7.5) bilan, subStats/mainStats/overall biroz pasayadi.
+    const recentRatings = career.matchRatings || [];
+    const recentAvgRating = recentRatings.length
+      ? recentRatings.reduce((a, b) => a + b, 0) / recentRatings.length
+      : 6.0;
+    const progression = resolveVeteranProgression(age, recentAvgRating);
+    if (progression.regressing) {
+      const isGk = player.position === 'GK';
+      const decline = 1 + Math.random(); // 1.0-2.0 stat point, har yili
+      const newSubStats = {};
+      Object.keys(subStats || {}).forEach((k) => { newSubStats[k] = clampStat(subStats[k] - decline); });
+      subStats = newSubStats;
+      mainStats = isGk ? subStats : calcMainStats(subStats);
+      overall = isGk ? calcGoalkeeperOVR(subStats) : calcOVR(player.position, mainStats);
+      messages = [...messages, {
+        id: newId('msg'), type: 'club', date: newDate, from: player.club.name,
+        subject: 'Age is catching up',
+        body: `At ${age}, your recent form hasn't been enough to hold back time - your attributes have declined slightly this year.`,
+        read: false, resolved: true
+      }];
+    }
+
+    // 8-BAND: MAJBURIY PENSIYA. 35 yoshdan boshlab har tug'ilgan kunda
+    // pensiyaga chiqish ehtimoli tashlanadi (getRetirementChance - 45
+    // yoshda 100%, kafolatlangan). Chiqsa: karyera "retired" deb
+    // belgilanadi, joriy pul (career.money) MEROS sifatida saqlanadi -
+    // keyingi karyera (o'g'il, "<Familiya> Jr.") shu pul bilan boshlanadi
+    // (RetirementPage/StartPage orqali). Pensiyaga chiqgandan keyin bu
+    // funksiya boshqa hech narsa qilmaydi - o'yin/mashg'ulot/kubok
+    // davom etmaydi, faqat pensiya xabari va meros saqlanadi.
+    const retireChance = getRetirementChance(age);
+    if (retireChance > 0 && Math.random() < retireChance) {
+      const retiredCareer = {
+        ...career,
+        retired: true,
+        retirementLegacy: { money: career.money || 0, surname: player.surname, retiredAge: age },
+        messages: [...messages, {
+          id: newId('msg'), type: 'club', date: newDate, from: player.club.name,
+          subject: 'Retirement',
+          body: `At ${age}, you've decided to retire from professional football. Thank you for an incredible career.`,
+          read: false, resolved: true
+        }],
+      };
+      return {
+        nextPlayer: { ...player, age, overall, mainStats, subStats, career: retiredCareer },
+        matchInfo: null,
+      };
+    }
   }
 
   // Free agents don't have a club schedule to advance through - just wait
@@ -794,7 +859,7 @@ export function prepareNextDay(player) {
       if (offer) messages = [...messages, offer];
     }
     return {
-      nextPlayer: { ...player, age, career: { ...career, messages } },
+      nextPlayer: { ...player, age, overall, mainStats, subStats, career: { ...career, messages } },
       matchInfo: null
     };
   }
@@ -804,7 +869,7 @@ export function prepareNextDay(player) {
   ({ career, messages } = checkContractStatus(player, career, newDay, messages));
   if (career.freeAgent) {
     // Just went free THIS tick - no more club-specific logic applies today.
-    return { nextPlayer: { ...player, age, career }, matchInfo: null };
+    return { nextPlayer: { ...player, age, overall, mainStats, subStats, career }, matchInfo: null };
   }
 
   let clubTier = player.club.tier;
@@ -924,6 +989,9 @@ export function prepareNextDay(player) {
     ...player,
     age,
     potential,
+    overall,
+    mainStats,
+    subStats,
     club: { ...player.club, tier: clubTier },
     career: { ...career, schedule, standings, topScorers, messages }
   };
@@ -1029,14 +1097,23 @@ function maybeGenerateFreeAgentOffer(player, gameDate) {
   };
 }
 
-export function getLeagueTable(player) {
-  const standings = player?.career?.standings || {};
-  return Object.values(standings)
+// Generic: turns a raw standings object ({ teamId: {played,win,draw,loss,gf,ga,pts} })
+// into a sorted, display-ready table. Works for BOTH the player's own
+// client-side standings AND a shared-world standings object fetched from the
+// server (used by the "browse any league" screen), since the shape is the
+// same either way.
+export function computeStandingsTable(standings) {
+  return Object.values(standings || {})
     .map((row) => {
       const team = INITIAL_TEAMS.find((t) => t.id === row.teamId);
       return { ...row, name: team?.name || row.teamId, logo: team?.logo || '⚽', gd: row.gf - row.ga };
     })
     .sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
+}
+
+export function getLeagueTable(player) {
+  const standings = player?.career?.standings || {};
+  return computeStandingsTable(standings);
 }
 
 export function getTopScorers(player) {

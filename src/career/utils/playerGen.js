@@ -1,4 +1,4 @@
-import { LEAGUES, HOME_COUNTRY_CLUB_BOOST } from '../data/leaguesData';
+import { LEAGUES, HOME_COUNTRY_CLUB_BOOST } from '../../data/leaguesData';
 import { INITIAL_TEAMS } from '../../data/teamsData';
 import { generateSubStatsForMain, generateGkSubStats, calcMainStats, calcGoalkeeperOVR, calcOVR } from './statCalc';
 

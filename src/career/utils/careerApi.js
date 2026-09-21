@@ -17,7 +17,7 @@ const TOKEN_KEY = 'ms_token';
 // gains endpoints/fields the frontend depends on (career save/sync, admin
 // passwords, delete-user, etc). Lets us show a precise "backend hali
 // yangilanmagan" message instead of a confusing generic error.
-export const REQUIRED_SERVER_VERSION = 8;
+export const REQUIRED_SERVER_VERSION = 11;
 
 export async function checkBackendVersion() {
   try {
@@ -72,14 +72,30 @@ export async function loadCareerFromServer() {
     // don't know whether a career exists, so the caller should fall back to
     // whatever it has cached locally rather than treating this as a
     // confirmed "no career".
-    return { player: null, worldDate: null, confirmed: false };
+    return { player: null, worldDate: null, confirmed: false, pendingWorldMatch: null };
   }
   // The server answered authoritatively: data.player is exactly what exists
   // for this account right now, including null (no career at all - e.g.
   // right after an admin "Wipe Data"). confirmed: true tells the caller to
   // trust this value even when it's null, instead of resurrecting a stale
   // local save.
-  return { player: data.player, worldDate: data.worldDate, confirmed: true };
+  return { player: data.player, worldDate: data.worldDate, confirmed: true, pendingWorldMatch: data.pendingWorldMatch || null };
+}
+
+// 4-BAND: foydalanuvchining klubi navbatdagi o'yinini KUTMOQDA (hali
+// avtomatik hal qilinmagan) bo'lsa, uni LiveMatch orqali o'ynash uchun kerakli
+// hamma narsani (ikkala klub + world squadlari + seed) qaytaradi.
+export async function fetchPendingMatchDetail() {
+  const data = await apiFetch('/api/world-match-detail');
+  if (!data.ok) return null;
+  return data;
+}
+
+// Foydalanuvchi LiveMatch orqali O'ZI o'ynagan pending o'yinning yakuniy
+// natijasini serverga yozib qo'yadi (standings/schedule/karyera statistikasi
+// shu yerda yangilanadi).
+export async function submitMatchResult(payload) {
+  return apiFetch('/api/career/submit-match-result', { method: 'POST', body: JSON.stringify(payload) });
 }
 
 // Umumiy dunyodagi so'nggi o'yin natijasi "ko'rildi" deb belgilanadi - shu
@@ -110,9 +126,18 @@ export async function wipeAllData() {
   return data;
 }
 
+// Every league in the game (not just the player's own), with a light
+// summary of its shared world - powers the "browse any league" screen.
+export async function fetchLeagues() {
+  const data = await apiFetch('/api/leagues');
+  if (!data.ok) return { ok: false, leagues: [], worldDate: null };
+  return { ok: true, leagues: data.leagues, worldDate: data.worldDate };
+}
+
 // Current shared schedule/standings for a league - anyone logged in can view.
-export async function fetchWorld(leagueId) {
-  const data = await apiFetch(`/api/world/${encodeURIComponent(leagueId)}`);
+export async function fetchWorld(leagueId, { includeSquads } = {}) {
+  const qs = includeSquads ? '?includeSquads=1' : '';
+  const data = await apiFetch(`/api/world/${encodeURIComponent(leagueId)}${qs}`);
   if (!data.ok) return { ok: false, world: null };
   return { ok: true, world: data.world };
 }

@@ -8,14 +8,34 @@ import { buildSeasonSchedule, initStandings, computeStartingWage, setupSeasonCup
 
 const SPIN_MS = 900;
 
+// Har bir slot (reyting / klub / potensial) uchun URINISHLAR SONI CHEKLANGAN.
+// Avval cheksiz aylantirish mumkin edi — foydalanuvchi o'ziga yoqqan raqam
+// yoki klub chiqmaguncha bosaverardi, bu esa "spin" ning o'zini ma'nosiz
+// qilardi. Endi eng ko'pi 4 marta: istalgan paytda to'xtab, qo'lidagi natija
+// bilan o'ynab ketishi mumkin; 4-marta bosgandan keyin esa chiqqan natija
+// yakuniy bo'lib qoladi.
+const MAX_SPINS = 4;
+
 const POSITIONS = ['GK', 'CB', 'LB', 'RB', 'CDM', 'CM', 'CAM', 'LM', 'RM', 'LW', 'RW', 'ST'];
+
+// 8-BAND: pensiyaga chiqgan o'yinchining "merosi" - RetirementPage shu
+// yerga (sessionStorage) yozib, /start'ga yuboradi. Familiya "Jr." bilan
+// oldindan to'ldiriladi, pul esa meros qilib olinadi (odatdagi 1000 o'rniga).
+const LEGACY_KEY = 'footballSimulator.legacyCareer';
+function readLegacyCareer() {
+  try {
+    const raw = sessionStorage.getItem(LEGACY_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
 
 export default function StartPage() {
   const navigate = useNavigate();
   const { createPlayer } = useGame();
+  const [legacy] = useState(() => readLegacyCareer());
 
   const [name, setName] = useState('');
-  const [surname, setSurname] = useState('');
+  const [surname, setSurname] = useState(() => (legacy ? `${legacy.surname} Jr.` : ''));
   const [number, setNumber] = useState('');
   const [position, setPosition] = useState('');
   const [nationality, setNationality] = useState('');
@@ -24,9 +44,15 @@ export default function StartPage() {
   const [potential, setPotential] = useState(null);
   const [clubResult, setClubResult] = useState(null);
   const [spinning, setSpinning] = useState({ rating: false, potential: false, club: false });
+  const [spins, setSpins] = useState({ rating: 0, potential: 0, club: 0 });
+
+  const spinsLeft = (key) => MAX_SPINS - spins[key];
+  const anySpinUsed = spins.rating > 0 || spins.potential > 0 || spins.club > 0;
 
   const spin = (key, roll, setter) => {
     if (spinning[key]) return;
+    if (spins[key] >= MAX_SPINS) return; // urinishlar tugadi — natija yakuniy
+    setSpins((s) => ({ ...s, [key]: s[key] + 1 }));
     setSpinning((s) => ({ ...s, [key]: true }));
     let ticks = 0;
     const interval = setInterval(() => {
@@ -132,7 +158,7 @@ export default function StartPage() {
         day: 1,
         lastAgeUpDay: 1,
         growthUsedThisYear: 0,
-        money: 1000,
+        money: legacy ? legacy.money : 1000,
         weeklyWage,
         contract: { yearsTotal: rollContractLength(clubResult.league.id), signedDay: 1 },
         contractTalksOpened: false,
@@ -167,6 +193,7 @@ export default function StartPage() {
       }
     };
     createPlayer(player);
+    if (legacy) sessionStorage.removeItem(LEGACY_KEY);
     navigate('/home', { replace: true });
   };
 
@@ -175,6 +202,11 @@ export default function StartPage() {
       <div className="card start-card">
         <h1>Create a Player</h1>
         <p className="tagline">Build your pro and spin your way into the league.</p>
+        {legacy && (
+          <div className="badge badge-gold" style={{ display: 'inline-block', marginBottom: 14 }}>
+            🏆 Continuing the family legacy - inherited ${legacy.money.toLocaleString()} from {legacy.surname} (retired at {legacy.retiredAge})
+          </div>
+        )}
 
         <div className="grid grid-3" style={{ marginBottom: 14 }}>
           <div className="field">
@@ -210,8 +242,12 @@ export default function StartPage() {
           </div>
           <div className="field">
             <label>Nationality</label>
+            {/* Millat birinchi aylantirishdan keyin QULFLANADI: aks holda
+                klub urinishlari tugagach millatni almashtirib, qaytadan
+                4 ta urinish olish mumkin bo'lardi — ya'ni cheklov bo'lmasdi. */}
             <select
               value={nationality}
+              disabled={anySpinUsed}
               onChange={(e) => {
                 setNationality(e.target.value);
                 // Nationality changed after a club was already rolled -
@@ -231,6 +267,9 @@ export default function StartPage() {
           <div className={`roll-slot${rating !== null ? ' done' : ''}${spinning.rating ? ' spinning' : ''}`} onClick={spinRating}>
             <div className="roll-label">FIRST RATING</div>
             <div className="roll-value">{rating ?? 'Spin'}</div>
+            <div className="roll-label" style={{ marginTop: 4, opacity: 0.75 }}>
+              {spinsLeft('rating') > 0 ? `${spinsLeft('rating')} urinish qoldi` : 'Yakuniy'}
+            </div>
           </div>
           <div
             className={`roll-slot${clubResult ? ' done' : ''}${spinning.club ? ' spinning' : ''}`}
@@ -239,6 +278,9 @@ export default function StartPage() {
           >
             <div className="roll-label">FIRST CLUB</div>
             <div className="roll-value">{clubResult ? clubResult.team.name : 'Spin'}</div>
+            <div className="roll-label" style={{ marginTop: 4, opacity: 0.75 }}>
+              {spinsLeft('club') > 0 ? `${spinsLeft('club')} urinish qoldi` : 'Yakuniy'}
+            </div>
           </div>
           <div
             className={`roll-slot${potential !== null ? ' done' : ''}${spinning.potential ? ' spinning' : ''}`}
@@ -247,6 +289,9 @@ export default function StartPage() {
           >
             <div className="roll-label">FIRST POTENTIAL</div>
             <div className="roll-value">{potential ?? 'Spin'}</div>
+            <div className="roll-label" style={{ marginTop: 4, opacity: 0.75 }}>
+              {spinsLeft('potential') > 0 ? `${spinsLeft('potential')} urinish qoldi` : 'Yakuniy'}
+            </div>
           </div>
         </div>
         {!nationality && (
