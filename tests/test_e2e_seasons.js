@@ -1,7 +1,7 @@
 // Full end-to-end test against the REAL running server: register humans,
 // give them careers in the same league, then let the admin advance the shared
 // world through several full seasons and verify the squads actually evolve.
-const BASE = 'http://localhost:4000';
+const BASE = '[https://football-simulator-server.onrender.com](https://football-simulator-server.onrender.com)';
 
 async function api(path, { method = 'GET', token, body } = {}) {
   const res = await fetch(`${BASE}${path}`, {
@@ -22,7 +22,7 @@ function makePlayer(name, clubId, clubName) {
 }
 
 (async () => {
-  // --- setup ---
+  // --- setup ---j
   const admin = await api('/api/login', { method: 'POST', body: { username: 'Begimqulov017', password: 'beg1mqulov.011' } });
   if (!admin.ok) throw new Error('admin login failed: ' + JSON.stringify(admin));
   const adminToken = admin.token;
