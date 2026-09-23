@@ -4,20 +4,20 @@ import NotStarted from '../components/NotStarted';
 import { useGame } from '../context/GameContext';
 
 const TABS = [
-  { id: 'staff', label: 'Staff & Coaches' },
-  { id: 'gear', label: 'Equipment & Gear' },
-  { id: 'clubs', label: 'Club Ownership' }
+  { id: 'staff', label: 'Xodimlar va murabbiylar' },
+  { id: 'gear', label: 'Jihozlar' },
+  { id: 'clubs', label: 'Klub egaligi' }
 ];
 
 const STAFF = [
-  { key: 'fitnessTrainer', name: 'Fitness Trainer', effect: '+25% training stat gains', price: 25000 },
-  { key: 'physio', name: 'Physiotherapist', effect: 'Faster stamina & injury recovery', price: 30000 },
-  { key: 'agent', name: 'Agent', effect: 'Unlocks offers from bigger clubs', price: 50000 }
+  { key: 'fitnessTrainer', name: 'Fitnes murabbiyi', effect: '+25% training natijasi', price: 25000 },
+  { key: 'physio', name: 'Fizioterapevt', effect: 'Kuch-quvvat va jarohatdan tezroq tiklanish', price: 30000 },
+  { key: 'agent', name: 'Agent', effect: 'Kattaroq klublardan takliflarni ochadi', price: 50000 }
 ];
 
 const GEAR = [
-  { key: 'boots', value: 'pro', name: 'Pro Boots', effect: '+1 stat in matches', price: 8000 },
-  { key: 'boots', value: 'elite', name: 'Elite Boots', effect: '+2 stats in matches', price: 20000 }
+  { key: 'boots', value: 'pro', name: 'Pro butsalar', effect: "O'yinda +1 stat", price: 8000 },
+  { key: 'boots', value: 'elite', name: 'Elite butsalar', effect: "O'yinda +2 stat", price: 20000 }
 ];
 
 export default function MoneyPage() {
@@ -27,16 +27,19 @@ export default function MoneyPage() {
 
   const { money, weeklyWage, perks } = player.career;
   const hasPendingContract = player.career.messages.some((m) => m.type === 'contract' && !m.resolved);
+  const daysSinceAsk = player.career.day - (player.career.lastContractRequestDay || 0);
+  const onCooldown = !hasPendingContract && daysSinceAsk < 20;
+  const contractDisabled = hasPendingContract || onCooldown;
 
   return (
     <AppShell>
       <div className="page-header">
         <div>
-          <h1>Money & Budget</h1>
-          <div className="sub">Balance ${money.toLocaleString()} · Weekly Wage ${weeklyWage.toLocaleString()}</div>
+          <h1>Pul va byudjet</h1>
+          <div className="sub">Balans ${money.toLocaleString()} · Haftalik maosh ${weeklyWage.toLocaleString()}</div>
         </div>
-        <button className="btn btn-primary" disabled={hasPendingContract} onClick={requestNewContract}>
-          {hasPendingContract ? 'Offer pending...' : 'Request New Contract'}
+        <button className="btn btn-primary" disabled={contractDisabled} onClick={requestNewContract}>
+          {hasPendingContract ? 'Taklif kutilmoqda...' : onCooldown ? `Yana ${20 - daysSinceAsk} kun kuting` : "Yangi kontrakt so'rash"}
         </button>
       </div>
 
@@ -67,7 +70,7 @@ export default function MoneyPage() {
                 disabled={owned || money < s.price}
                 onClick={() => purchasePerk(s.key, s.price, true)}
               >
-                {owned ? 'Owned' : `$${s.price.toLocaleString()}`}
+                {owned ? "Sotib olingan" : `$${s.price.toLocaleString()}`}
               </button>
             </div>
           );
@@ -86,14 +89,14 @@ export default function MoneyPage() {
                 disabled={owned || money < g.price}
                 onClick={() => purchasePerk('boots', g.price, g.value)}
               >
-                {owned ? 'Equipped' : `$${g.price.toLocaleString()}`}
+                {owned ? 'Kiyilgan' : `$${g.price.toLocaleString()}`}
               </button>
             </div>
           );
         })}
 
         {tab === 'clubs' && (
-          <NotStarted icon="🏟️" title="Club ownership coming later" desc="Buy clubs once you've built up enough career earnings." />
+          <NotStarted icon="🏟️" title="Klub egaligi keyinroq" desc="Yetarli mablag' to'plaganingizdan so'ng klub sotib olishingiz mumkin bo'ladi." />
         )}
       </div>
     </AppShell>

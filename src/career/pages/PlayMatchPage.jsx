@@ -100,8 +100,9 @@ export default function PlayMatchPage() {
 
   const { opponentName, opponentLogo, isHome, pStats } = matchInfo;
   const passedEvents = timeline.filter((e) => e.minute <= minute);
-  const liveGolFor = passedEvents.filter((e) => e.side === 'for').length;
-  const liveGolAgainst = passedEvents.filter((e) => e.side === 'against').length;
+  const passedGoals = passedEvents.filter((e) => e.kind === 'goal');
+  const liveGolFor = passedGoals.filter((e) => e.side === 'for').length;
+  const liveGolAgainst = passedGoals.filter((e) => e.side === 'against').length;
   const mvp = isMvpPerformance(pStats);
 
   const homeName = isHome ? player.club.name : opponentName;
@@ -170,18 +171,32 @@ export default function PlayMatchPage() {
           {passedEvents.length === 0 && (
             <div className="sub" style={{ padding: 8 }}>{finished ? 'A quiet match, no goals.' : 'Kick-off...'}</div>
           )}
-          {[...passedEvents].reverse().map((e) => (
-            <div key={e.id} className="list-row">
-              <span>
-                ⚽ {e.minute}' —{' '}
-                {e.side === 'for'
-                  ? (e.isPlayerGoal ? `You scored!` : e.isPlayerAssist ? `Teammate scores (assist: you)` : `${player.club.name} scores`)
-                  : `${opponentName} scores`}
-              </span>
-              {e.isPlayerGoal && <span className="badge badge-gold">GOAL</span>}
-              {e.isPlayerAssist && <span className="badge badge-green">ASSIST</span>}
-            </div>
-          ))}
+          {[...passedEvents].reverse().map((e) => {
+            if (e.kind === 'card') {
+              const teamName = e.side === 'for' ? player.club.name : opponentName;
+              const icon = e.card?.type === 'red' ? '🟥' : '🟨';
+              return (
+                <div key={e.id} className="list-row">
+                  <span>{icon} {e.minute}' — {e.card?.name || 'Noma\'lum futbolchi'} ({teamName}) kartochka oldi</span>
+                </div>
+              );
+            }
+            let label;
+            if (e.side === 'for') {
+              if (e.isPlayerGoal) label = 'Siz gol urdingiz!';
+              else if (e.isPlayerAssist) label = `${e.scorerName || 'Jamoadosh'} gol urdi (assist: siz)`;
+              else label = `${e.scorerName || player.club.name} gol urdi${e.assistName ? ` (assist: ${e.assistName})` : ''}`;
+            } else {
+              label = `${e.scorerName || opponentName} gol urdi${e.assistName ? ` (assist: ${e.assistName})` : ''}`;
+            }
+            return (
+              <div key={e.id} className="list-row">
+                <span>⚽ {e.minute}' — {label}</span>
+                {e.isPlayerGoal && <span className="badge badge-gold">GOAL</span>}
+                {e.isPlayerAssist && <span className="badge badge-green">ASSIST</span>}
+              </div>
+            );
+          })}
         </div>
       </div>
 

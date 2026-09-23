@@ -7,8 +7,9 @@ import { getMergedSquad } from '../data/clubRosterStore';
 import { getPlayerFixtures } from '../utils/season';
 import { fetchClubRoster } from '../utils/careerApi';
 
-function initials(fullName) {
-  return fullName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
+function surname(fullName) {
+  const parts = fullName.trim().split(' ');
+  return parts[parts.length - 1];
 }
 
 // Real position groups, used to lay the squad out like an actual formation
@@ -90,12 +91,12 @@ export default function ClubPage() {
   const { rows, bench } = buildFormation(squad);
 
   const cardStyle = (p) => ({
-    width: 64, height: 64, borderRadius: 14,
+    width: 84, height: 72, borderRadius: 14,
     background: 'var(--glass-fill)',
     border: p.id === player.id ? '2px solid var(--accent-gold)' : '1px solid var(--glass-border)',
     boxShadow: p.id === player.id ? '0 0 0 3px rgba(255, 200, 60, 0.15)' : 'none',
     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-    fontFamily: 'var(--font-display)', position: 'relative'
+    fontFamily: 'var(--font-display)', position: 'relative', padding: '0 4px'
   });
 
   return (
@@ -109,17 +110,20 @@ export default function ClubPage() {
 
       <div className="grid grid-2">
         <div className="card">
-          <div className="card-title">SQUAD</div>
+          <div className="card-title">TARKIB</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {rows.map((row, i) => (
               <div key={i} style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
                 {row.map((p) => (
                   <div
                     key={p.id}
-                    title={`${p.name} · ${p.pos} · OVR ${p.ovr ?? '-'}${p.isUser ? ' · Player-created' : ''}${p.id === player.id ? ' (You)' : ''}`}
+                    title={`${p.name} · ${p.pos} · OVR ${p.ovr ?? '-'}${p.isUser ? ' · Foydalanuvchi yaratgan' : ''}${p.id === player.id ? ' (Siz)' : ''}`}
                     style={cardStyle(p)}
                   >
-                    <span style={{ fontSize: 13 }}>{initials(p.name)}</span>
+                    <span style={{ fontSize: 12, textAlign: 'center', lineHeight: 1.15, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {surname(p.name)}
+                    </span>
+                    <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{p.pos}</span>
                     <span style={{ fontSize: 10, color: 'var(--accent-gold)' }}>{p.ovr ?? '-'}</span>
                     {p.isUser && (
                       <span style={{ position: 'absolute', top: -6, right: -6, fontSize: 11 }}>
@@ -135,13 +139,13 @@ export default function ClubPage() {
 
         <div className="grid" style={{ gap: 18 }}>
           <div className="card" style={{ textAlign: 'center' }}>
-            <div className="card-title">CLUB NAME AND LOGO</div>
+            <div className="card-title">KLUB NOMI VA LOGOTIPI</div>
             <div style={{ fontSize: 44 }}>{player.club.logo}</div>
             <div style={{ fontFamily: 'var(--font-display)', marginTop: 6 }}>{player.club.name}</div>
           </div>
 
           <div className="card">
-            <div className="card-title">BENCH PLAYERS</div>
+            <div className="card-title">ZAXIRADAGI O'YINCHILAR</div>
             <div style={{ maxHeight: 220, overflowY: 'auto' }}>
               {bench.map((p) => (
                 <div
@@ -149,7 +153,7 @@ export default function ClubPage() {
                   className="list-row"
                   style={p.id === player.id ? { color: 'var(--accent-gold)' } : undefined}
                 >
-                  <span>{p.name}{p.isUser && p.id !== player.id ? ' 👤' : ''}{p.id === player.id ? ' ⭐ (You)' : ''}</span>
+                  <span>{p.name}{p.isUser && p.id !== player.id ? ' 👤' : ''}{p.id === player.id ? ' ⭐ (Siz)' : ''}</span>
                   <span className="badge">{p.pos} · {p.ovr ?? '-'}</span>
                 </div>
               ))}
@@ -157,18 +161,36 @@ export default function ClubPage() {
           </div>
 
           <div className="card">
-            <div className="card-title">TROPHIES</div>
-            {(!player.career.trophies || player.career.trophies.length === 0) ? (
-              <div className="sub" style={{ padding: 8 }}>No trophies won at this club yet.</div>
-            ) : (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {[...player.career.trophies].reverse().map((t, i) => (
-                  <span key={i} className="badge badge-gold" title={`${t.name} (${t.year})`}>
-                    {t.icon || '🏆'} {t.year}
-                  </span>
-                ))}
-              </div>
-            )}
+            <div className="card-title">TROPHIES <span className="sub" style={{ fontWeight: 400 }}>· {player.club.name}</span></div>
+            {(() => {
+              // 9-BOSQICH: bu yerda endi O'YINCHINING shaxsiy yutuqlari
+              // EMAS, balki KLUBNING o'zi (garchi o'yinchisiz mavsumlarda
+              // bo'lsa ham) yutgan kubkalar ko'rsatiladi - Profile
+              // sahifasidagi shaxsiy vite bilan aralashtirilmasin.
+              const own = (player.career.trophies || []).filter((t) => t.teamId === player.club.id);
+              const clubWide = (player.career.clubTrophyHistory || []).filter((t) => t.teamId === player.club.id);
+              const merged = [...own, ...clubWide];
+              const seen = new Set();
+              const unique = merged.filter((t) => {
+                const key = `${t.name}_${t.year}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+              }).sort((a, b) => b.year - a.year);
+
+              if (!unique.length) {
+                return <div className="sub" style={{ padding: 8 }}>Bu klub hali (kuzatilgan mavsumlarda) kubok yutmagan.</div>;
+              }
+              return (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {unique.map((t, i) => (
+                    <span key={i} className="badge badge-gold" title={`${t.name} (${t.year})`}>
+                      {t.icon || '🏆'} {t.year}
+                    </span>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
 
           <button
@@ -177,15 +199,15 @@ export default function ClubPage() {
             onClick={() => navigate('/games')}
             style={{ textAlign: 'left', cursor: 'pointer', width: '100%' }}
           >
-            <div className="card-title">NEXT THREE GAMES <span className="sub" style={{ float: 'right' }}>See full schedule →</span></div>
+            <div className="card-title">KEYINGI 3 TA O'YIN <span className="sub" style={{ float: 'right' }}>To'liq jadval →</span></div>
             {getPlayerFixtures(player).filter((f) => !f.played).slice(0, 3).map((f) => (
               <div key={f.round} className="list-row">
-                <span>{f.opponentLogo} {f.isHome ? 'vs' : '@'} {f.opponent}</span>
+                <span>{f.opponentLogo} {f.isHome ? 'uy' : 'mehmon'} — {f.opponent}</span>
                 <span className="badge">{f.date}</span>
               </div>
             ))}
             {getPlayerFixtures(player).filter((f) => !f.played).length === 0 && (
-              <div className="sub" style={{ padding: 8 }}>Season complete - new fixtures coming soon.</div>
+              <div className="sub" style={{ padding: 8 }}>Mavsum tugadi - yangi o'yinlar tez orada.</div>
             )}
           </button>
         </div>

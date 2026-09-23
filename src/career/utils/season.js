@@ -176,12 +176,53 @@ function weightedPick(list) {
   return list[list.length - 1];
 }
 
+// Fauldan ko'ra ko'proq mudofaachi/opardgichlar sariq kartochka oladi -
+// hujumchilar deyarli olmaydi. GK juda kam.
+const FOUL_WEIGHT = { CB: 1, LB: 0.8, RB: 0.8, CDM: 1, CM: 0.6, LM: 0.4, RM: 0.4, CAM: 0.3, LW: 0.25, RW: 0.25, ST: 0.2, GK: 0.05 };
+
+function weightedPickByFoul(list) {
+  const weights = list.map((p) => Math.max(0.05, FOUL_WEIGHT[p.pos] ?? 0.4));
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < list.length; i += 1) {
+    r -= weights[i];
+    if (r <= 0) return list[i];
+  }
+  return list[list.length - 1];
+}
+
+// 2-BOSQICH: bitta oʻyin uchun (bitta jamoa) sariq/qizil kartochkalarni
+// tasodifiy, lekin real futbolga oʻxshab (mudofaachilarga koʻproq) hosil
+// qiladi. Har bir kartochka egasining ismi qaytariladi - shu sababli
+// endi "kim jarohat oldi" kabi "kim kartochka oldi" ham koʻrinadi.
+function generateTeamCards(team) {
+  if (!team?.squad?.length) return [];
+  const cards = [];
+  const yellowCount = Math.random() < 0.55 ? (Math.random() < 0.65 ? 1 : 2) : 0;
+  const usedIds = new Set();
+  for (let i = 0; i < yellowCount; i += 1) {
+    const pool = team.squad.filter((p) => !usedIds.has(p.id));
+    if (!pool.length) break;
+    const player = weightedPickByFoul(pool);
+    usedIds.add(player.id);
+    cards.push({ id: player.id, name: player.name, type: 'yellow' });
+  }
+  // Juda kam holatda (~3%) qizil kartochka - alohida futbolchiga.
+  if (Math.random() < 0.03) {
+    const pool = team.squad.filter((p) => !usedIds.has(p.id));
+    const player = weightedPickByFoul(pool.length ? pool : team.squad);
+    if (player) cards.push({ id: player.id, name: player.name, type: 'red' });
+  }
+  return cards;
+}
+
 function distributeGoals(team, goalsCount, topScorers, excludeId) {
-  if (!team || goalsCount <= 0) return;
+  if (!team || goalsCount <= 0) return [];
   const pool = team.squad.filter((p) => p.id !== excludeId);
   const attackers = pool.filter((p) => (ATTACK_WEIGHT[p.pos] ?? 0) > 0.3);
   const list = attackers.length ? attackers : pool;
-  if (!list.length) return;
+  if (!list.length) return [];
+  const scored = [];
   for (let i = 0; i < goalsCount; i += 1) {
     const scorer = weightedPick(list);
     if (!scorer) continue;
@@ -189,7 +230,17 @@ function distributeGoals(team, goalsCount, topScorers, excludeId) {
       topScorers[scorer.id] = { id: scorer.id, name: scorer.name, teamId: team.id, teamName: team.name, goals: 0 };
     }
     topScorers[scorer.id].goals += 1;
+
+    // 2-BOSQICH: bu golni kim uzatgani (assist) - ~68% ehtimol bilan,
+    // to'purchining o'zidan boshqa birov, ko'proq CAM/CM/qanotchilardan.
+    let assistName = null;
+    if (Math.random() < 0.68) {
+      const assistPool = pool.filter((p) => p.id !== scorer.id);
+      if (assistPool.length) assistName = weightedPick(assistPool).name;
+    }
+    scored.push({ id: scorer.id, name: scorer.name, assistName });
   }
+  return scored;
 }
 
 function applyResultToStandings(standings, homeId, awayId, golA, golB) {
@@ -228,7 +279,13 @@ export function recomputeTier(player) {
 }
 
 function maybeGenerateTransferOffer(player, league, gameDate) {
-  if (Math.random() > 0.08) return null;
+  // 3-BOSQICH: eski qat'iy 8% ehtimol + faqat "juda yaxshi o'ynagan kunlar"
+  // talabi transfer takliflarini yillar davomida deyarli yo'qolib ketishiga
+  // sabab bo'lgan edi. Endi bazaviy ehtimol OVR bilan birga o'sadi - kuchli
+  // futbolchi doim ko'proq e'tibor tortadi, lekin zaif futbolchi ham
+  // umuman umidsiz qolmaydi.
+  const chance = 0.10 + clamp((player.overall - 60) / 200, 0, 0.12);
+  if (Math.random() > chance) return null;
   const candidates = league.teamIds.filter((id) => id !== player.club.id);
   if (!candidates.length) return null;
   const team = INITIAL_TEAMS.find((t) => t.id === pick(candidates));
@@ -276,6 +333,8 @@ function maybeGenerateScoutInterest(player, league, gameDate) {
 // Random dressing-room banter from a teammate - pure flavour, always
 // resolved, never blocks anything. Pulled from the player's own club squad
 // (built-in pros + any other human players who joined the same club).
+// 7-BOSQICH: jamoadoshlar endi o'zbekcha, jonli gaplashadi - reytingga
+// qarab 3 xil kayfiyatda (zo'r o'yin / o'rtacha / yomon o'yin).
 function maybeGenerateTeammateMessage(player, gameDate) {
   if (Math.random() > 0.16) return null;
   const team = INITIAL_TEAMS.find((t) => t.id === player.club.id);
@@ -283,21 +342,64 @@ function maybeGenerateTeammateMessage(player, gameDate) {
   const squad = getMergedSquad(team).filter((p) => p.id !== player.id);
   if (!squad.length) return null;
   const mate = pick(squad);
-  const won = player.career.matchRatings?.length && player.career.matchRatings[player.career.matchRatings.length - 1] >= 7;
-  const lines = won
-    ? [
-      `Great game out there today, that performance deserved the three points!`,
-      `Was a pleasure playing alongside you today, let's keep this run going.`,
-      `Coach was buzzing about your display in the dressing room after the match.`
-    ]
-    : [
-      `Rough one today, but we'll bounce back next week - heads up.`,
-      `Fancy an extra shooting session tomorrow before training? Could help both of us.`,
-      `Don't worry about today's result too much, one bad game means nothing over a season.`
+  const lastRating = player.career.matchRatings?.length ? player.career.matchRatings[player.career.matchRatings.length - 1] : null;
+
+  let lines;
+  if (lastRating != null && lastRating >= 8) {
+    lines = [
+      `Ajoyib o'yin! Qoyil qoldirding, bugun haqiqiy jangchi eding!`,
+      `Zo'r o'ynading! Menimcha bu senga oddiy kun emas edi - primedasan!`,
+      `Bugungi o'yining hammani hayratda qoldirdi. Shunday davom et!`
     ];
+  } else if (lastRating != null && lastRating >= 6.5) {
+    lines = [
+      `Yaxshi o'ynading bugun, jamoaga foyda berding.`,
+      `Baxtli natija, sen ham o'z hissangni qo'shding - rahmat!`,
+      `Solid o'yin edi, keyingisiga ham shunday tayyorlanamiz.`
+    ];
+  } else {
+    lines = [
+      `Bugun unchalik bo'lmadi, lekin xafa bo'lma - keyingi o'yinda qaytaramiz.`,
+      `Menimcha bu sening to'liq kuching emas edi. Dam ol, keyingisiga tayyorlan.`,
+      `Hammada shunaqa kunlar bo'ladi. Ertaga mashg'ulotda birga ishlaymiz, ko'tarilamiz.`
+    ];
+  }
   return {
-    id: newId('msg'), type: 'teammate', date: gameDate, from: mate.name || 'Teammate',
-    subject: `Message from ${mate.name || 'a teammate'}`,
+    id: newId('msg'), type: 'teammate', date: gameDate, from: mate.name || 'Jamoadosh',
+    subject: `${mate.name || 'Jamoadosh'}dan xabar`,
+    body: pick(lines), read: false, resolved: true
+  };
+}
+
+// 7-BOSQICH: murabbiydan alohida xabarlar - reyting va shakl (form)ga qarab
+// turlicha ohangda (maqtov, ogohlantirish, motivatsiya).
+function maybeGenerateCoachMessage(player, gameDate) {
+  if (Math.random() > 0.14) return null;
+  const lastRating = player.career.matchRatings?.length ? player.career.matchRatings[player.career.matchRatings.length - 1] : null;
+  const clubName = player.club.name;
+  let lines;
+  if (lastRating != null && lastRating >= 8) {
+    lines = [
+      `Sen hozircha jamoamizning asosiy o'yinchisisan. Shu darajani ushlab tur, senga kelajakda ko'proq imkoniyat beraman.`,
+      `Bugungi o'yining haqiqatan ham prayimdagi futbolchining o'yini edi. Qoyil!`,
+      `Menejment sen bilan faxrlanadi. Shunday davom eting, ${clubName} senga tayanadi.`
+    ];
+  } else if (lastRating != null && lastRating < 6) {
+    lines = [
+      `Oxirgi o'yinlaringda o'zingizning kuchingizda emassiz - biroz pasayish sezyapman. Mashg'ulotlarda ko'proq qatnashing.`,
+      `Har kim shunday davrdan o'tadi, lekin mashg'ulotga jiddiyroq yondashishing kerak. Ishlaymiz, tuzatamiz.`,
+      `Stamina va shaklingga e'tibor bering - keyingi muhim o'yin oldidan tiklanib olishingiz kerak.`
+    ];
+  } else {
+    lines = [
+      `Muhim o'yin bor - staminangizni ushlab turing, sizga tayanaman.`,
+      `Yaxshi ishlayapsiz, lekin mashg'ulotlarda yana bir bosqich yuqoriga chiqishimiz mumkin.`,
+      `Jamoa siz bilan hisoblashadi - shunday tayyorlaning.`
+    ];
+  }
+  return {
+    id: newId('msg'), type: 'club', date: gameDate, from: `${clubName} bosh murabbiyi`,
+    subject: 'Murabbiydan xabar',
     body: pick(lines), read: false, resolved: true
   };
 }
@@ -333,8 +435,13 @@ function processRound(round, player, standings, topScorers) {
     const playerIsAway = involvesPlayer && player.club.id === m.away;
     const homeGoalsForNpc = playerIsHome && pStats?.played ? golA - pStats.goals : golA;
     const awayGoalsForNpc = playerIsAway && pStats?.played ? golB - pStats.goals : golB;
-    distributeGoals(homeTeam, homeGoalsForNpc, topScorers, playerIsHome ? player.id : null);
-    distributeGoals(awayTeam, awayGoalsForNpc, topScorers, playerIsAway ? player.id : null);
+    const homeScorers = distributeGoals(homeTeam, homeGoalsForNpc, topScorers, playerIsHome ? player.id : null);
+    const awayScorers = distributeGoals(awayTeam, awayGoalsForNpc, topScorers, playerIsAway ? player.id : null);
+    // 2-BOSQICH: kartochkalar faqat FOYDALANUVCHI ISHTIROK ETGAN o'yin
+    // uchun hisoblanadi (pastda matchInfo'ga yoziladi) - boshqa yuzlab
+    // o'yin uchun har kuni bekorga hisoblab o'tirmaslik uchun.
+    let homeCards = null;
+    let awayCards = null;
 
     if (involvesPlayer && pStats?.played && pStats.goals > 0) {
       if (!topScorers[player.id]) {
@@ -343,11 +450,19 @@ function processRound(round, player, standings, topScorers) {
       topScorers[player.id].goals += pStats.goals;
     }
 
+    if (involvesPlayer) {
+      homeCards = generateTeamCards(homeTeam);
+      awayCards = generateTeamCards(awayTeam);
+    }
+
     updatedMatches.push({ ...m, played: true, golA, golB });
 
     if (involvesPlayer) {
       const opponent = playerIsHome ? awayTeam : homeTeam;
-      playerPatch = { pStats, opponent, isHome: playerIsHome, golA, golB };
+      playerPatch = {
+        pStats, opponent, isHome: playerIsHome, golA, golB,
+        homeScorers, awayScorers, homeCards, awayCards
+      };
     }
   });
 
@@ -385,7 +500,7 @@ function processRound(round, player, standings, topScorers) {
         body, read: false, resolved: true
       });
 
-      if (!pStats.injured && pStats.rating >= 7.5) {
+      if (!pStats.injured && pStats.rating >= 6.5) {
         const offer = maybeGenerateTransferOffer(player, league, round.date);
         if (offer) messages.push(offer);
         else {
@@ -395,6 +510,8 @@ function processRound(round, player, standings, topScorers) {
       }
       const teammateMsg = maybeGenerateTeammateMessage(player, round.date);
       if (teammateMsg) messages.push(teammateMsg);
+      const coachMsg = maybeGenerateCoachMessage(player, round.date);
+      if (coachMsg) messages.push(coachMsg);
 
       const historyEntry = {
         id: newId('hist'), date: round.date, round: round.round,
@@ -451,7 +568,7 @@ function processRound(round, player, standings, topScorers) {
 const UEFA_LEAGUE_IDS = ['la_liga', 'premier_league', 'bundesliga', 'ligue_1', 'serie_a', 'primeira_liga', 'eredivisie', 'belgian_pro_league', 'super_lig', 'swiss_super_league'];
 const AFC_LEAGUE_IDS = ['uzbekistan_super_league', 'saudi_pro_league', 'j1_league', 'k_league', 'qatar_stars_league', 'uae_pro_league', 'iran_pro_league', 'iraqi_premier_league', 'chinese_super_league'];
 
-function getConfederation(leagueId) {
+export function getConfederation(leagueId) {
   if (UEFA_LEAGUE_IDS.includes(leagueId)) return 'UEFA';
   if (AFC_LEAGUE_IDS.includes(leagueId)) return 'AFC';
   return null;
@@ -555,6 +672,13 @@ function resolveCupFixture(player, cupRun, career, standings /* unused, kept for
     if (!topScorers[player.id]) topScorers[player.id] = { id: player.id, name: `${player.name} ${player.surname}`, teamId: player.club.id, teamName: player.club.name, goals: 0 };
     topScorers[player.id].goals += pStats.goals;
   }
+  // 2-BOSQICH: kubok o'yinlarida ham endi "kim urdi/kim assist qildi/kim
+  // kartochka oldi" to'liq - league filiali bilan bir xil mantiq.
+  const npcGoalsFor = pStats?.played ? golA - pStats.goals : golA;
+  const forScorers = distributeGoals(playerTeam, npcGoalsFor, topScorers, player.id);
+  const againstScorers = distributeGoals(opponent, golB, topScorers, null);
+  const forCards = generateTeamCards(playerTeam);
+  const againstCards = generateTeamCards(opponent);
 
   let won = golA > golB;
   if (golA === golB) won = Math.random() < 0.5; // decided on penalties
@@ -575,6 +699,7 @@ function resolveCupFixture(player, cupRun, career, standings /* unused, kept for
   return {
     pStats,
     message,
+    forScorers, againstScorers, forCards, againstCards,
     nextCupRun: {
       ...cupRun,
       fixtures: updatedFixtures,
@@ -645,11 +770,22 @@ function finalizeSeason(player, career, standings, topScorers, schedule, message
   const seasonYear = Number(career.gameDate.slice(0, 4));
 
   const trophies = [...(career.trophies || [])];
+  // 9-BOSQICH: klub sahifasidagi kubkalar viteni ENDI o'yinchining shaxsiy
+  // yutuqlaridan (Profile) FARQLI - bu yerga har mavsum g'olib bo'lgan
+  // klub (garchi bu o'yinchining o'zi bo'lmasa ham) yoziladi, shu orqali
+  // klub sahifasi haqiqatan ham "shu klubning" kubkalar viteni bo'ladi.
+  const clubTrophyHistory = [...(career.clubTrophyHistory || [])];
+  if (championId) {
+    clubTrophyHistory.push({
+      teamId: championId, teamName: championTeam?.name || championId,
+      name: `${league?.name || 'League'} Champion`, year: seasonYear, icon: '🏆'
+    });
+  }
   let newMessages = [...messages];
 
   const wonLeague = championId === player.club.id;
   if (wonLeague) {
-    trophies.push({ name: `${league?.name || 'League'} Champion`, year: seasonYear, icon: '🏆' });
+    trophies.push({ name: `${league?.name || 'League'} Champion`, year: seasonYear, icon: '🏆', teamId: player.club.id, teamName: player.club.name });
     newMessages.push({
       id: newId('msg'), type: 'club', date: career.gameDate, from: player.club.name,
       subject: 'CHAMPIONS!', body: `${player.club.name} have won the ${league?.name || 'league'} title! An unforgettable season.`,
@@ -659,7 +795,7 @@ function finalizeSeason(player, career, standings, topScorers, schedule, message
 
   const wonGoldenBoot = goldenBoot && goldenBoot.id === player.id && goldenBoot.goals > 0;
   if (wonGoldenBoot) {
-    trophies.push({ name: `${league?.name || 'League'} Golden Boot`, year: seasonYear, icon: '⚽' });
+    trophies.push({ name: `${league?.name || 'League'} Golden Boot`, year: seasonYear, icon: '⚽', teamId: player.club.id, teamName: player.club.name });
     newMessages.push({
       id: newId('msg'), type: 'club', date: career.gameDate, from: 'League Awards',
       subject: 'Golden Boot!', body: `You finished the season as top scorer with ${goldenBoot.goals} goals - the Golden Boot is yours!`,
@@ -670,19 +806,30 @@ function finalizeSeason(player, career, standings, topScorers, schedule, message
   // Cup silverware from the season that's ending (career.domesticCup /
   // continentalCup are about to be replaced with fresh ones for next season).
   if (career.domesticCup?.won) {
-    trophies.push({ name: career.domesticCup.name, year: seasonYear, icon: '🏆' });
+    trophies.push({ name: career.domesticCup.name, year: seasonYear, icon: '🏆', teamId: player.club.id, teamName: player.club.name });
+    clubTrophyHistory.push({ teamId: player.club.id, teamName: player.club.name, name: career.domesticCup.name, year: seasonYear, icon: '🏆' });
   }
   if (career.continentalCup?.won) {
-    trophies.push({ name: career.continentalCup.name, year: seasonYear, icon: '🌍' });
+    trophies.push({ name: career.continentalCup.name, year: seasonYear, icon: '🌍', teamId: player.club.id, teamName: player.club.name });
+    clubTrophyHistory.push({ teamId: player.club.id, teamName: player.club.name, name: career.continentalCup.name, year: seasonYear, icon: '🌍' });
   }
 
   // Continental qualification for NEXT season, based on where the club
   // finished in its own league this season.
+  // 5-BOSQICH: endi UEFA uchun 3 daraja (Champions/Europa/Conference League)
+  // va AFC uchun 2 daraja (Champions League Elite / Two) bor - avvalgi
+  // versiyada Konferensiya va AFC "2" ligalari butunlay yo'q edi.
   const confederation = getConfederation(player.club.leagueId);
   let qualifiedContinentalNextSeason = null;
   if (confederation && playerPosition > 0) {
-    if (playerPosition <= 2) qualifiedContinentalNextSeason = { confederation, name: confederation === 'UEFA' ? 'UEFA Champions League' : 'AFC Champions League' };
-    else if (playerPosition <= 4 && confederation === 'UEFA') qualifiedContinentalNextSeason = { confederation, name: 'UEFA Europa League' };
+    if (confederation === 'UEFA') {
+      if (playerPosition <= 2) qualifiedContinentalNextSeason = { confederation, name: 'UEFA Champions League', tier: 'cl' };
+      else if (playerPosition <= 4) qualifiedContinentalNextSeason = { confederation, name: 'UEFA Europa League', tier: 'el' };
+      else if (playerPosition <= 6) qualifiedContinentalNextSeason = { confederation, name: 'UEFA Conference League', tier: 'ecl' };
+    } else if (confederation === 'AFC') {
+      if (playerPosition <= 2) qualifiedContinentalNextSeason = { confederation, name: 'AFC Champions League Elite', tier: 'afc_elite' };
+      else if (playerPosition <= 4) qualifiedContinentalNextSeason = { confederation, name: 'AFC Champions League Two', tier: 'afc_two' };
+    }
   }
   if (qualifiedContinentalNextSeason && !career.continentalCup) {
     newMessages.push({
@@ -734,8 +881,17 @@ function finalizeSeason(player, career, standings, topScorers, schedule, message
     read: false, resolved: true
   });
 
+  // 5-BOSQICH: "ligaga kirib, o'tgan sezonni jadvalini ko'rish" - shu
+  // sezonning yakuniy jadvali saqlanadi, LeaguePage'da "Bu sezon / O'tgan
+  // sezon" almashtirgichi bilan ko'rsatiladi.
+  const previousSeasonTable = ranking.map((r, i) => {
+    const t = INITIAL_TEAMS.find((tt) => tt.id === r.teamId);
+    return { position: i + 1, teamId: r.teamId, name: t?.name || r.teamId, logo: t?.logo || '⚽', ...r, gd: r.gf - r.ga };
+  });
+
   return {
     trophies,
+    clubTrophyHistory,
     seasonHistory,
     schedule: newSchedule,
     standings: newStandings,
@@ -743,6 +899,9 @@ function finalizeSeason(player, career, standings, topScorers, schedule, message
     domesticCup,
     continentalCup,
     qualifiedContinentalNextSeason,
+    previousSeasonTable,
+    previousSeasonYear: seasonYear,
+    previousSeasonLeagueName: league?.name || '',
     seasonAppearances: 0,
     seasonGoals: 0,
     seasonAssists: 0,
@@ -872,6 +1031,11 @@ export function prepareNextDay(player) {
     return { nextPlayer: { ...player, age, overall, mainStats, subStats, career }, matchInfo: null };
   }
 
+  // 3-BOSQICH: kecha yuborilgan kontrakt kontr-taklifiga (negotiate) klub
+  // javobini shu yerda, kuniga bir marta ishlab chiqamiz - bu ishlov
+  // o'yin kuni bo'ladimi yoki tinch kunmi, baribir ishlaydi.
+  ({ career, messages } = resolveContractNegotiations(player, career, newDate, messages));
+
   let clubTier = player.club.tier;
   const roundIdx = schedule.findIndex((r) => r.date === newDate && !r.matches.every((m) => m.played));
   if (roundIdx !== -1) {
@@ -906,14 +1070,21 @@ export function prepareNextDay(player) {
     ].slice(-20);
 
     if (playerPatch && playerPatch.opponent) {
-      const { pStats, opponent, isHome, golA, golB } = playerPatch;
+      const { pStats, opponent, isHome, golA, golB, homeScorers, awayScorers, homeCards, awayCards } = playerPatch;
       matchInfo = {
         opponentName: opponent.name,
         opponentLogo: opponent.logo,
         isHome,
         golFor: isHome ? golA : golB,
         golAgainst: isHome ? golB : golA,
-        pStats: pStats || { played: false }
+        pStats: pStats || { played: false },
+        // 2-BOSQICH: "kim gol urdi / kim assist qildi / kim kartochka
+        // oldi" endi to'liq - forScorers/againstScorers har biri
+        // {id,name,assistName}, forCards/againstCards {id,name,type}.
+        forScorers: isHome ? homeScorers : awayScorers,
+        againstScorers: isHome ? awayScorers : homeScorers,
+        forCards: isHome ? homeCards : awayCards,
+        againstCards: isHome ? awayCards : homeCards,
       };
     }
   } else {
@@ -936,7 +1107,11 @@ export function prepareNextDay(player) {
         isHome: true,
         golFor: outcome.nextCupRun.fixtures[cupRun.stage].golFor,
         golAgainst: outcome.nextCupRun.fixtures[cupRun.stage].golAgainst,
-        pStats: outcome.pStats || { played: false }
+        pStats: outcome.pStats || { played: false },
+        forScorers: outcome.forScorers,
+        againstScorers: outcome.againstScorers,
+        forCards: outcome.forCards,
+        againstCards: outcome.againstCards,
       };
       break;
     }
@@ -950,6 +1125,16 @@ export function prepareNextDay(player) {
       if (league && Math.random() < 0.10) {
         const scout = maybeGenerateScoutInterest(player, league, newDate);
         if (scout) messages = [...messages, scout];
+      }
+      // 3-BOSQICH: haqiqiy (aniq pul bilan) transfer taklifi endi faqat
+      // "juda yaxshi o'ynalgan kun"ga bog'liq emas - tinch kunlarda ham,
+      // kamdan-kam, OVR asosida (kuchli o'yinchiga ko'proq) kelishi mumkin.
+      if (league && !player.career.freeAgent) {
+        const quietChance = 0.02 + clamp((player.overall - 65) / 400, 0, 0.05);
+        if (Math.random() < quietChance) {
+          const offer = maybeGenerateTransferOffer(player, league, newDate);
+          if (offer) messages = [...messages, offer];
+        }
       }
       if (Math.random() < 0.10) {
         const teammateMsg = maybeGenerateTeammateMessage(player, newDate);
@@ -1024,10 +1209,16 @@ export function computeStartingWage(overall, tier, leagueId) {
 // offer longer deals) - not indefinitely, and not something you can just
 // keep asking to raise forever. Somewhere around 2-3 months before it
 // expires the club will want to talk about a new one.
+// 3-BOSQICH: oldingi versiyada katta (prestijli) liga klublari uchun bu
+// deyarli har doim 8 yilga "yopishib qolardi" (tor oraliq + qattiq
+// tavan tufayli). Endi markazga nisbatan kengroq, tekisroq tarqaladi va
+// eng uzun muddat 6 yilga tushirildi - 8 yillik shartnoma haqiqiy
+// futbolda ham kamdan-kam uchraydi.
 export function rollContractLength(leagueId) {
-  const prestige = LEAGUE_PRESTIGE[leagueId] || 0.55;
-  const base = 3 + Math.round(prestige * 3); // ~3 (small leagues) to ~6 (big leagues)
-  return clamp(base + randInt(-1, 2), 3, 8);
+  const prestige = LEAGUE_PRESTIGE[leagueId] || 0.55; // taxminan 0..1
+  const center = 2.2 + prestige * 2.3; // ~2.2 (kichik liga) dan ~4.5 (top liga) gacha
+  const roll = center + (Math.random() - 0.5) * 3.6; // +-1.8 yil atrofida tarqalish
+  return clamp(Math.round(roll), 1, 6);
 }
 
 export function computeContractOffer(player) {
@@ -1037,6 +1228,82 @@ export function computeContractOffer(player) {
   const growthMult = 1 + Math.max(0, player.overall - player.firstRating) / 60;
   const newWage = Math.round((player.career.weeklyWage || 200) * perfMult * growthMult * (1 + Math.random() * 0.2));
   return { wage: Math.max(newWage, player.career.weeklyWage || 200), years: rollContractLength(player.club.leagueId) };
+}
+
+// 3-BOSQICH: haqiqiy "negotiate" (kontr-taklif) mexanizmi.
+// O'yinchi MessagesPage'da "Negotiate" tugmasini bosib o'z summasi va
+// muddatini yuboradi (buning o'zi zudlik bilan, kun kutmasdan sodir
+// bo'ladi - shu yerda faqat KLUBNING javobi hisoblanadi, u esa 1 kun
+// o'tgach keladi):
+//   - agar so'ralgan summa klub taklifidan ko'pi bilan ~12% ko'p bo'lsa ->
+//     klub roziligini beradi, aynan shu shartlarda shartnoma imzolanadi.
+//   - ~45% gacha ko'p bo'lsa (va muzokara aylanasi tugamagan bo'lsa) ->
+//     klub o'rtacha summa bilan QARSHI TAKLIF yuboradi (yana Accept/
+//     Negotiate/Decline chiqadi) - jami 3 martagacha aylana bo'lishi mumkin.
+//   - undan ham ko'p bo'lsa (yoki aylanalar tugasa-yu hali ko'p bo'lsa) ->
+//     klub xafa bo'ladi: muzokara yopiladi, juda ochko'zlik qilingan bo'lsa
+//     (>60% ortiqcha) esa futbolchi TO'G'RIDAN-TO'G'RI ERKIN AGENT bo'lib
+//     qoladi - xato/ochko'z taklif haqiqatan ham xavfli bo'lishi kerak.
+function resolveContractNegotiations(player, career, newDate, messages) {
+  let nextCareer = career;
+  let nextMessages = messages;
+  let releasedNow = false;
+
+  nextMessages = nextMessages.map((m) => {
+    if (releasedNow) return m;
+    if (m.type !== 'contract' || m.resolved || !m.negotiation?.counterOffer) return m;
+    if (m.negotiation.awaitingClubSince >= newDate) return m; // hali 1 kun to'lmagan
+
+    const clubWage = m.offer.wage;
+    const askWage = m.negotiation.counterOffer.wage;
+    const askYears = clamp(Math.round(m.negotiation.counterOffer.years || m.offer.years || 3), 1, 6);
+    const ratio = askWage / Math.max(1, clubWage);
+    const round = m.negotiation.round || 0;
+
+    if (ratio <= 1.12) {
+      nextCareer = {
+        ...nextCareer,
+        weeklyWage: askWage,
+        contract: { yearsTotal: askYears, signedDay: player.career.day + 1 },
+        contractTalksOpened: false,
+        contractFailedNegotiations: 0
+      };
+      return {
+        ...m, resolved: true, read: false, outcome: 'accepted',
+        subject: 'Contract agreed!',
+        body: `${m.from} accepted your terms: $${askWage.toLocaleString()}/week over ${askYears} years.`
+      };
+    }
+
+    if (ratio <= 1.45 && round < 2) {
+      const counterWage = Math.round(clubWage * 0.55 + askWage * 0.45);
+      return {
+        ...m,
+        read: false,
+        offer: { wage: counterWage, years: askYears },
+        negotiation: { round: round + 1, counterOffer: null, awaitingClubSince: null },
+        subject: 'Counter-offer',
+        body: `${m.from} came back with a new offer: $${counterWage.toLocaleString()}/week over ${askYears} years. Accept, negotiate again, or walk away.`
+      };
+    }
+
+    // Juda ochko'z taklif - klub sabrini yo'qotadi.
+    const tooGreedy = ratio > 1.6;
+    if (tooGreedy) releasedNow = true;
+    return {
+      ...m, resolved: true, read: false, outcome: 'declined',
+      subject: tooGreedy ? 'Talks collapsed - released' : 'Talks broke down',
+      body: tooGreedy
+        ? `${m.from} felt your $${askWage.toLocaleString()}/week demand was unrealistic and ended talks completely - you've been released and are now a free agent.`
+        : `${m.from} weren't willing to meet your $${askWage.toLocaleString()}/week demand. Talks are off for now.`
+    };
+  });
+
+  if (releasedNow) {
+    nextCareer = { ...nextCareer, freeAgent: true, contract: null };
+  }
+
+  return { career: nextCareer, messages: nextMessages };
 }
 
 const CONTRACT_TALKS_WINDOW_DAYS = 75; // start negotiating ~2.5 months out
@@ -1067,9 +1334,10 @@ function checkContractStatus(player, career, newDay, messages) {
       messages: [...messages, {
         id: newId('msg'), type: 'contract', date: career.gameDate, from: player.club.name,
         subject: 'Contract renewal talks',
-        body: `Your deal with ${player.club.name} runs out in a few months. They're offering a new ${offer.years}-year contract at $${offer.wage.toLocaleString()}/week - accept, or negotiate elsewhere before time runs out.`,
+        body: `Your deal with ${player.club.name} runs out in a few months. They're offering a new ${offer.years}-year contract at $${offer.wage.toLocaleString()}/week - accept, negotiate, or wait for something else before time runs out.`,
         read: false, resolved: false,
-        offer
+        offer,
+        negotiation: { round: 0, counterOffer: null, awaitingClubSince: null }
       }]
     };
   }
@@ -1149,7 +1417,7 @@ export function getPlayerFixtures(player) {
 // outcome, only the presentation of it.
 export function buildMatchTimeline(matchInfo) {
   if (!matchInfo) return [];
-  const { golFor, golAgainst, pStats } = matchInfo;
+  const { golFor, golAgainst, pStats, forScorers, againstScorers, forCards, againstCards } = matchInfo;
   const events = [];
 
   const usedMinutes = new Set();
@@ -1160,14 +1428,27 @@ export function buildMatchTimeline(matchInfo) {
     return m;
   };
 
-  for (let i = 0; i < golFor; i += 1) events.push({ minute: rollMinute(), side: 'for' });
-  for (let i = 0; i < golAgainst; i += 1) events.push({ minute: rollMinute(), side: 'against' });
+  for (let i = 0; i < golFor; i += 1) events.push({ minute: rollMinute(), side: 'for', kind: 'goal' });
+  for (let i = 0; i < golAgainst; i += 1) events.push({ minute: rollMinute(), side: 'against', kind: 'goal' });
+
+  // 2-BOSQICH: sariq/qizil kartochkalar ham endi voqealar chizig'ida -
+  // har biriga alohida (gollardan farqli) daqiqa beriladi.
+  (forCards || []).forEach((c) => events.push({ minute: rollMinute(), side: 'for', kind: 'card', card: c }));
+  (againstCards || []).forEach((c) => events.push({ minute: rollMinute(), side: 'against', kind: 'card', card: c }));
+
   events.sort((a, b) => a.minute - b.minute);
 
   // Tag which of "our" goals are the player's own, and (separately) which
   // are assisted by the player - both counts come straight from pStats, so
-  // they always add up to what the post-match summary shows.
-  const forEvents = events.filter((e) => e.side === 'for');
+  // they always add up to what the post-match summary shows. The
+  // REMAINING "for" goals get a real NPC scorer name (+ assist, if any)
+  // from forScorers - and every "against" goal gets a real NPC scorer name
+  // from the opponent's squad (againstScorers) - so nothing is anonymous
+  // anymore.
+  const forEvents = events.filter((e) => e.kind === 'goal' && e.side === 'for');
+  const againstEvents = events.filter((e) => e.kind === 'goal' && e.side === 'against');
+  const npcForScorers = [...(forScorers || [])];
+
   if (pStats?.played) {
     const scorerIdx = new Set();
     const goalCount = Math.min(pStats.goals || 0, forEvents.length);
@@ -1184,6 +1465,21 @@ export function buildMatchTimeline(matchInfo) {
     }
     assistIdx.forEach((idx) => { forEvents[idx].isPlayerAssist = true; });
   }
+
+  // Player golisiz/assistsiz qolgan har bir "for" voqeaga navbat bilan bitta
+  // haqiqiy NPC to'purchi (va bo'lsa, uning assistchisi) biriktiriladi.
+  forEvents.forEach((e) => {
+    if (e.isPlayerGoal || e.isPlayerAssist) return;
+    const npc = npcForScorers.shift();
+    if (npc) { e.scorerName = npc.name; e.assistName = npc.assistName; }
+  });
+
+  // Raqib gollarining barchasi NPC - to'g'ridan-to'g'ri biriktiramiz.
+  const npcAgainstScorers = [...(againstScorers || [])];
+  againstEvents.forEach((e) => {
+    const npc = npcAgainstScorers.shift();
+    if (npc) { e.scorerName = npc.name; e.assistName = npc.assistName; }
+  });
 
   return events.map((e, i) => ({ id: `ev_${i}`, ...e }));
 }
@@ -1267,6 +1563,17 @@ export function generateNews(player) {
     items.push({
       id: `news_trophy_${t.name}_${t.year}`, date: `${t.year}-05-01`, icon: t.icon || '🏆',
       headline: t.name, body: `${player.name} ${player.surname} won the ${t.name} in ${t.year}.`
+    });
+  });
+
+  // 6-BOSQICH: transfer bozori tikeri (klublar orasidagi NPC transferlari)
+  // ham endi yangiliklar oqimida ko'rinadi - avval bu faqat orqa fonda
+  // hisoblanardi, hech qayerda ko'rsatilmasdi.
+  (player.career.transferLog || []).slice(-15).forEach((t) => {
+    items.push({
+      id: `news_transfer_${t.id}`, date: t.date, icon: '💸',
+      headline: 'Transfer done deal',
+      body: `${t.playerName} (${t.playerPos}, OVR ${t.ovr}) moves from ${t.fromClub} to ${t.toClub} for $${(t.fee || 0).toLocaleString()}.`
     });
   });
 

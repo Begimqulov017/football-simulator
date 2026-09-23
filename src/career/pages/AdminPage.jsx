@@ -8,7 +8,7 @@ export default function AdminPage({ currentUser }) {
       <div className="page-header">
         <div>
           <h1>Admin</h1>
-          <div className="sub">Foydalanuvchilarni boshqarish — ruxsat berish, o'chirish</div>
+          <div className="sub">Sizda shaxsiy karyera yo'q — siz umumiy dunyoni (kunni) boshqarasiz va barcha o'yinchilarni kuzatasiz</div>
         </div>
       </div>
       <div style={{ maxWidth: 640 }}>

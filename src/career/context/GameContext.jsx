@@ -153,15 +153,29 @@ export function GameProvider({ children, username }) {
     setPlayer((prev) => (prev ? { ...prev, ...updater(prev) } : prev));
   }, []);
 
-  // Advances the in-game calendar by one day. When the new date lands on a
-  // scheduled matchday, the whole league's round is simulated (results,
-  // table, top scorers, the player's own match stats, messages, wages,
-  // injuries) via the season engine. This is only used for QUIET days now -
-  // matchdays go through prepareMatchday/commitMatchday below instead, so
-  // the outcome can be played back before it's applied.
+  // 1-BOSQICH: kalendar ENDI faqat ADMIN tomonidan boshqariladi (server
+  // "umumiy dunyo" kuni - worldDate). Ilgari bu tugma cheklovsiz edi -
+  // foydalanuvchi xohlagancha bosib, admin hali yetib kelmagan kunlarga
+  // "o'tib ketishi" mumkin edi, natijada uning shaxsiy kalendari (bu yerda,
+  // client tomonida) va serverning umumiy dunyosi bir-biridan uzilib
+  // qolardi. Endi: agar bu o'yinchi allaqachon admin bosgan oxirgi kunga
+  // yetib olgan bo'lsa (gameDate >= worldDate), tugma hech narsa qilmaydi -
+  // admin "Kunni o'tkazish"ni bosishini kutish kerak. worldDate hali
+  // noma'lum bo'lsa (masalan offlayn/birinchi yuklanish) - eski xatti-
+  // harakat saqlanadi, aks holda o'yin butunlay muzlab qoladi.
+  const canAdvanceDay = useMemo(() => {
+    if (!player) return false;
+    if (!worldDate) return true;
+    return player.career.gameDate < worldDate;
+  }, [player, worldDate]);
+
   const nextDay = useCallback(() => {
-    setPlayer((prev) => (prev ? advanceOneDay(prev) : prev));
-  }, []);
+    setPlayer((prev) => {
+      if (!prev) return prev;
+      if (worldDate && prev.career.gameDate >= worldDate) return prev;
+      return advanceOneDay(prev);
+    });
+  }, [worldDate]);
 
   const matchdayNext = useMemo(() => isMatchdayNext(player), [player]);
 
@@ -209,11 +223,17 @@ export function GameProvider({ children, username }) {
 
   // Player-requested wage renegotiation with the current club, based on
   // recent form and overall growth since their First Rating.
+  // 3-BOSQICH: endi "cheksiz so'rash" mumkin emas - bitta faol taklif
+  // turgan bo'lsa YOKI oxirgi so'rovdan beri 20 kun o'tmagan bo'lsa,
+  // tugma bosilmaydi (bu MoneyPage'da ham tekshiriladi/ko'rsatiladi).
+  const CONTRACT_REQUEST_COOLDOWN_DAYS = 20;
   const requestNewContract = useCallback(() => {
     setPlayer((prev) => {
       if (!prev) return prev;
       const hasPending = prev.career.messages.some((m) => m.type === 'contract' && !m.resolved);
       if (hasPending) return prev;
+      const lastAsk = prev.career.lastContractRequestDay || 0;
+      if (prev.career.day - lastAsk < CONTRACT_REQUEST_COOLDOWN_DAYS) return prev;
       const offer = computeContractOffer(prev);
       const message = {
         id: `msg_${Date.now()}`,
@@ -224,9 +244,38 @@ export function GameProvider({ children, username }) {
         body: `Based on your recent form, ${prev.club.name} are offering a new ${offer.years}-year deal at $${offer.wage.toLocaleString()}/week (currently $${(prev.career.weeklyWage || 0).toLocaleString()}/week).`,
         read: false,
         resolved: false,
-        offer
+        offer,
+        negotiation: { round: 0, counterOffer: null, awaitingClubSince: null }
       };
-      return { ...prev, career: { ...prev.career, messages: [...prev.career.messages, message] } };
+      return {
+        ...prev,
+        career: { ...prev.career, lastContractRequestDay: prev.career.day, messages: [...prev.career.messages, message] }
+      };
+    });
+  }, []);
+
+  // 3-BOSQICH: o'yinchi o'z summasi/muddatini yozib "Negotiate"ni bosganda
+  // shu yerga tushadi - bu ZUDLIK bilan sodir bo'ladi (kun kutilmaydi),
+  // klubning javobi esa keyingi kun (season.js'dagi
+  // resolveContractNegotiations orqali) tayyor bo'ladi.
+  const submitContractCounter = useCallback((messageId, counter) => {
+    setPlayer((prev) => {
+      if (!prev) return prev;
+      const msg = prev.career.messages.find((m) => m.id === messageId);
+      if (!msg || msg.resolved || msg.type !== 'contract') return prev;
+      const wage = Math.max(1, Math.round(Number(counter.wage) || msg.offer.wage));
+      const years = Math.max(1, Math.min(6, Math.round(Number(counter.years) || msg.offer.years)));
+      return {
+        ...prev,
+        career: {
+          ...prev.career,
+          messages: prev.career.messages.map((m) => (m.id === messageId ? {
+            ...m,
+            read: true,
+            negotiation: { ...(m.negotiation || { round: 0 }), counterOffer: { wage, years }, awaitingClubSince: prev.career.gameDate }
+          } : m))
+        }
+      };
     });
   }, []);
 
@@ -384,9 +433,9 @@ export function GameProvider({ children, username }) {
   const value = {
     player, ready, createPlayer, updatePlayer, nextDay, resetSave,
     matchdayNext, pendingMatchday, prepareMatchday, commitMatchday,
-    worldDate, hasUnwatchedResult, acknowledgeResult,
+    worldDate, canAdvanceDay, hasUnwatchedResult, acknowledgeResult,
     pendingWorldMatch, refreshPendingWorldMatch,
-    markMessageRead, requestNewContract, acceptContractOffer, acceptTransferOffer, declineOffer,
+    markMessageRead, requestNewContract, submitContractCounter, acceptContractOffer, acceptTransferOffer, declineOffer,
     purchasePerk
   };
 

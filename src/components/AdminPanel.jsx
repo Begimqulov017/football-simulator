@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getAllUsers, setProAccess, deleteUser } from '../utils/auth';
-import { checkBackendVersion, REQUIRED_SERVER_VERSION, advanceWorldDay, wipeAllData } from '../career/utils/careerApi';
+import { checkBackendVersion, REQUIRED_SERVER_VERSION, advanceWorldDay, wipeAllData, fetchAllCareerUsers } from '../career/utils/careerApi';
 import Icon from './Icon';
+
+function formatMoney(n) {
+  if (n == null) return '-';
+  return '$' + Number(n).toLocaleString('en-US');
+}
 
 export default function AdminPanel({ currentUser }) {
   const [users, setUsers] = useState([]);
@@ -16,6 +21,19 @@ export default function AdminPanel({ currentUser }) {
   const [wipeText, setWipeText] = useState('');
   const [wipeBusy, setWipeBusy] = useState(false);
   const [wipeResult, setWipeResult] = useState(null);
+  const [careerUsers, setCareerUsers] = useState([]);
+  const [careerLoading, setCareerLoading] = useState(true);
+  const [statsSort, setStatsSort] = useState('overall');
+
+  const loadCareerUsers = useCallback(() => {
+    setCareerLoading(true);
+    fetchAllCareerUsers().then((res) => {
+      setCareerUsers(res.ok ? res.users : []);
+      setCareerLoading(false);
+    });
+  }, []);
+
+  useEffect(() => { loadCareerUsers(); }, [loadCareerUsers]);
 
   const loadUsers = useCallback(() => {
     setLoading(true);
@@ -70,6 +88,7 @@ export default function AdminPanel({ currentUser }) {
         count: res.resolvedMatches,
         matches: res.matches || []
       });
+      loadCareerUsers();
     } else {
       setWorldResult({ ok: false, error: res.error || "Kunni o'tkazib bo'lmadi" });
     }
@@ -85,6 +104,7 @@ export default function AdminPanel({ currentUser }) {
     if (res.ok) {
       setWipeResult({ ok: true });
       loadUsers(); // now shows only the admin, with no career
+      loadCareerUsers();
       setWorldResult(null);
     } else {
       setWipeResult({ ok: false, error: res.error || "Tozalab bo'lmadi" });
@@ -156,6 +176,69 @@ export default function AdminPanel({ currentUser }) {
           ) : (
             <div className="text-xs text-red-300">{worldResult.error}</div>
           )
+        )}
+      </div>
+
+      <div className="mb-4 rounded-lg border border-sky-500/40 bg-sky-500/10 p-3">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="text-sky-300 text-sm font-bold flex items-center gap-1.5">
+            📊 Barcha o'yinchilar — to'liq statistika
+          </div>
+          <div className="flex items-center gap-1">
+            {[
+              ['overall', 'OVR'],
+              ['goals', 'Gol'],
+              ['assists', 'Asist'],
+              ['money', 'Pul'],
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setStatsSort(key)}
+                className={`px-2 py-1 rounded-md text-[11px] font-bold transition-colors ${
+                  statsSort === key ? 'bg-sky-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {careerLoading && <div className="text-slate-400 text-xs">Yuklanmoqda...</div>}
+        {!careerLoading && careerUsers.length === 0 && (
+          <div className="text-slate-400 text-xs">Hozircha hech kim karyera boshlamagan.</div>
+        )}
+        {!careerLoading && careerUsers.length > 0 && (
+          <div className="max-h-72 overflow-y-auto flex flex-col gap-1">
+            {[...careerUsers]
+              .sort((a, b) => {
+                if (statsSort === 'goals') return (b.career?.goals || 0) - (a.career?.goals || 0);
+                if (statsSort === 'assists') return (b.career?.assists || 0) - (a.career?.assists || 0);
+                if (statsSort === 'money') return (b.career?.money || 0) - (a.career?.money || 0);
+                return (b.overall || 0) - (a.overall || 0);
+              })
+              .map((u) => (
+                <div key={u.username} className="rounded-md bg-slate-900/60 border border-slate-700 px-2.5 py-1.5 flex items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="shrink-0">{u.club?.logo || '⚽'}</span>
+                    <div className="min-w-0">
+                      <div className="text-slate-200 font-semibold truncate">
+                        {u.name} {u.surname} <span className="text-slate-500 font-normal">({u.username})</span>
+                      </div>
+                      <div className="text-slate-500 truncate">
+                        {u.club ? `${u.club.name} · ${u.club.leagueName}` : 'Klubsiz'} · {u.position || '-'} · {u.age ?? '-'} yosh
+                        {u.career?.gameDate ? ` · shaxsiy kun: ${u.career.gameDate}` : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0 font-mono">
+                    <span title="Overall">OVR {u.overall ?? '-'}</span>
+                    <span title="Gol/Asist">⚽{u.career?.goals ?? 0} 🅰️{u.career?.assists ?? 0}</span>
+                    <span title="Pul">{formatMoney(u.career?.money)}</span>
+                  </div>
+                </div>
+              ))}
+          </div>
         )}
       </div>
 

@@ -447,6 +447,35 @@ function playFriendlies(db, teams, date) {
   return played;
 }
 
+// 4-BOSQICH: birinchi marta (yoki har yangi chaqiruv oynasida) terma
+// jamoaga kiritilgan HAQIQIY foydalanuvchilarga xabar yuboradi - "Siz X
+// terma jamoasiga chaqirildingiz" - qaysi turnir/o'rtoqlik uchun ekani
+// bilan birga.
+function notifyCallUps(db, teams, countries, contextLabel, dateStr) {
+  const uniqueCountries = [...new Set(countries)];
+  uniqueCountries.forEach((country) => {
+    const team = teams[country];
+    if (!team) return;
+    team.humans.forEach((username) => {
+      const u = (db.users || []).find((x) => x.username === username);
+      if (!u?.careerSave) return;
+      const cs = u.careerSave;
+      cs.career = cs.career || {};
+      cs.career.messages = cs.career.messages || [];
+      cs.career.messages.push({
+        id: `msg_intl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        type: 'national',
+        date: dateStr,
+        from: `${team.flag} ${country}`,
+        subject: `Siz ${country} terma jamoasiga chaqirildingiz!`,
+        body: `${contextLabel} uchun ${country} milliy terma jamoasi tarkibiga kiritildingiz. Tarkib va o'yinlarni "National Team" sahifasida kuzatib boring. Omad!`,
+        read: false, resolved: true
+      });
+      u.careerSavedAt = new Date().toISOString();
+    });
+  });
+}
+
 // ------------------------------------------------------------
 // Entry point - called once per advanced day
 // ------------------------------------------------------------
@@ -486,6 +515,8 @@ function advanceInternational(db, date) {
     intl.activeTournaments.push(t);
     pushNews(intl, { type: 'tournament_start', date, title: `${t.name} ${year} boshlandi`, detail: `${t.size} terma jamoa · ${t.groups.length} guruh` });
     events.push({ type: 'tournament_start', tournament: t.name, teams: t.size });
+    const tournamentCountries = t.groups.flatMap((g) => g.teams);
+    notifyCallUps(db, teams, tournamentCountries, `${t.name} ${year}`, date);
   });
 
   // 2) Resolve whatever stage falls on this date
@@ -524,6 +555,8 @@ function advanceInternational(db, date) {
     if (played.length) {
       pushNews(intl, { type: 'break', date, title: `Xalqaro pauza — ${played.length} ta o'rtoqlik o'yini`, detail: date });
       events.push({ type: 'break', matches: played });
+      const friendlyCountries = played.flatMap((m) => [m.home, m.away]);
+      notifyCallUps(db, teams, friendlyCountries, "Xalqaro do'stlik uchrashuvlari", date);
     }
   }
 
