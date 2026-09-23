@@ -1,7 +1,7 @@
 // Full end-to-end test against the REAL running server: register humans,
 // give them careers in the same league, then let the admin advance the shared
 // world through several full seasons and verify the squads actually evolve.
-const BASE = '[https://football-simulator-server.onrender.com](https://football-simulator-server.onrender.com)';
+const BASE = 'https://football-simulator-server.onrender.com';
 
 async function api(path, { method = 'GET', token, body } = {}) {
   const res = await fetch(`${BASE}${path}`, {

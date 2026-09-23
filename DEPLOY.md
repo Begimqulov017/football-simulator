@@ -121,7 +121,7 @@ Build sozlamalari repodagi `netlify.toml` faylidan avtomatik olinadi:
 
 Oxirida **slash qo'ymang** (`.../` emas, `.com`).
 
-> Loyihadagi `.env` faylida `[https://football-simulator-server.onrender.com](https://football-simulator-server.onrender.com)` yozilgan — bu faqat lokal
+> Loyihadagi `.env` faylida `https://football-simulator-server.onrender.com` yozilgan — bu faqat lokal
 > ishlash uchun. Netlify'dagi muhit o'zgaruvchisi undan ustun turadi, shuning
 > uchun `.env`ni o'zgartirish shart emas.
 

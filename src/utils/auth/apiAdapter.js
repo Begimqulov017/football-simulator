@@ -12,7 +12,7 @@
 // qurilmada alohida login qilinadi (xuddi istalgan sayt kabi).
 //
 // Serverning manzili REACT_APP_API_BASE_URL orqali sozlanadi (.env fayliga
-// qarang). Standart holatda [https://football-simulator-server.onrender.com](https://football-simulator-server.onrender.com) ga ulanadi.
+// qarang). Standart holatda https://football-simulator-server.onrender.com ga ulanadi.
 // ============================================================
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'https://football-simulator-server.onrender.com';
