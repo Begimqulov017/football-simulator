@@ -12,10 +12,10 @@
 // qurilmada alohida login qilinadi (xuddi istalgan sayt kabi).
 //
 // Serverning manzili REACT_APP_API_BASE_URL orqali sozlanadi (.env fayliga
-// qarang). Standart holatda http://localhost:4000 ga ulanadi.
+// qarang). Standart holatda 'https://football-simulator-server.onrender.com' ga ulanadi.
 // ============================================================
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:4000';
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'https://football-simulator-server.onrender.com';
 const TOKEN_KEY = 'ms_token';
 const CACHED_USER_KEY = 'ms_cached_user'; // faqat UI-ni tezroq ko'rsatish uchun, manba emas
 

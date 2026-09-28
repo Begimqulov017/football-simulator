@@ -10,7 +10,7 @@
 // statistikasini ko'ra oladi.
 // ============================================================
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:4000';
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'https://football-simulator-server.onrender.com';
 const TOKEN_KEY = 'ms_token';
 
 // Bump this alongside server/index.js's SERVER_VERSION whenever the backend
