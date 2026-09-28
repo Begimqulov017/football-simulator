@@ -42,7 +42,10 @@ async function apiFetch(path, options = {}) {
 
   let res;
   try {
-    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    const cleanBase = API_BASE.replace(/\/$/, '');
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    
+    res = await fetch(`${cleanBase}${cleanPath}`, { ...options, headers });
   } catch (err) {
     // Server ishlamayapti yoki tarmoq muammosi
     return { ok: false, error: "Serverga ulanib bo'lmadi. `server/` papkasida `npm start` ishlatilganini tekshiring.", networkError: true };
