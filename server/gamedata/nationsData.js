@@ -154,13 +154,46 @@ function hashString(str) {
 // Roughly half of a club's squad is homegrown (when the club's league country
 // is itself a footballing nation we know), the rest are drawn from the full
 // pool. Deterministic, so it never changes for a given player.
-const HOME_NATION_SHARE = 0.45;
+// 4-BOSQICH: eski qiymat (0.45) va "butun dunyo bo'yicha tekis" xorijiy
+// havza birgalikda ABSURD holatlarga olib kelardi - masalan Real Madrid'da
+// o'ynaydigan (demak UEFA/Yevropa) futbolchi hech qanday cheklovsiz
+// O'zbekistonga (AFC) "chaqirilishi" mumkin edi. Endi: (1) o'z klubi
+// mamlakati ehtimoli oshirildi, (2) "xorijiy" holatda ham asosan O'ZI
+// O'YNAYDIGAN KONFEDERATSIYAGA yaqin/mos millatlar orasidan tanlanadi -
+// haqiqiy futbolda ham legionerlar ko'pincha yaqin mintaqalardan keladi.
+const HOME_NATION_SHARE = 0.6;
+
+// Klub o'ynaydigan konfederatsiyaga qarab, "xorijiy" futbolchi qaysi
+// konfederatsiyalardan bo'lishi REALISTIK - masalan Yevropa klubida
+// o'ynovchi xorijiy o'zi Yevropadan yoki Janubiy Amerika/Afrikadan bo'lishi
+// odatiy, lekin bir zumda AFC (Markaziy Osiyo)ga "sakrab" ketmaydi.
+const PLAUSIBLE_FOREIGN_CONFEDS = {
+  UEFA: ['UEFA', 'CONMEBOL', 'CAF'],
+  CONMEBOL: ['CONMEBOL', 'UEFA'],
+  CAF: ['CAF', 'UEFA', 'CONMEBOL'],
+  AFC: ['AFC', 'CONMEBOL', 'UEFA'],
+  CONCACAF: ['CONCACAF', 'CONMEBOL', 'UEFA'],
+  OFC: ['OFC', 'AFC']
+};
+
+const WEIGHTED_POOL_BY_CONFED = {};
+Object.keys(PLAUSIBLE_FOREIGN_CONFEDS).forEach((confed) => {
+  const allowed = new Set(PLAUSIBLE_FOREIGN_CONFEDS[confed]);
+  const list = [];
+  NATIONS.filter((n) => allowed.has(n.confederation)).forEach((n) => {
+    const w = NATION_WEIGHT[n.name] || 2;
+    for (let i = 0; i < w; i += 1) list.push(n.name);
+  });
+  WEIGHTED_POOL_BY_CONFED[confed] = list.length ? list : WEIGHTED_POOL;
+});
 
 function nationalityFor(playerId, homeCountry) {
   const h = hashString(String(playerId));
   const homeEligible = homeCountry && NATION_BY_NAME[homeCountry];
   if (homeEligible && (h % 1000) / 1000 < HOME_NATION_SHARE) return homeCountry;
-  return WEIGHTED_POOL[(h >>> 10) % WEIGHTED_POOL.length];
+  const homeConfed = homeEligible ? NATION_BY_NAME[homeCountry].confederation : null;
+  const pool = (homeConfed && WEIGHTED_POOL_BY_CONFED[homeConfed]) || WEIGHTED_POOL;
+  return pool[(h >>> 10) % pool.length];
 }
 
 function flagFor(country) {

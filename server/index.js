@@ -417,7 +417,7 @@ app.get('/api/world-match-detail', authMiddleware, (req, res) => {
 // (kelajakda kengaytirilishi mumkin).
 app.post('/api/career/submit-match-result', authMiddleware, (req, res) => {
   const db = req.db;
-  const { leagueId, round, scoreA, scoreB, myGoals, myAssists, myRating, myMinutes, myInjured, myInjuryDays, penWinnerClubId } = req.body || {};
+  const { leagueId, round, scoreA, scoreB, myGoals, myAssists, myRating, myMinutes, myInjured, myInjuryDays, myYellow, myRed, penWinnerClubId } = req.body || {};
   const pending = findPendingMatchForUser(db, req.user);
   if (!pending || pending.leagueId !== leagueId || pending.round !== round) {
     return res.status(409).json({ ok: false, error: "Bu o'yin endi kutilmoqda emas (allaqachon hal qilingan yoki topilmadi)" });
@@ -507,6 +507,27 @@ app.post('/api/career/submit-match-result', authMiddleware, (req, res) => {
   if (myInjured) {
     cs.career.injury = { daysLeft: myInjuryDays || 5, description: 'Match injury' };
   }
+  // 11-BOSQICH: haqiqiy futboldagi kabi - qizil kartochka yoki har 3-sariq
+  // kartochka diskvalifikatsiya (keyingi o'yin(lar)ni o'tkazib yuborish)
+  // olib keladi.
+  let disciplineMsg = null;
+  if (myRed) {
+    cs.career.suspension = { matchesLeft: 2, reason: 'red_card' };
+    disciplineMsg = "🟥 Qizil kartochka oldingiz - keyingi 2 ta o'yinda ishtirok eta olmaysiz.";
+  } else if (myYellow) {
+    cs.career.yellowCardsThisSeason = (cs.career.yellowCardsThisSeason || 0) + 1;
+    if (cs.career.yellowCardsThisSeason >= 3) {
+      cs.career.yellowCardsThisSeason = 0;
+      cs.career.suspension = { matchesLeft: 1, reason: 'yellow_accumulation' };
+      disciplineMsg = "🟨🟨🟨 Ketma-ket 3-sariq kartochka to'plandingiz - keyingi o'yinda ishtirok eta olmaysiz.";
+    }
+  }
+  if (disciplineMsg) {
+    cs.career.messages = [...(cs.career.messages || []), {
+      id: `msg_disc_${Date.now()}`, type: 'club', date: cs.career.gameDate, from: cs.club?.name || 'Klub',
+      subject: 'Diskvalifikatsiya', body: disciplineMsg, read: false, resolved: true
+    }];
+  }
   target.careerSavedAt = new Date().toISOString();
 
   if (isCup) {
@@ -522,12 +543,14 @@ app.post('/api/career/submit-match-result', authMiddleware, (req, res) => {
           const champUser = usersInLeagueForMatch.find((u) => u.careerSave.club.id === world.cup.championId);
           if (champUser) {
             const ccs = champUser.careerSave;
+            const CUP_PRIZE = 120_000;
             ccs.career.trophies = [...(ccs.career.trophies || []), { name: world.cup.name, year: world.season, icon: '🏆' }];
+            ccs.career.money = (ccs.career.money || 0) + CUP_PRIZE;
             ccs.career.messages = [...(ccs.career.messages || []), {
               id: `msg_cup_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
               type: 'club', date: world.gameDate, from: world.cup.name,
               subject: `Champions: ${world.cup.name}!`,
-              body: `Congratulations - you've won the ${world.cup.name} this season!`,
+              body: `Congratulations - you've won the ${world.cup.name} this season! Mukofot puli: $${CUP_PRIZE.toLocaleString()}.`,
               read: false, resolved: true,
             }];
             champUser.careerSavedAt = new Date().toISOString();
@@ -535,11 +558,11 @@ app.post('/api/career/submit-match-result', authMiddleware, (req, res) => {
         }
         break;
       }
-      world.cup.rounds.push(engine.buildNextCupRound(finishedRound));
+      world.cup.rounds.push(engine.buildNextCupRound(finishedRound, world.gameDate));
     }
   } else if (engine.isSeasonComplete(world)) {
     const league = engine.LEAGUES.find((l) => l.id === leagueId);
-    if (league) rolloverSeason(world, league);
+    if (league) rolloverSeason(world, league, db);
   }
 
   writeDB(db);
@@ -669,12 +692,39 @@ const PENDING_MATCH_CATCHUP_DAYS = 15;
 // statistikasi (gol/assist/reyting) bilan xabar qoldiriladi.
 function autoResolveStalePendingMatches(db, newDate) {
   const resolvedForUsers = [];
+  // 11-BOSQICH: admin "kunni o'tkazish"ni bossa-yu, o'yinchi o'z pending
+  // o'yinini tomosha qilmasa - avval bu FAQAT kun-sanoq (15 kun) bilan
+  // hal qilinardi. Endi qo'shimcha ravishda SON-based cheklov ham bor:
+  // bitta o'yinchida 5 tadan ortiq "tomosha qilinmagan" o'yin to'planib
+  // qolsa, ENG ESKISI(lari) avtomatik hal qilinadi - "admin 5ta o'yingacha
+  // o'tib ketishi mumkin, 6-siga o'tsa avto o'ynaladi" degan talab shu.
+  const MAX_UNWATCHED_PER_USER = 5;
+  const forceDatesByLeague = {};
   Object.keys(db.leagueWorlds).forEach((leagueId) => {
     const world = db.leagueWorlds[leagueId];
     if (!world?.schedule) return;
+    const usersHere = db.users.filter((u) => u.careerSave?.club?.leagueId === leagueId);
+    const forceDates = new Set();
+    usersHere.forEach((u) => {
+      const clubId = u.careerSave.club.id;
+      const myPendingDates = world.schedule
+        .filter((r) => r.matches.some((m) => (m.home === clubId || m.away === clubId) && m.pending && !m.played))
+        .map((r) => r.date)
+        .sort();
+      if (myPendingDates.length > MAX_UNWATCHED_PER_USER) {
+        myPendingDates.slice(0, myPendingDates.length - MAX_UNWATCHED_PER_USER).forEach((d) => forceDates.add(d));
+      }
+    });
+    forceDatesByLeague[leagueId] = forceDates;
+  });
+
+  Object.keys(db.leagueWorlds).forEach((leagueId) => {
+    const world = db.leagueWorlds[leagueId];
+    if (!world?.schedule) return;
+    const forceDates = forceDatesByLeague[leagueId] || new Set();
     world.schedule.forEach((round) => {
       const ageDays = (new Date(newDate) - new Date(round.date)) / 86400000;
-      if (ageDays < PENDING_MATCH_CATCHUP_DAYS) return;
+      if (ageDays < PENDING_MATCH_CATCHUP_DAYS && !forceDates.has(round.date)) return;
       round.matches = round.matches.map((m) => {
         if (!m.pending || m.played) return m;
         const homeTeam = engine.INITIAL_TEAMS.find((t) => t.id === m.home);
@@ -793,12 +843,14 @@ function autoResolveStalePendingMatches(db, newDate) {
               const champUser = usersInLeague.find((u) => u.careerSave.club.id === world.cup.championId);
               if (champUser) {
                 const ccs = champUser.careerSave;
+                const CUP_PRIZE = 120_000;
                 ccs.career.trophies = [...(ccs.career.trophies || []), { name: world.cup.name, year: world.season, icon: '🏆' }];
+                ccs.career.money = (ccs.career.money || 0) + CUP_PRIZE;
                 ccs.career.messages = [...(ccs.career.messages || []), {
                   id: `msg_cup_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
                   type: 'club', date: newDate, from: world.cup.name,
                   subject: `Champions: ${world.cup.name}!`,
-                  body: `Congratulations - you've won the ${world.cup.name} this season!`,
+                  body: `Congratulations - you've won the ${world.cup.name} this season! Mukofot puli: $${CUP_PRIZE.toLocaleString()}.`,
                   read: false, resolved: true,
                 }];
                 champUser.careerSavedAt = new Date().toISOString();
@@ -806,7 +858,7 @@ function autoResolveStalePendingMatches(db, newDate) {
             }
             break;
           }
-          world.cup.rounds.push(engine.buildNextCupRound(finishedRound));
+          world.cup.rounds.push(engine.buildNextCupRound(finishedRound, newDate));
         }
       }
     }
@@ -814,12 +866,51 @@ function autoResolveStalePendingMatches(db, newDate) {
   return resolvedForUsers;
 }
 
-function rolloverSeason(world, league) {
+function rolloverSeason(world, league, db) {
   const finishedSeason = world.season || 1;
   const table = engine.sortedTable(world.standings);
   const championId = table[0]?.teamId;
   const championName = engine.INITIAL_TEAMS.find((t) => t.id === championId)?.name || championId || '—';
   const topScorerList = Object.values(world.topScorers || {}).sort((a, b) => b.goals - a.goals).slice(0, 10);
+
+  // 11-BOSQICH: mahalliy (client) tomondagi "chempion/oltin butsa" mantig'i
+  // butunlay olib tashlandi (u soxta, hech qachon yangilanmaydigan
+  // ma'lumotga asoslangan edi). ENDI haqiqiy g'olib/eng ko'p gol urgan
+  // futbolchi bo'lgan HAQIQIY foydalanuvchilarga shu yerda, to'g'ridan-
+  // to'g'ri, MUKOFOT PULI bilan birga trofey beriladi.
+  const CHAMPION_PRIZE = 250_000;
+  const GOLDEN_BOOT_PRIZE = 75_000;
+  if (db) {
+    if (championId) {
+      db.users.forEach((u) => {
+        const cs = u.careerSave;
+        if (!cs || cs.club?.id !== championId) return;
+        cs.career.trophies = [...(cs.career.trophies || []), { name: `${league.name} Champion`, year: finishedSeason, icon: '🏆', teamId: championId, teamName: championName }];
+        cs.career.money = (cs.career.money || 0) + CHAMPION_PRIZE;
+        cs.career.messages = [...(cs.career.messages || []), {
+          id: `msg_champ_${Date.now()}_${u.username}`, type: 'club', date: world.gameDate, from: championName,
+          subject: 'CHAMPIONS!', body: `${championName} sizning ishtirokingiz bilan ${league.name} chempioni bo'ldi! Mukofot: $${CHAMPION_PRIZE.toLocaleString()}.`,
+          read: false, resolved: true
+        }];
+        u.careerSavedAt = new Date().toISOString();
+      });
+    }
+    const topScorer = topScorerList[0];
+    if (topScorer && topScorer.goals > 0) {
+      db.users.forEach((u) => {
+        const cs = u.careerSave;
+        if (!cs || cs.id !== topScorer.id) return;
+        cs.career.trophies = [...(cs.career.trophies || []), { name: `${league.name} Golden Boot`, year: finishedSeason, icon: '⚽', teamId: cs.club?.id, teamName: cs.club?.name }];
+        cs.career.money = (cs.career.money || 0) + GOLDEN_BOOT_PRIZE;
+        cs.career.messages = [...(cs.career.messages || []), {
+          id: `msg_gb_${Date.now()}_${u.username}`, type: 'club', date: world.gameDate, from: 'League Awards',
+          subject: 'Golden Boot!', body: `${topScorer.goals} gol bilan ${league.name} bombardiri bo'ldingiz! Mukofot: $${GOLDEN_BOOT_PRIZE.toLocaleString()}.`,
+          read: false, resolved: true
+        }];
+        u.careerSavedAt = new Date().toISOString();
+      });
+    }
+  }
 
   // 1) Age every squad, collecting who hung up their boots, who was released,
   //    and exactly which players are brand new (counting "age <= 18" instead
@@ -925,8 +1016,8 @@ function resolveCupRoundForLeague(db, leagueId, newDate) {
 
     const humanHome = usersInLeague.filter((u) => u.careerSave.club.id === m.home).map((u) => ({ ...u.careerSave, username: u.username }));
     const humanAway = usersInLeague.filter((u) => u.careerSave.club.id === m.away).map((u) => ({ ...u.careerSave, username: u.username }));
-    const activeHumanHome = humanHome.filter((hp) => !hp.career?.injury?.daysLeft);
-    const activeHumanAway = humanAway.filter((hp) => !hp.career?.injury?.daysLeft);
+    const activeHumanHome = humanHome.filter((hp) => !hp.career?.injury?.daysLeft && !hp.career?.suspension?.matchesLeft);
+    const activeHumanAway = humanAway.filter((hp) => !hp.career?.injury?.daysLeft && !hp.career?.suspension?.matchesLeft);
     if (activeHumanHome.length || activeHumanAway.length) {
       m.pending = true;
       m.seed = engine.generateMatchSeed(leagueId, world.season, `cup-r${round.round}`, m.home, m.away);
@@ -988,7 +1079,7 @@ function resolveCupRoundForLeague(db, leagueId, newDate) {
       }
       break;
     }
-    world.cup.rounds.push(engine.buildNextCupRound(finishedRound));
+    world.cup.rounds.push(engine.buildNextCupRound(finishedRound, newDate));
   }
 }
 
@@ -1140,8 +1231,8 @@ app.post('/api/admin/advance-world-day', authMiddleware, adminMiddleware, (req, 
       // LiveMatch orqali o'zi "o'ynaguncha" KUTILMOQDA (pending) holatida
       // qoladi. Jarohatlangan bo'lsa (o'zi o'ynay olmaydi) yoki hech qanday
       // inson yo'q bo'lsa - avvalgidek, darhol avtomatik hal qilinadi.
-      const activeHumanHome = humanHome.filter((hp) => !hp.career?.injury?.daysLeft);
-      const activeHumanAway = humanAway.filter((hp) => !hp.career?.injury?.daysLeft);
+      const activeHumanHome = humanHome.filter((hp) => !hp.career?.injury?.daysLeft && !hp.career?.suspension?.matchesLeft);
+      const activeHumanAway = humanAway.filter((hp) => !hp.career?.injury?.daysLeft && !hp.career?.suspension?.matchesLeft);
       if (activeHumanHome.length || activeHumanAway.length) {
         return {
           ...m,
@@ -1192,7 +1283,7 @@ app.post('/api/admin/advance-world-day', authMiddleware, adminMiddleware, (req, 
     // That may well have been the last fixture of the season - if so, age the
     // whole league a year and build the next season's calendar right away.
     if (engine.isSeasonComplete(world)) {
-      seasonRollovers.push({ league: world.leagueName, ...rolloverSeason(world, league) });
+      seasonRollovers.push({ league: world.leagueName, ...rolloverSeason(world, league, db) });
     }
   });
 
@@ -1201,16 +1292,49 @@ app.post('/api/admin/advance-world-day', authMiddleware, adminMiddleware, (req, 
   // abadiy to'xtatib qo'yardi.
   const autoResolvedPending = autoResolveStalePendingMatches(db, newDate);
 
+  // BUG FIX (12-bosqich, xavfsizlik tarmog'i): yuqoridagi asosiy siklda
+  // `isSeasonComplete` FAQAT shu kunga to'g'ri keladigan `roundIdx` topilgan
+  // holatda tekshiriladi. Agar mavsumning oxirgi o'ynalmagan o'yini inson
+  // tomonidan darhol tomosha qilinmay, faqat yuqoridagi 15-kunlik
+  // `autoResolveStalePendingMatches` orqali HOZIR (boshqa kunda) hal
+  // qilingan bo'lsa - asosiy sikl buni umuman ko'rmagan bo'lardi, va
+  // `roundIdx` shu kundan keyin hech qachon topilmaydi (jadval tugagan),
+  // demak `isSeasonComplete` ENDI HECH QACHON qayta tekshirilmay, mavsum
+  // "100% o'ynalgan" holatda ABADIY muzlab qolardi. Shuning uchun BU YERDA
+  // har bir liga uchun yana tekshiramiz - agar aynan hozir to'liq bo'lib
+  // qolgan bo'lsa, mavsumni yakunlaymiz. (Xavfsiz: `rolloverSeason` yangi,
+  // butunlay o'ynalmagan jadval yaratadi, shuning uchun bir xil ligada bir
+  // tikda ikki marta ishga tushmaydi.)
+  Object.keys(db.leagueWorlds).forEach((leagueId) => {
+    const world = db.leagueWorlds[leagueId];
+    const league = engine.LEAGUES.find((l) => l.id === leagueId);
+    if (!world || !league) return;
+    if (engine.isSeasonComplete(world)) {
+      seasonRollovers.push({ league: world.leagueName, ...rolloverSeason(world, league, db) });
+    }
+  });
+
   // Injury recovery. The shared world hands out match injuries but nothing on
   // the server ever healed them, so an injured player stayed injured forever
   // as far as the server was concerned - which quietly made them permanently
   // ineligible for national-team call-ups.
   db.users.forEach((u) => {
     const inj = u.careerSave?.career?.injury;
-    if (!inj?.daysLeft) return;
-    inj.daysLeft -= 1;
-    if (inj.daysLeft <= 0) u.careerSave.career.injury = null;
-    u.careerSavedAt = new Date().toISOString();
+    if (inj?.daysLeft) {
+      inj.daysLeft -= 1;
+      if (inj.daysLeft <= 0) u.careerSave.career.injury = null;
+      u.careerSavedAt = new Date().toISOString();
+    }
+    // 11-BOSQICH: diskvalifikatsiya ham shu kunlik "tick" bilan kamayadi -
+    // qizil/uchinchi-sariq kartochka olgan futbolchi haqiqatan ham keyingi
+    // o'yin(lar)da qatnasha olmaydi (yuqoridagi activeHuman* filtrlariga
+    // qarang), so'ng avtomatik tiklanadi.
+    const susp = u.careerSave?.career?.suspension;
+    if (susp?.matchesLeft) {
+      susp.matchesLeft -= 1;
+      if (susp.matchesLeft <= 0) u.careerSave.career.suspension = null;
+      u.careerSavedAt = new Date().toISOString();
+    }
   });
 
   // International calendar rides on the same day tick as the leagues.
@@ -1246,13 +1370,41 @@ app.get('/api/international', authMiddleware, (req, res) => {
     topScorers: Object.values(t.topScorers).sort((a, b) => b.goals - a.goals).slice(0, 10),
     recentResults: t.results.slice(-12)
   }));
+  const currentYear = Number((db.worldDate || new Date().toISOString().slice(0, 10)).slice(0, 4));
+  // 11-BOSQICH: "upcoming tournaments" - hali boshlanmagan, lekin taqvimda
+  // ko'rinadigan keyingi 3 yillik xalqaro turnirlar ro'yxati (statik
+  // taqvimdan hisoblanadi, DB holatiga bog'liq emas).
+  const activeKeys = new Set(intl.activeTournaments.map((t) => t.key));
+  const finishedKeys = new Set((intl.history || []).map((h) => h.key));
+  const upcomingTournaments = [];
+  for (let y = currentYear; y <= currentYear + 3; y += 1) {
+    international.tournamentsForYear(y).forEach((def) => {
+      const alreadyKnown = (y === currentYear) && (activeKeys.has(def.key) || finishedKeys.has(`${def.key}_${y}`));
+      if (alreadyKnown) return;
+      upcomingTournaments.push({ ...def, year: y, startDate: `${y}-06-01` });
+    });
+  }
+
   res.json({
     ok: true,
     worldDate: db.worldDate || null,
     tournaments,
+    upcomingTournaments,
     history: intl.history,
     news: intl.newsLog.slice(0, 30)
   });
+});
+
+// 11-BOSQICH: barcha millatlarning o'rtacha reytingi bo'yicha jahon
+// reytingi (kuch bo'yicha eng zo'rlar) - milliy terma jamoa sahifasida
+// ko'rsatish uchun.
+app.get('/api/international/rankings', authMiddleware, (req, res) => {
+  const teams = international.buildNationalTeams(req.db);
+  const rankings = Object.entries(teams).map(([country, team]) => {
+    const avg = team.squad.length ? team.squad.reduce((s, p) => s + p.ovr, 0) / team.squad.length : 0;
+    return { country, flag: team.flag, confederation: team.confederation, avgRating: Math.round(avg * 10) / 10, squadSize: team.squad.length };
+  }).filter((r) => r.squadSize >= 11).sort((a, b) => b.avgRating - a.avgRating);
+  res.json({ ok: true, rankings });
 });
 
 // The current call-up list for one nation, with the requesting user flagged.

@@ -79,7 +79,7 @@ export default function LeagueBrowsePage() {
       </div>
 
       <div className="card">
-        <div className="card-title">STANDINGS</div>
+        <div className="card-title">JADVAL</div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
@@ -121,12 +121,12 @@ export default function LeagueBrowsePage() {
                 className="btn" style={{ padding: '4px 10px', fontSize: 12 }}
                 disabled={activeIdx <= 0}
                 onClick={() => setRoundIdx(Math.max(0, activeIdx - 1))}
-              >← Prev</button>
+              >← Oldingi</button>
               <button
                 className="btn" style={{ padding: '4px 10px', fontSize: 12 }}
                 disabled={activeIdx >= schedule.length - 1}
                 onClick={() => setRoundIdx(Math.min(schedule.length - 1, activeIdx + 1))}
-              >Next →</button>
+              >Keyingi →</button>
             </div>
           </div>
           <div style={{ maxHeight: 360, overflowY: 'auto' }}>
@@ -166,12 +166,12 @@ export default function LeagueBrowsePage() {
                 className="btn" style={{ padding: '4px 10px', fontSize: 12 }}
                 disabled={activeCupIdx <= 0}
                 onClick={() => setCupRoundIdx(Math.max(0, activeCupIdx - 1))}
-              >← Prev</button>
+              >← Oldingi</button>
               <button
                 className="btn" style={{ padding: '4px 10px', fontSize: 12 }}
                 disabled={activeCupIdx >= cupRounds.length - 1}
                 onClick={() => setCupRoundIdx(Math.min(cupRounds.length - 1, activeCupIdx + 1))}
-              >Next →</button>
+              >Keyingi →</button>
             </div>
           </div>
           {world.cup.championId && (

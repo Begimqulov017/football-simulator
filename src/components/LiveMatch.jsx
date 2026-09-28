@@ -58,7 +58,7 @@ const emptyStats = () => ({
 // hisoblanardi), keyin YAKUNIY (foydalanuvchi ko'rgan) natija bilan
 // onFinish chaqiriladi. Berilmasa (ligada durang ruxsat etilgan holatlar),
 // avvalgidek durang bilan tugaydi.
-export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shootoutOnDraw }) {
+export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shootoutOnDraw, competitionLabel }) {
   useEffect(() => {
     if (seed !== undefined && seed !== null) setSeed(seed);
     else clearSeed();
@@ -694,6 +694,7 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
         redCardsA={redCardsA}
         redCardsB={redCardsB}
         liveTicker={liveTicker}
+        competitionLabel={competitionLabel}
         onTogglePause={() => setIsPaused(!isPaused)}
         onToggleSpeed={toggleSpeed}
         onFinish={finishMatch}
@@ -885,10 +886,25 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
             ))}
           </div>
           {shootout.revealed < shootout.kicks.length ? (
-            <div style={{ opacity: 0.8, fontSize: 13 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              marginTop: 6, padding: '10px 16px', borderRadius: 12,
+              background: 'rgba(255, 200, 60, 0.1)', border: '1px solid rgba(255, 200, 60, 0.4)'
+            }}>
               {(() => {
                 const next = shootout.kicks[shootout.revealed];
-                return next ? `Zarba: ${next.kicker?.name || '?'} (${next.side === 'a' ? teamA.name : teamB.name})` : '';
+                if (!next) return null;
+                const teamObj = next.side === 'a' ? teamA : teamB;
+                return (
+                  <>
+                    <span style={{ fontSize: 22 }}>{teamObj?.logo || '⚽'}</span>
+                    <span style={{ fontSize: 14 }}>
+                      <span style={{ opacity: 0.7 }}>Zarba tepmoqda: </span>
+                      <b style={{ fontSize: 16, color: 'var(--accent-gold)' }}>{next.kicker?.name || '?'}</b>
+                      <span style={{ opacity: 0.7 }}> ({teamObj?.name})</span>
+                    </span>
+                  </>
+                );
               })()}
             </div>
           ) : (

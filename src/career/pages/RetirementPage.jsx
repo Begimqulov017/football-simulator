@@ -34,7 +34,7 @@ export default function RetirementPage() {
     <div className="start-shell">
       <div className="card start-card" style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 40, marginBottom: 8 }}>🏆</div>
-        <h1>Retirement</h1>
+        <h1>Pensiyaga chiqish</h1>
         <p className="tagline">
           At {legacy.retiredAge}, {player?.name} {player?.surname} has hung up the boots.
         </p>

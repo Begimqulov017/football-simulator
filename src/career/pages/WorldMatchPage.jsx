@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import { useGame } from '../context/GameContext';
 import { fetchPendingMatchDetail, submitMatchResult } from '../utils/careerApi';
+import { LEAGUES } from '../../data/leaguesData';
 import LiveMatch from '../../components/LiveMatch';
 
 // 4-BAND: bu sahifa umumiy dunyodagi foydalanuvchining O'Z o'yinini
@@ -42,15 +43,27 @@ export default function WorldMatchPage() {
     pos: player.position, ovr: player.overall, stamina: 100, isHuman: true,
   } : null), [player]);
 
+  // 11-BOSQICH: sarlavhada endi doim "Tezkor o'yin • Do'stona uchrashuv"
+  // ko'rinib turmasin - haqiqiy musobaqa/tur nomi chiqsin.
+  const competitionLabel = useMemo(() => {
+    if (!detail) return null;
+    const league = LEAGUES.find((l) => l.id === detail.leagueId);
+    const leagueName = league?.name || detail.leagueId;
+    if (detail.competition === 'cup') return `${leagueName} kubogi — ${detail.round}-bosqich`;
+    return `${leagueName} — ${detail.round}-tur`;
+  }, [detail]);
+
   const handleFinish = useCallback(async (result) => {
     if (!detail || !myEntry || submitting) return;
     setSubmitting(true);
-    const myEvents = result.playerEventsMap?.[myEntry.id] || { goals: 0, assists: 0, injured: false };
+    const myEvents = result.playerEventsMap?.[myEntry.id] || { goals: 0, assists: 0, injured: false, yellow: false, red: false };
     const myRating = result.playerRatings?.[myEntry.id];
     const myGoals = myEvents.goals || 0;
     const myAssists = myEvents.assists || 0;
     const myInjured = !!myEvents.injured;
     const myInjuryDays = myInjured ? Math.floor(Math.random() * 10) + 3 : 0;
+    const myYellow = !!myEvents.yellow;
+    const myRed = !!myEvents.red;
     // 7-BAND: kubokda durang bo'lishi mumkin emas. `shootoutOnDraw` (3-band)
     // yoqilgan bo'lsa, LiveMatch durang holatda penalti seriyasini JONLI
     // ko'rsatadi va natijada `penWinner` ('a'=uy, 'b'=mehmon) keladi - shu
@@ -71,22 +84,33 @@ export default function WorldMatchPage() {
         myMinutes: 90,
         myInjured,
         myInjuryDays,
+        myYellow, myRed,
         penWinnerClubId,
       });
       // Server allaqachon shu qiymatlarni yozib qo'ydi - lokal holatni ham
       // BIR XIL o'sish (increment) bilan yangilaymiz, aks holda foydalanuvchi
       // keyingi to'liq yuklashgacha (yoki 20s pollinggacha) eski
       // sonlarni ko'rib turaverardi.
-      updatePlayer((prev) => ({
-        career: {
-          ...prev.career,
-          appearances: (prev.career.appearances || 0) + 1,
-          goals: (prev.career.goals || 0) + myGoals,
-          assists: (prev.career.assists || 0) + myAssists,
-          matchRatings: [...(prev.career.matchRatings || []), typeof myRating === 'number' ? myRating : 6.0].slice(-10),
-          injury: myInjured ? { daysLeft: myInjuryDays, description: 'Match injury' } : prev.career.injury,
-        },
-      }));
+      updatePlayer((prev) => {
+        let suspension = prev.career.suspension;
+        let yellowCardsThisSeason = prev.career.yellowCardsThisSeason || 0;
+        if (myRed) suspension = { matchesLeft: 2, reason: 'red_card' };
+        else if (myYellow) {
+          yellowCardsThisSeason += 1;
+          if (yellowCardsThisSeason >= 3) { yellowCardsThisSeason = 0; suspension = { matchesLeft: 1, reason: 'yellow_accumulation' }; }
+        }
+        return {
+          career: {
+            ...prev.career,
+            appearances: (prev.career.appearances || 0) + 1,
+            goals: (prev.career.goals || 0) + myGoals,
+            assists: (prev.career.assists || 0) + myAssists,
+            matchRatings: [...(prev.career.matchRatings || []), typeof myRating === 'number' ? myRating : 6.0].slice(-10),
+            injury: myInjured ? { daysLeft: myInjuryDays, description: 'Match injury' } : prev.career.injury,
+            suspension, yellowCardsThisSeason,
+          },
+        };
+      });
     } finally {
       await refreshPendingWorldMatch();
       navigate('/home', { replace: true });
@@ -136,6 +160,7 @@ export default function WorldMatchPage() {
       teamB={teamB}
       seed={detail.seed}
       shootoutOnDraw={detail.competition === 'cup'}
+      competitionLabel={competitionLabel}
       onFinish={handleFinish}
       onExit={handleExit}
     />

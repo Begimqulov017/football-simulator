@@ -350,7 +350,7 @@ export const resolveAttackOutcome = (attackPlayers, defendPlayers) => {
   const markerMod = getMarkerModifier(scorer, defendPlayers);
   const shotPower = getPlayerGoalWeight(scorer) * markerMod * BIG_CHANCE_POWER_SCALE;
 
-  const MISS_CHANCE = 0.32; // to'p darvoza tashqarisiga ketishi (nishonga tegmaydi)
+  const MISS_CHANCE = 0.24; // to'p darvoza tashqarisiga ketishi (nishonga tegmaydi) - 11-BOSQICH: gollar juda kam bo'lib qolgani uchun 0.32'dan pasaytirildi
   const saveChance = savePower / (savePower + shotPower); // nishonga tegsa, ushlanish ehtimoli
 
   const outcomeRand = rand();
@@ -379,7 +379,7 @@ export const resolveRegularShot = (attackPlayers, defendPlayers) => {
   const markerMod = getMarkerModifier(scorer, defendPlayers);
   const shotPower = getPlayerGoalWeight(scorer) * markerMod * REGULAR_SHOT_POWER_SCALE;
 
-  const MISS_CHANCE = 0.70; // oddiy zarbalarning aksariyati chetga/bloklanib ketadi (gollarni real darajaga tushirish uchun oshirildi)
+  const MISS_CHANCE = 0.58; // 11-BOSQICH: gollar kam bo'lib qolgani uchun 0.70'dan pasaytirildi
   const saveChance = savePower / (savePower + shotPower);
 
   const outcomeRand = rand();

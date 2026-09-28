@@ -15,22 +15,22 @@ export default function TransfersPage() {
     <AppShell>
       <div className="page-header">
         <div>
-          <h1>Transfers</h1>
-          <div className="sub">Transfer market activity across the football world</div>
+          <h1>Transferlar</h1>
+          <div className="sub">Butun futbol dunyosidagi transfer bozori faoliyati</div>
         </div>
-        <span className="badge badge-gold">${totalVolume.toFixed(1)}M total volume</span>
+        <span className="badge badge-gold">${totalVolume.toFixed(1)}M umumiy hajm</span>
       </div>
 
       {log.length === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: 32 }}>
-          <div className="sub">The transfer window is quiet right now - check back after a few more matchdays.</div>
+          <div className="sub">Hozircha transfer oynasi tinch - bir necha o'yindan keyin qaytib ko'ring.</div>
         </div>
       )}
 
       {log.length > 0 && (
         <div className="grid grid-2">
           <div className="card">
-            <div className="card-title">TOP 10 BIGGEST TRANSFERS</div>
+            <div className="card-title">ENG QIMMAT 10 TA TRANSFER</div>
             <div style={{ maxHeight: 440, overflowY: 'auto' }}>
               {top10.map((t) => (
                 <div key={t.id} className="list-row">
@@ -46,7 +46,7 @@ export default function TransfersPage() {
           </div>
 
           <div className="card">
-            <div className="card-title">RECENT TRANSFERS</div>
+            <div className="card-title">SO'NGGI TRANSFERLAR</div>
             <div style={{ maxHeight: 440, overflowY: 'auto' }}>
               {recent.map((t) => (
                 <div key={t.id} className="list-row">

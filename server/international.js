@@ -99,24 +99,41 @@ function buildPlayerPool(db) {
 // Best SQUAD_SIZE players of a nation, but with a floor on keepers and
 // defenders so a "national team" is never 23 strikers - the match engine
 // reads positions when it decides who scores.
+// 11-BOSQICH: eski versiyada QATTIQ kvota (masalan MID uchun aniq 6 ta)
+// ba'zida yuqori reytingli futbolchini pastroq reytinglidan orqada
+// qoldirishi mumkin edi (kvota to'lib, keyingi bo'sh joy faqat "istalgan
+// pozitsiya" bosqichida tekshirilardi). Endi mantiq soddalashtirildi:
+// har doim ENG YUQORI OVR birinchi olinadi, guruh bo'yicha faqat "maksimal
+// chegara" bor (masalan faqat 3ta darvozabon) - shu bilan "73+ reytingli
+// menda 72lar bor-u men yo'qman" degan holat endi mumkin emas.
+const GROUP_MAX = { GK: 3, DEF: 10, MID: 10, ATT: 8 };
+function groupOfPos(pos) {
+  if (pos === 'GK') return 'GK';
+  if (['CB', 'LB', 'RB'].includes(pos)) return 'DEF';
+  if (['CDM', 'CM', 'CAM', 'LM', 'RM'].includes(pos)) return 'MID';
+  return 'ATT';
+}
+
 function pickSquad(players) {
   const byOvr = [...players].filter((p) => !p.injured).sort((a, b) => b.ovr - a.ovr);
   const squad = [];
-  const taken = new Set();
-  const takeSome = (filterFn, count) => {
+  const groupCount = { GK: 0, DEF: 0, MID: 0, ATT: 0 };
+  for (const p of byOvr) {
+    if (squad.length >= SQUAD_SIZE) break;
+    const g = groupOfPos(p.pos);
+    if (groupCount[g] >= GROUP_MAX[g]) continue;
+    squad.push(p);
+    groupCount[g] += 1;
+  }
+  // Xavfsizlik: agar yuqoridagi chegaralar juda qattiq bo'lib, 23 ta
+  // to'lmasa (masalan millatda darvozabon umuman yo'q bo'lsa), qolgan
+  // joylar sof OVR bo'yicha to'ldiriladi.
+  if (squad.length < SQUAD_SIZE) {
     for (const p of byOvr) {
-      if (squad.length >= SQUAD_SIZE || count <= 0) break;
-      if (taken.has(p.id) || !filterFn(p)) continue;
-      squad.push(p); taken.add(p.id); count -= 1;
+      if (squad.length >= SQUAD_SIZE) break;
+      if (!squad.includes(p)) squad.push(p);
     }
-  };
-  takeSome((p) => p.pos === 'GK', 3);
-  takeSome((p) => ['CB', 'LB', 'RB'].includes(p.pos), 7);
-  takeSome((p) => ['CDM', 'CM', 'CAM', 'LM', 'RM'].includes(p.pos), 6);
-  takeSome((p) => ['ST', 'LW', 'RW'].includes(p.pos), 5);
-  takeSome(() => true, SQUAD_SIZE); // fill any remaining slots with the best left
-  // Positional quotas mean the array is built keepers-first; sort it so the
-  // squad reads as a real call-up list (best player at the top).
+  }
   return squad.sort((a, b) => b.ovr - a.ovr);
 }
 
@@ -200,6 +217,9 @@ function humanPseudoPlayer(db, username) {
 
 function playNationalMatch(db, teamA, teamB, topScorers, allowDraw) {
   let { golA, golB } = engine.simulateTeamMatch(teamA.squad, teamB.squad);
+  // 11-BOSQICH: bu seed keyinroq o'sha o'yinni LiveMatch orqali "tomosha
+  // qilish/qayta ko'rish" uchun ishlatiladi - xuddi liga o'yinlari kabi.
+  const seed = Math.floor(Math.random() * 1_000_000_000);
 
   const humanResults = [];
   [['home', teamA, teamB], ['away', teamB, teamA]].forEach(([side, team, opponent]) => {
@@ -237,10 +257,16 @@ function playNationalMatch(db, teamA, teamB, topScorers, allowDraw) {
     penalties = aWins ? { a: 5, b: 4 } : { a: 4, b: 5 };
   }
 
-  return { golA, golB, penalties, humanResults };
+  return { golA, golB, penalties, humanResults, seed };
 }
 
 // Writes a national-team appearance onto a human player's careerSave.
+// Compact squad snapshot for later LiveMatch replay (id/name/pos/ovr only -
+// enough to render the pitch, without dragging along every stat field).
+function compactSquad(squad) {
+  return squad.map((p) => ({ id: p.id, name: p.name, pos: p.pos, ovr: p.ovr }));
+}
+
 function recordHumanInternational(db, hr, context) {
   const u = (db.users || []).find((x) => x.username === hr.username);
   if (!u?.careerSave) return;
@@ -250,7 +276,16 @@ function recordHumanInternational(db, hr, context) {
     country: hr.country, caps: 0, goals: 0, assists: 0, tournaments: [], trophies: [], lastCallUp: null
   };
   intl.country = hr.country;
-  intl.lastCallUp = { date: context.date, opponent: hr.opponentCountry, competition: context.competition };
+  const ownGoals = hr.side === 'home' ? context.golA : context.golB;
+  const oppGoals = hr.side === 'home' ? context.golB : context.golA;
+  intl.lastCallUp = {
+    date: context.date, opponent: hr.opponentCountry, competition: context.competition,
+    // 11-BOSQICH: bu o'yinni keyinroq LiveMatch orqali tomosha qilish uchun.
+    seed: context.seed,
+    teamASquad: hr.side === 'home' ? context.teamASquad : context.teamBSquad,
+    teamBSquad: hr.side === 'home' ? context.teamBSquad : context.teamASquad,
+    golA: ownGoals, golB: oppGoals
+  };
   if (hr.pStats.played) {
     intl.caps += 1;
     intl.goals += hr.pStats.goals || 0;
@@ -264,7 +299,15 @@ function recordHumanInternational(db, hr, context) {
 // ------------------------------------------------------------
 // Tournament lifecycle
 // ------------------------------------------------------------
-const VALID_SIZES = [32, 16, 8];
+// 14-BOSQICH TUZATISH: CAF (Africa Cup) va CONMEBOL (Copa América) o'yin
+// boshida navbati bilan atigi 4 va 7 ta "vatanidan 11+ professional
+// futbolchisi bor" millatga ega (MIN_SQUAD_FOR_ELIGIBILITY). Eski ro'yxatda
+// eng kichik format 8 ta jamoa edi - shuning uchun bu ikki kubok pool
+// yetarli kattalikka yetguncha ABADIY o'tkazib yuborilardi (createTournament
+// `null` qaytarardi), garchi "continental yil"da UEFA/AFC kabi boshqa
+// kuboklar normal o'tsa ham. 4 qo'shildi: 1 guruh (barcha 4 jamoa
+// round-robin) + to'g'ridan-to'g'ri final (ROUND_LABEL[2] = 'Final').
+const VALID_SIZES = [32, 16, 8, 4];
 
 function createTournament(def, year, teams) {
   const pool = Object.values(teams)
@@ -343,7 +386,10 @@ function playGroupMatchday(db, tournament, matchdayIndex, teams) {
       const match = { stage: `Group ${group.name}`, home: a.country, away: b.country, homeFlag: a.flag, awayFlag: b.flag, golA: r.golA, golB: r.golB };
       played.push(match);
       tournament.results.push(match);
-      r.humanResults.forEach((hr) => recordHumanInternational(db, hr, { date: tournament.groupDates[matchdayIndex], competition: tournament.name }));
+      r.humanResults.forEach((hr) => recordHumanInternational(db, hr, {
+        date: tournament.groupDates[matchdayIndex], competition: tournament.name,
+        seed: r.seed, teamASquad: compactSquad(a.squad), teamBSquad: compactSquad(b.squad), golA: r.golA, golB: r.golB
+      }));
     });
   });
   return played;
@@ -392,7 +438,10 @@ function playKnockoutRound(db, tournament, roundIndex, teams) {
     const match = { stage: label, ...tie };
     played.push(match);
     tournament.results.push(match);
-    r.humanResults.forEach((hr) => recordHumanInternational(db, hr, { date: tournament.knockoutDates[roundIndex], competition: `${tournament.name} · ${label}` }));
+    r.humanResults.forEach((hr) => recordHumanInternational(db, hr, {
+      date: tournament.knockoutDates[roundIndex], competition: `${tournament.name} · ${label}`,
+      seed: r.seed, teamASquad: compactSquad(a.squad), teamBSquad: compactSquad(b.squad), golA: r.golA, golB: r.golB
+    }));
   }
 
   tournament.knockout[roundIndex] = { label, ties };
@@ -410,6 +459,7 @@ function playKnockoutRound(db, tournament, roundIndex, teams) {
 function awardTrophies(db, tournament, teams) {
   const champion = teams[tournament.winner];
   if (!champion) return;
+  const TOURNAMENT_PRIZE = 400_000;
   champion.humans.forEach((username) => {
     const u = (db.users || []).find((x) => x.username === username);
     if (!u?.careerSave) return;
@@ -417,7 +467,19 @@ function awardTrophies(db, tournament, teams) {
     cs.career = cs.career || {};
     cs.career.international = cs.career.international || { country: tournament.winner, caps: 0, goals: 0, assists: 0, tournaments: [], trophies: [] };
     cs.career.international.trophies = [...(cs.career.international.trophies || []), { name: tournament.name, year: tournament.year, country: tournament.winner }];
-    cs.career.trophies = [...(cs.career.trophies || []), `${tournament.name} ${tournament.year}`];
+    // 11-BOSQICH: bu ilgari oddiy MATN (string) sifatida qo'shilardi, holbuki
+    // ProfilePage/ClubPage har doim {name,year,icon} OBYEKTINI kutadi -
+    // shu sabab bu trofey Profile'da noto'g'ri/bo'sh ko'rinishi mumkin edi.
+    // Endi to'g'ri shaklda + mukofot puli bilan.
+    cs.career.trophies = [...(cs.career.trophies || []), { name: `${tournament.name} ${tournament.year}`, year: tournament.year, icon: '🌍' }];
+    cs.career.money = (cs.career.money || 0) + TOURNAMENT_PRIZE;
+    cs.career.messages = [...(cs.career.messages || []), {
+      id: `msg_intltrophy_${Date.now()}_${username}`, type: 'national', date: tournament.knockoutDates?.[tournament.knockoutDates.length - 1] || tournament.groupDates?.[0],
+      from: `${champion.flag} ${tournament.winner}`,
+      subject: `🏆 ${tournament.name} ${tournament.year} - CHEMPION!`,
+      body: `${tournament.winner} terma jamoasi bilan ${tournament.name} ${tournament.year} kubogini qo'lga kiritdingiz! Mukofot puli: $${TOURNAMENT_PRIZE.toLocaleString()}.`,
+      read: false, resolved: true
+    }];
     u.careerSavedAt = new Date().toISOString();
   });
 }
@@ -441,10 +503,42 @@ function playFriendlies(db, teams, date) {
       const r = playNationalMatch(db, a, b, {}, true);
       const match = { stage: 'Friendly', home: a.country, away: b.country, homeFlag: a.flag, awayFlag: b.flag, golA: r.golA, golB: r.golB };
       played.push(match);
-      r.humanResults.forEach((hr) => recordHumanInternational(db, hr, { date, competition: 'International friendly' }));
+      r.humanResults.forEach((hr) => recordHumanInternational(db, hr, {
+        date, competition: 'International friendly',
+        seed: r.seed, teamASquad: compactSquad(a.squad), teamBSquad: compactSquad(b.squad), golA: r.golA, golB: r.golB
+      }));
     }
   });
   return played;
+}
+
+// 4-BOSQICH: birinchi marta (yoki har yangi chaqiruv oynasida) terma
+// jamoaga kiritilgan HAQIQIY foydalanuvchilarga xabar yuboradi - "Siz X
+// terma jamoasiga chaqirildingiz" - qaysi turnir/o'rtoqlik uchun ekani
+// bilan birga.
+function notifyCallUps(db, teams, countries, contextLabel, dateStr) {
+  const uniqueCountries = [...new Set(countries)];
+  uniqueCountries.forEach((country) => {
+    const team = teams[country];
+    if (!team) return;
+    team.humans.forEach((username) => {
+      const u = (db.users || []).find((x) => x.username === username);
+      if (!u?.careerSave) return;
+      const cs = u.careerSave;
+      cs.career = cs.career || {};
+      cs.career.messages = cs.career.messages || [];
+      cs.career.messages.push({
+        id: `msg_intl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        type: 'national',
+        date: dateStr,
+        from: `${team.flag} ${country}`,
+        subject: `Siz ${country} terma jamoasiga chaqirildingiz!`,
+        body: `${contextLabel} uchun ${country} milliy terma jamoasi tarkibiga kiritildingiz. Tarkib va o'yinlarni "National Team" sahifasida kuzatib boring. Omad!`,
+        read: false, resolved: true
+      });
+      u.careerSavedAt = new Date().toISOString();
+    });
+  });
 }
 
 // ------------------------------------------------------------
@@ -486,6 +580,8 @@ function advanceInternational(db, date) {
     intl.activeTournaments.push(t);
     pushNews(intl, { type: 'tournament_start', date, title: `${t.name} ${year} boshlandi`, detail: `${t.size} terma jamoa · ${t.groups.length} guruh` });
     events.push({ type: 'tournament_start', tournament: t.name, teams: t.size });
+    const tournamentCountries = t.groups.flatMap((g) => g.teams);
+    notifyCallUps(db, teams, tournamentCountries, `${t.name} ${year}`, date);
   });
 
   // 2) Resolve whatever stage falls on this date
@@ -524,6 +620,8 @@ function advanceInternational(db, date) {
     if (played.length) {
       pushNews(intl, { type: 'break', date, title: `Xalqaro pauza — ${played.length} ta o'rtoqlik o'yini`, detail: date });
       events.push({ type: 'break', matches: played });
+      const friendlyCountries = played.flatMap((m) => [m.home, m.away]);
+      notifyCallUps(db, teams, friendlyCountries, "Xalqaro do'stlik uchrashuvlari", date);
     }
   }
 

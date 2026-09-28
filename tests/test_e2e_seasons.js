@@ -63,11 +63,13 @@ function makePlayer(name, clubId, clubName) {
 
   // --- advance until 4 season rollovers have happened ---
   const TARGET_SEASONS = 4;
+  const TARGET_LEAGUE_NAME = 'La Liga'; // must match world.leagueName for 'la_liga' (server/gamedata/leaguesData.js)
   let rollovers = [];
+  let laLigaRollovers = [];
   let calls = 0;
   let matchesResolved = 0;
   const t0 = Date.now();
-  while (rollovers.length < TARGET_SEASONS && calls < 2000) {
+  while (laLigaRollovers.length < TARGET_SEASONS && calls < 2000) {
     const r = await api('/api/admin/advance-world-day', { method: 'POST', token: adminToken });
     calls += 1;
     if (!r.ok) throw new Error('advance failed: ' + JSON.stringify(r));
@@ -75,7 +77,8 @@ function makePlayer(name, clubId, clubName) {
     if (r.seasonRollovers?.length) {
       r.seasonRollovers.forEach((ro) => {
         rollovers.push(ro);
-        console.log(`ROLLOVER after ${calls} admin clicks | season ${ro.season} done | champion: ${ro.championName}` +
+        if (ro.league === TARGET_LEAGUE_NAME) laLigaRollovers.push(ro);
+        console.log(`ROLLOVER after ${calls} admin clicks | league ${ro.league} | season ${ro.season} done | champion: ${ro.championName}` +
           ` | retirements ${ro.retirements} (famous ${ro.famousRetirements}) | academy ${ro.newAcademy}` +
           ` | next season starts ${ro.nextSeasonStart}`);
       });

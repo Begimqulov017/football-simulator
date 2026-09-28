@@ -13,6 +13,7 @@ export default function MatchTablo({
   redCardsA,
   redCardsB,
   liveTicker,
+  competitionLabel,
   onTogglePause,
   onToggleSpeed,
   onFinish,
@@ -25,7 +26,7 @@ export default function MatchTablo({
 
   return (
     <div className="match-hero">
-      <div className="match-hero-comp">🏆 Tezkor O'yin • Do'stona Uchrashuv</div>
+      <div className="match-hero-comp">🏆 {competitionLabel || "Tezkor o'yin • Do'stona uchrashuv"}</div>
 
       <div className="match-hero-teams">
         <div className="hero-team">

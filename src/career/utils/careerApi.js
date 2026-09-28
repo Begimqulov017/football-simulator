@@ -167,7 +167,7 @@ export async function fetchClubRoster(clubId) {
 // tables, brackets, top scorers), past winners and the international news log.
 export async function fetchInternational() {
   const data = await apiFetch('/api/international');
-  if (!data.ok) return { ok: false, tournaments: [], history: [], news: [] };
+  if (!data.ok) return { ok: false, tournaments: [], upcomingTournaments: [], history: [], news: [] };
   return data;
 }
 
@@ -177,4 +177,12 @@ export async function fetchNationSquad(country) {
   const data = await apiFetch(`/api/international/nation/${encodeURIComponent(country)}`);
   if (!data.ok) return { ok: false, error: data.error, team: null };
   return { ok: true, team: data.team };
+}
+
+// 11-BOSQICH: barcha millatlarning o'rtacha reyting bo'yicha jahon
+// reytingi (kuchlilar ro'yxati).
+export async function fetchNationRankings() {
+  const data = await apiFetch('/api/international/rankings');
+  if (!data.ok) return [];
+  return data.rankings;
 }

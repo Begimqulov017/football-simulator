@@ -17,6 +17,7 @@ const SPIN_MS = 900;
 const MAX_SPINS = 4;
 
 const POSITIONS = ['GK', 'CB', 'LB', 'RB', 'CDM', 'CM', 'CAM', 'LM', 'RM', 'LW', 'RW', 'ST'];
+const UZ_MONTHS = ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun', 'iyul', 'avgust', 'sentyabr', 'oktyabr', 'noyabr', 'dekabr'];
 
 // 8-BAND: pensiyaga chiqgan o'yinchining "merosi" - RetirementPage shu
 // yerga (sessionStorage) yozib, /start'ga yuboradi. Familiya "Jr." bilan
@@ -39,6 +40,7 @@ export default function StartPage() {
   const [number, setNumber] = useState('');
   const [position, setPosition] = useState('');
   const [nationality, setNationality] = useState('');
+  const [birthMonth, setBirthMonth] = useState('');
 
   const [rating, setRating] = useState(null);
   const [potential, setPotential] = useState(null);
@@ -96,7 +98,7 @@ export default function StartPage() {
   }, [clubResult, rating]);
 
   const canStart =
-    name.trim() && surname.trim() && number.toString().trim() && position && nationality &&
+    name.trim() && surname.trim() && number.toString().trim() && position && nationality && birthMonth &&
     rating !== null && potential !== null && clubResult && !clubResult.team?.name?.includes('...') &&
     !spinning.rating && !spinning.potential && !spinning.club;
 
@@ -125,6 +127,7 @@ export default function StartPage() {
       clubResult.league, '2026-08-01', schedule
     );
 
+    const birthYear = 2026 - 17; // 2009 - o'yinchi hozir 17 yoshda, mavsum 2026'da boshlanadi
     const player = {
       id: playerId,
       name: name.trim(),
@@ -133,6 +136,7 @@ export default function StartPage() {
       position,
       nationality,
       age: 17,
+      birthDate: `${birthYear}-${String(birthMonth).padStart(2, '0')}-01`,
       createdAt: new Date().toISOString(),
       firstRating: rating,
       potential,
@@ -200,48 +204,48 @@ export default function StartPage() {
   return (
     <div className="start-shell">
       <div className="card start-card">
-        <h1>Create a Player</h1>
-        <p className="tagline">Build your pro and spin your way into the league.</p>
+        <h1>Futbolchi yaratish</h1>
+        <p className="tagline">O'z futbolchingizni yarating va ligaga yo'l oling.</p>
         {legacy && (
           <div className="badge badge-gold" style={{ display: 'inline-block', marginBottom: 14 }}>
-            🏆 Continuing the family legacy - inherited ${legacy.money.toLocaleString()} from {legacy.surname} (retired at {legacy.retiredAge})
+            🏆 Oilaviy meros davom etmoqda - {legacy.surname}dan ${legacy.money.toLocaleString()} meros qoldi ({legacy.retiredAge} yoshda pensiyaga chiqqan)
           </div>
         )}
 
         <div className="grid grid-3" style={{ marginBottom: 14 }}>
           <div className="field">
-            <label>Name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Alisher" />
+            <label>Ism</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="masalan: Alisher" />
           </div>
           <div className="field">
-            <label>Surname</label>
-            <input value={surname} onChange={(e) => setSurname(e.target.value)} placeholder="e.g. Nomozov" />
+            <label>Familiya</label>
+            <input value={surname} onChange={(e) => setSurname(e.target.value)} placeholder="masalan: Nomozov" />
           </div>
           <div className="field">
-            <label>Number</label>
+            <label>Raqam</label>
             <input
               type="number"
               min="1"
               max="99"
               value={number}
               onChange={(e) => setNumber(e.target.value)}
-              placeholder="e.g. 9"
+              placeholder="masalan: 9"
             />
           </div>
         </div>
 
         <div className="grid grid-2" style={{ marginBottom: 20 }}>
           <div className="field">
-            <label>Position</label>
+            <label>Pozitsiya</label>
             <select value={position} onChange={(e) => setPosition(e.target.value)}>
-              <option value="" disabled>Select position</option>
+              <option value="" disabled>Pozitsiyani tanlang</option>
               {POSITIONS.map((p) => (
                 <option key={p} value={p}>{p}</option>
               ))}
             </select>
           </div>
           <div className="field">
-            <label>Nationality</label>
+            <label>Millat</label>
             {/* Millat birinchi aylantirishdan keyin QULFLANADI: aks holda
                 klub urinishlari tugagach millatni almashtirib, qaytadan
                 4 ta urinish olish mumkin bo'lardi — ya'ni cheklov bo'lmasdi. */}
@@ -255,9 +259,19 @@ export default function StartPage() {
                 if (clubResult) setClubResult(null);
               }}
             >
-              <option value="" disabled>Select nationality</option>
+              <option value="" disabled>Millatni tanlang</option>
               {NATIONALITIES.map((n) => (
                 <option key={n.name} value={n.name}>{n.flag} {n.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="sub" style={{ display: 'block', marginBottom: 6 }}>Tug'ilgan oyi (17 yosh, 2009-yil)</label>
+            <select value={birthMonth} onChange={(e) => setBirthMonth(e.target.value)}>
+              <option value="" disabled>Oyni tanlang</option>
+              {UZ_MONTHS.map((m, i) => (
+                <option key={m} value={i + 1}>{m}</option>
               ))}
             </select>
           </div>
@@ -265,8 +279,8 @@ export default function StartPage() {
 
         <div className="roll-grid">
           <div className={`roll-slot${rating !== null ? ' done' : ''}${spinning.rating ? ' spinning' : ''}`} onClick={spinRating}>
-            <div className="roll-label">FIRST RATING</div>
-            <div className="roll-value">{rating ?? 'Spin'}</div>
+            <div className="roll-label">BOSHLANG'ICH REYTING</div>
+            <div className="roll-value">{rating ?? 'Aylantirish'}</div>
             <div className="roll-label" style={{ marginTop: 4, opacity: 0.75 }}>
               {spinsLeft('rating') > 0 ? `${spinsLeft('rating')} urinish qoldi` : 'Yakuniy'}
             </div>
@@ -276,8 +290,8 @@ export default function StartPage() {
             onClick={spinClub}
             style={{ opacity: nationality ? 1 : 0.5, pointerEvents: nationality ? 'auto' : 'none' }}
           >
-            <div className="roll-label">FIRST CLUB</div>
-            <div className="roll-value">{clubResult ? clubResult.team.name : 'Spin'}</div>
+            <div className="roll-label">BIRINCHI KLUB</div>
+            <div className="roll-value">{clubResult ? clubResult.team.name : 'Aylantirish'}</div>
             <div className="roll-label" style={{ marginTop: 4, opacity: 0.75 }}>
               {spinsLeft('club') > 0 ? `${spinsLeft('club')} urinish qoldi` : 'Yakuniy'}
             </div>
@@ -287,8 +301,8 @@ export default function StartPage() {
             onClick={spinPotential}
             style={{ opacity: rating === null ? 0.5 : 1, pointerEvents: rating === null ? 'none' : 'auto' }}
           >
-            <div className="roll-label">FIRST POTENTIAL</div>
-            <div className="roll-value">{potential ?? 'Spin'}</div>
+            <div className="roll-label">BOSHLANG'ICH POTENTSIAL</div>
+            <div className="roll-value">{potential ?? 'Aylantirish'}</div>
             <div className="roll-label" style={{ marginTop: 4, opacity: 0.75 }}>
               {spinsLeft('potential') > 0 ? `${spinsLeft('potential')} urinish qoldi` : 'Yakuniy'}
             </div>
@@ -296,34 +310,34 @@ export default function StartPage() {
         </div>
         {!nationality && (
           <p className="tagline" style={{ marginTop: -8, marginBottom: 20 }}>
-            Pick a nationality first - your first club roll leans toward clubs from your home country.
+            Avval millatni tanlang - birinchi klub tanlovi o'z vataningizdagi klublarga moyil bo'ladi.
           </p>
         )}
 
         <div className="result-grid">
           <div className="result-card">
             <div className="logo">{clubResult ? clubResult.team.logo : '❔'}</div>
-            <div className="value" style={{ fontSize: 13 }}>{clubResult ? clubResult.league.name : 'First Club Logo'}</div>
+            <div className="value" style={{ fontSize: 13 }}>{clubResult ? clubResult.league.name : "Birinchi klub logotipi"}</div>
             <div className="label">{clubResult ? clubResult.league.country : ''}</div>
           </div>
           <div className="result-card green">
             <div className="value">{rating ?? '--'}</div>
-            <div className="label">First Rating</div>
+            <div className="label">Boshlang'ich reyting</div>
           </div>
           <div className="result-card gold">
             <div className="value">{potential ?? '--'}</div>
-            <div className="label">First Potential</div>
+            <div className="label">Boshlang'ich potentsial</div>
           </div>
         </div>
 
         {tierPreview && (
           <div className={`badge ${tierPreview === 'starter' ? 'badge-gold' : ''}`} style={{ display: 'block', textAlign: 'center', marginBottom: 16 }}>
-            {tierPreview === 'starter' ? '⭐ You will start in the Starting XI' : '🪑 You will start on the Bench'}
+            {tierPreview === 'starter' ? '⭐ Siz asosiy tarkibda boshlaysiz' : '🪑 Siz zaxirada boshlaysiz'}
           </div>
         )}
 
         <button className="btn btn-primary btn-block" disabled={!canStart} onClick={handleStart}>
-          Start Game!
+          O'yinni boshlash!
         </button>
       </div>
     </div>

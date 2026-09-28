@@ -479,9 +479,22 @@ function isCupRoundComplete(round) {
   return round.matches.every((m) => m.played);
 }
 
-function buildNextCupRound(prevRound) {
+function buildNextCupRound(prevRound, todayDate) {
   const winners = prevRound.matches.map((m) => m.winnerId).filter(Boolean);
-  const nextDate = addDays(prevRound.date, 14);
+  // BUG FIX (12-bosqich): agar oldingi tur o'z sanasida emas, balki 15-kunlik
+  // "catch-up" orqali KEYINROQ hal qilingan bo'lsa (inson o'yinchi o'z pending
+  // o'yinini darhol tomosha qilmagani uchun - odatiy holat!), +14 kunlik oddiy
+  // hisob-kitob ALLAQACHON O'TIB KETGAN sanani berardi. `resolveCupRoundForLeague`
+  // esa yangi turni FAQAT `round.date === newDate` bo'lganda ishga tushiradi -
+  // agar bu sana allaqachon o'tib ketgan bo'lsa, bu tekshiruv ENDI HECH QACHON
+  // to'g'ri kelmaydi va butun kubok (demak, unga bog'liq narsalar) ABADIY
+  // to'xtab qolardi. Shuning uchun: agar hisoblangan sana bugundan keyin
+  // bo'lmasa, uni bugundan +14 kunga suramiz - shu bilan har doim KELAJAKDA
+  // bo'lishini kafolatlaymiz.
+  let nextDate = addDays(prevRound.date, 14);
+  if (todayDate && nextDate <= todayDate) {
+    nextDate = addDays(todayDate, 14);
+  }
   return buildCupRound(winners, prevRound.round + 1, nextDate);
 }
 
