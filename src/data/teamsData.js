@@ -1,9 +1,8 @@
-import realMadridLogo from './logos/real-madrid.png';
 export const INITIAL_TEAMS = [
   {
     id: 'real_madrid',
     name: 'Real Madrid',
-    logo: realMadridLogo,
+    logo: './logos/real-madrid.png',
     squad: [
       { id: 'courtois', name: 'Thibaut Courtois', pos: 'GK', ovr: 89, stats: { div: 85, han: 89, kic: 76, ref: 90, spd: 46, pos: 88 } },
       { id: 'trent', name: 'Trent Alexander-Arnold', pos: 'RB', ovr: 86, stats: { pac: 76, sho: 72, pas: 89, dri: 80, def: 80, phy: 74 }, altPos: ['CM'] },
