@@ -1,5 +1,5 @@
 import realMadridLogo from './logos/real-madrid.png';
-const INITIAL_TEAMS = [
+export const INITIAL_TEAMS = [
   {
     id: 'real_madrid',
     name: 'Real Madrid',
