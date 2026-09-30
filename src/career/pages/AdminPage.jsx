@@ -1,19 +1,22 @@
 import React from 'react';
 import AppShell from '../components/AppShell';
-import AdminPanel from '../../components/AdminPanel';
+import AdminDashboard from '../admin/AdminDashboard';
 
+// Phase 4 — Admin Dashboard (Clean Light). Faqat adminlar uchun; server ham tekshiradi.
 export default function AdminPage({ currentUser }) {
   return (
     <AppShell>
       <div className="page-header">
         <div>
-          <h1>Admin</h1>
-          <div className="sub">Sizda shaxsiy karyera yo'q — siz umumiy dunyoni (kunni) boshqarasiz va barcha o'yinchilarni kuzatasiz</div>
+          <h1>Admin Dashboard</h1>
+          <div className="sub">O'yinchilar statistikasi, ligalar va turnirlar, ruxsatlar va simulyatsiya boshqaruvi</div>
         </div>
       </div>
-      <div style={{ maxWidth: 640 }}>
-        <AdminPanel currentUser={currentUser} />
-      </div>
+      {currentUser?.isAdmin ? (
+        <AdminDashboard currentUser={currentUser} />
+      ) : (
+        <div className="card"><div className="sub">Bu sahifa faqat adminlar uchun.</div></div>
+      )}
     </AppShell>
   );
 }

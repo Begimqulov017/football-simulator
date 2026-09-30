@@ -1,0 +1,154 @@
+/* =========================================================================
+   CAREER — CLEAN LIGHT THEME (Phase 4/5)
+   Sofascore / zamonaviy sport ilovalari ruhida. career.css'dagi barcha
+   CSS o'zgaruvchilar shu yerda oq/och palitraga almashtiriladi, shu tufayli
+   Career'ning HAMMA sahifasi (inline style ishlatganlari ham) birdan moslashadi.
+   ========================================================================= */
+
+.career-app {
+  --bg-base: #F8FAFC;
+  --bg-elevated: #FFFFFF;
+  --bg-panel: #FFFFFF;
+  --bg-panel-2: #F1F5F9;
+
+  --glass-fill: #FFFFFF;
+  --glass-fill-strong: #F1F5F9;
+  --glass-border: #E2E8F0;
+  --glass-border-strong: #CBD5E1;
+
+  --accent-green: #10B981;
+  --accent-green-dim: #059669;
+  --accent-gold: #B45309;      /* oq fonda o'qiladigan to'q amber */
+  --accent-gold-dim: #D97706;
+  --accent-red: #DC2626;
+  --accent-red-dim: #B91C1C;
+  --accent-blue: #0284C7;
+
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 16px rgba(15, 23, 42, 0.06);
+  --glow-green: 0 10px 30px rgba(16, 185, 129, 0.18);
+  --glow-gold: 0 10px 30px rgba(217, 119, 6, 0.16);
+  --glow-red: 0 10px 30px rgba(220, 38, 38, 0.14);
+
+  --font-display: 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+
+  background:
+    radial-gradient(900px 500px at 10% -10%, rgba(16, 185, 129, 0.08), transparent 60%),
+    radial-gradient(800px 500px at 110% 0%, rgba(2, 132, 199, 0.07), transparent 55%),
+    var(--bg-base);
+  color: var(--text-primary);
+}
+
+.career-app h1, .career-app h2, .career-app h3, .career-app h4, .career-app .display {
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+::selection { background: rgba(16, 185, 129, 0.22); }
+
+/* Sidebar */
+.career-app .sidebar {
+  background: #FFFFFF;
+  border-right: 1px solid var(--glass-border);
+}
+.career-app .sidebar-header .club-badge { background: var(--bg-panel-2); }
+.career-app .sidebar-header .rating { color: var(--accent-green-dim); }
+.career-app .nav-item:hover { background: var(--bg-panel-2); }
+.career-app .nav-item.active {
+  background: #ECFDF5;
+  border-color: #A7F3D0;
+  color: #047857;
+}
+
+/* Cards */
+.career-app .card { backdrop-filter: none; -webkit-backdrop-filter: none; }
+.career-app .card--glow-green { border-color: #A7F3D0; }
+.career-app .card--glow-gold { border-color: #FDE68A; }
+.career-app .card--glow-red { border-color: #FECACA; }
+
+/* Buttons */
+.career-app .btn:hover { background: var(--bg-panel-2); }
+.career-app .btn-primary {
+  background: linear-gradient(135deg, #10B981, #059669);
+  color: #FFFFFF;
+  box-shadow: 0 8px 22px rgba(16, 185, 129, 0.28);
+}
+.career-app .btn-primary:hover { background: linear-gradient(135deg, #10B981, #059669); box-shadow: 0 12px 30px rgba(16, 185, 129, 0.38); }
+.career-app .btn-gold {
+  background: linear-gradient(135deg, #F59E0B, #D97706);
+  color: #FFFFFF;
+  box-shadow: 0 8px 22px rgba(217, 119, 6, 0.26);
+}
+.career-app .next-day-btn {
+  background: linear-gradient(135deg, #10B981, #059669);
+  color: #FFFFFF;
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.32);
+}
+.career-app .next-day-btn:hover { box-shadow: 0 14px 34px rgba(16, 185, 129, 0.42); }
+
+/* Forms */
+.career-app .field input, .career-app .field select { background: #FFFFFF; }
+.career-app .field input:focus, .career-app .field select:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+}
+
+/* Bars / rings / tracks */
+.career-app .stat-row .stat-track,
+.career-app .stamina-track { background: #E2E8F0; }
+.career-app .ring { background: conic-gradient(var(--accent-green) calc(var(--ring-pct) * 1%), #E2E8F0 0); }
+
+/* Badges */
+.career-app .badge-green { color: #047857; border-color: #A7F3D0; background: #ECFDF5; }
+.career-app .badge-gold { color: #B45309; border-color: #FDE68A; background: #FFFBEB; }
+.career-app .badge-red { color: #B91C1C; border-color: #FECACA; background: #FEF2F2; }
+
+/* Roll slots (eski) */
+.career-app .roll-slot { background: #FFFFFF; }
+.career-app .roll-slot.done { border-color: #A7F3D0; }
+.career-app .roll-slot:hover { background: var(--bg-panel-2); }
+
+/* Scrollbars */
+::-webkit-scrollbar-thumb { background: #CBD5E1; }
+
+/* =========================================================================
+   MOBIL / RESPONSIVE (Phase 5)
+   ========================================================================= */
+body:has(.career-app) { background: #F8FAFC; }
+.career-app { overflow-x: clip; }
+.career-app .main-area { min-width: 0; }
+.career-app .card, .career-app .grid > * { min-width: 0; }
+
+/* career.css'dagi media qoida scope'siz edi (specificity past) — shuning uchun ustun bo'lib qolgan.
+   Endi grid'lar planshet/mobilda bitta ustunga tushadi. */
+@media (max-width: 900px) {
+  .career-app .grid-2, .career-app .grid-3 { grid-template-columns: 1fr; }
+
+  /* Sidebar: mobilda ekranning yarmini egallamasligi uchun gorizontal siljiydigan lenta */
+  .career-app .sidebar {
+    flex-direction: row; align-items: center; gap: 6px;
+    height: auto; padding: 8px 10px; overflow-x: auto; overflow-y: hidden;
+    border-right: none; border-bottom: 1px solid var(--glass-border);
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  .career-app .sidebar::-webkit-scrollbar { display: none; }
+  .career-app .sidebar-header { flex: none; padding: 0 10px 0 2px; margin: 0; border: none; }
+  .career-app .sidebar-header .name { display: none; }
+  .career-app .nav-item { flex: none; width: auto; white-space: nowrap; padding: 8px 12px; margin: 0; }
+  .career-app .sidebar > button.nav-item { margin-top: 0 !important; margin-left: auto; width: auto !important; }
+}
+
+/* Jadvallar mobilda o'z ichida siljiydi (sahifa emas) */
+@media (max-width: 720px) {
+  .career-app .table { display: block; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+  .career-app .page-header { flex-wrap: wrap; gap: 8px; }
+  .career-app .page-header h1 { font-size: 22px; }
+}

@@ -43,7 +43,26 @@ function stripId(doc) {
 // Serverni app.listen()dan OLDIN chaqiriladi. Ulanib bo'lmasa server umuman
 // ishga tushmaydi — noto'g'ri MONGODB_URI bilan "ishlab turgandek" ko'rinib,
 // aslida hech narsa saqlamaydigan serverdan ko'ra, ochiq xato yaxshiroq.
+// LOKAL DEV REJIM: MONGODB_URI berilmagan va NODE_ENV=production emas bo'lsa,
+// ma'lumot server/data/db.json fayliga yoziladi (Atlas'siz ishlab chiqish uchun).
+const fs = require('fs');
+const path = require('path');
+const LOCAL_FILE = path.join(__dirname, 'data', 'db.json');
+let localMode = false;
+
+async function initLocalDB() {
+  localMode = true;
+  fs.mkdirSync(path.dirname(LOCAL_FILE), { recursive: true });
+  let existing = null;
+  try { existing = JSON.parse(fs.readFileSync(LOCAL_FILE, 'utf8')); } catch (e) { /* yangi baza */ }
+  cache = { ...DEFAULT_DB, ...(existing || {}) };
+  fs.writeFileSync(LOCAL_FILE, JSON.stringify(cache));
+  console.log(`🗂️  LOKAL DEV baza (${LOCAL_FILE}) — ${cache.users.length} user. Production uchun MONGODB_URI o'rnating.`);
+  return cache;
+}
+
 async function initDB() {
+  if (!MONGO_URI && process.env.NODE_ENV !== 'production') return initLocalDB();
   if (!MONGO_URI) {
     throw new Error(
       "MONGODB_URI muhit o'zgaruvchisi topilmadi. Render → Environment'da " +
@@ -78,6 +97,12 @@ function readDB() {
 
 function writeDB(db) {
   cache = db;
+  if (localMode) {
+    writeQueue = writeQueue.then(() => fs.promises.writeFile(LOCAL_FILE, JSON.stringify(cache))).catch((err) => {
+      lastWriteError = err.message;
+    });
+    return;
+  }
   // JSON orqali chuqur nusxa: Mongo driver'ga yuborilayotgan snapshot
   // keyinroq index.js tomonidan `db` ustida davom ettiriladigan
   // o'zgarishlardan (masalan navbatdagi so'rovda) ta'sirlanmasin.

@@ -76,13 +76,7 @@ export const GK_SUB_STAT_WEIGHTS = {
   positioning: 0.15
 };
 
-// 8-BOSQICH: avval bu yerda Math.round bo'lib, HAR BIR statni yaqin butun
-// songa "kesib tashlar" edi - shu sabab kichik (masalan +0.2) training
-// o'sishlari umuman ko'rinmasdi ("training bossam ham kuchaymayapti" degan
-// shikoyat aynan shu yerdan kelib chiqqan). Endi 0.01 aniqlik bilan
-// saqlanadi - har bir mashg'ulot HAQIQATDA sezilarli iz qoldiradi, hatto
-// potentsialga yaqinlashgan yoki keksa o'yinchida ham.
-const clamp = (n, min = 0, max = 99) => Math.max(min, Math.min(max, Math.round(n * 100) / 100));
+const clamp = (n, min = 0, max = 99) => Math.max(min, Math.min(max, Math.round(n)));
 
 // Weighted average of an object of { key: value } against a { key: weight } map.
 function weightedAverage(values, weights) {
@@ -204,11 +198,8 @@ export function computeTrainingGain(focusId, age, potential, currentOvr) {
   return Math.round(focus.statGain * ageMult * roomFactor * variance * 100) / 100;
 }
 
-// 8-BOSQICH: xuddi yuqoridagi kabi - endi 0.01 aniqlikda, butun songa
-// yaxlitlanmaydi, shuning uchun har bir training sessiyasi haqiqiy va
-// ko'rinadigan (garchi kichik bo'lsa ham) o'sish beradi.
 export function clampStat(n, min = 0, max = 99) {
-  return Math.max(min, Math.min(max, Math.round(n * 100) / 100));
+  return Math.max(min, Math.min(max, Math.round(n)));
 }
 
 export function getAgeMultiplier(age) {

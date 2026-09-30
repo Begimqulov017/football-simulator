@@ -1,10 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import Home from './pages/Home';
-import StartPage from './pages/StartPage';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
+import { LandingPage } from './landing';
+import { getCurrentUser, logout as authLogout } from './utils/auth';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
-import FootballCareerOnline from './pages/FootballCareerOnline';
-import { getCurrentUser, logout as authLogout } from './utils/auth';
+// Performance: og'ir bo'limlar (Match Simulator va Career) faqat kerak bo'lganda yuklanadi,
+// shuning uchun landing sahifa tez ochiladi.
+const Home = lazy(() => import('./pages/Home'));
+const FootballCareerOnline = lazy(() => import('./pages/FootballCareerOnline'));
+
+function ScreenFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center font-sans bg-surface text-ink-muted text-sm gap-2">
+      <span className="w-4 h-4 rounded-full border-2 border-surface-line border-t-brand motion-safe:animate-spin" />
+      Yuklanmoqda…
+    </div>
+  );
+}
 
 export default function App() {
   const [screen, setScreen] = useState('start'); // 'start' | 'login' | 'register' | 'matchsimulator' | 'career'
@@ -59,7 +70,7 @@ export default function App() {
   const handleGoRegister = () => { setPostAuthDestination('start'); setScreen('register'); };
 
   if (screen === 'matchsimulator') {
-    return <Home onExitToStart={() => setScreen('start')} />;
+    return <Suspense fallback={<ScreenFallback />}><Home onExitToStart={() => setScreen('start')} /></Suspense>;
   }
 
   if (screen === 'login') {
@@ -85,11 +96,11 @@ export default function App() {
   if (screen === 'career') {
     if (!authChecked) return null; // sessiya hali tekshirilmoqda — miltillashning oldini olamiz
     if (!currentUser) { setScreen('login'); return null; }
-    return <FootballCareerOnline currentUser={currentUser} onBack={() => setScreen('start')} />;
+    return <Suspense fallback={<ScreenFallback />}><FootballCareerOnline currentUser={currentUser} onBack={() => setScreen('start')} /></Suspense>;
   }
 
   return (
-    <StartPage
+    <LandingPage
       currentUser={currentUser}
       onOpenMatchSimulator={() => setScreen('matchsimulator')}
       onOpenProSimulator={handleOpenPro}

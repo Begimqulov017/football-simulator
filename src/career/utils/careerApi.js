@@ -10,14 +10,14 @@
 // statistikasini ko'ra oladi.
 // ============================================================
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL || 'https://football-simulator-server.onrender.com';
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:4000';
 const TOKEN_KEY = 'ms_token';
 
 // Bump this alongside server/index.js's SERVER_VERSION whenever the backend
 // gains endpoints/fields the frontend depends on (career save/sync, admin
 // passwords, delete-user, etc). Lets us show a precise "backend hali
 // yangilanmagan" message instead of a confusing generic error.
-export const REQUIRED_SERVER_VERSION = 11;
+export const REQUIRED_SERVER_VERSION = 12;
 
 export async function checkBackendVersion() {
   try {
@@ -106,8 +106,25 @@ export async function ackMatchResult() {
 
 // ADMIN ONLY: advances the shared world (every active league's calendar) by
 // one day, resolving that day's fixtures for everyone at once.
-export async function advanceWorldDay() {
-  return apiFetch('/api/admin/advance-world-day', { method: 'POST' });
+export async function advanceWorldDay(days = 1) {
+  return apiFetch('/api/admin/advance-world-day', { method: 'POST', body: JSON.stringify({ days }) });
+}
+
+// ---- Phase 4: Admin Dashboard ----
+export const fetchAdminPlayers = () => apiFetch('/api/admin/players');
+export const fetchAdminPending = () => apiFetch('/api/admin/pending');
+export const fetchSimLog = () => apiFetch('/api/admin/sim-log');
+export const fetchAdminLeague = (leagueId) => apiFetch(`/api/admin/league/${encodeURIComponent(leagueId)}`);
+export const adminSetPassword = (username, password) =>
+  apiFetch(`/api/admin/users/${encodeURIComponent(username)}/password`, { method: 'POST', body: JSON.stringify({ password }) });
+export const adminWipeUser = (username) =>
+  apiFetch(`/api/admin/users/${encodeURIComponent(username)}/wipe`, { method: 'POST' });
+
+// Chempionlar Ligasi / Yevropa Ligasi (umumiy dunyo)
+export async function fetchContinental() {
+  const data = await apiFetch('/api/continental');
+  if (!data.ok) return { ok: false, active: [], history: [], news: [] };
+  return data;
 }
 
 // TO'LIQ TOZALASH — faqat admin uchun. Barcha userlar, karyeralar, liga
@@ -167,7 +184,7 @@ export async function fetchClubRoster(clubId) {
 // tables, brackets, top scorers), past winners and the international news log.
 export async function fetchInternational() {
   const data = await apiFetch('/api/international');
-  if (!data.ok) return { ok: false, tournaments: [], upcomingTournaments: [], history: [], news: [] };
+  if (!data.ok) return { ok: false, tournaments: [], history: [], news: [] };
   return data;
 }
 
@@ -179,10 +196,9 @@ export async function fetchNationSquad(country) {
   return { ok: true, team: data.team };
 }
 
-// 11-BOSQICH: barcha millatlarning o'rtacha reyting bo'yicha jahon
-// reytingi (kuchlilar ro'yxati).
-export async function fetchNationRankings() {
-  const data = await apiFetch('/api/international/rankings');
-  if (!data.ok) return [];
-  return data.rankings;
+// ---- Phase 5: individual mukofotlar ----
+export async function fetchAwards(leagueId) {
+  const data = await apiFetch(`/api/awards/${encodeURIComponent(leagueId)}`);
+  return data.ok ? data : { ok: false, awards: [] };
 }
+export const fetchAwardsPreview = (leagueId) => apiFetch(`/api/admin/awards-preview/${encodeURIComponent(leagueId)}`);

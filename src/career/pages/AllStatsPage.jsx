@@ -21,7 +21,7 @@ export default function AllStatsPage() {
     <AppShell>
       <div className="page-header">
         <div>
-          <h1>Barcha statistika</h1>
+          <h1>All Stats</h1>
           <div className="sub">{player.name} {player.surname} · {player.position} · {player.club.name}</div>
         </div>
       </div>
@@ -67,7 +67,7 @@ export default function AllStatsPage() {
 
       <div className="grid grid-2">
         <div className="card">
-          <div className="card-title">JAMOA NATIJASI (siz ishtirok etgan)</div>
+          <div className="card-title">TEAM RECORD (with you involved)</div>
           <div className="grid grid-3">
             <div className="result-card">
               <div className="value" style={{ color: 'var(--accent-green)' }}>{wins}</div>
@@ -85,7 +85,7 @@ export default function AllStatsPage() {
         </div>
 
         <div className="card">
-          <div className="card-title">SHAKL (so'nggi {ratings.length})</div>
+          <div className="card-title">FORM (last {ratings.length})</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {ratings.length === 0 && <div className="sub" style={{ padding: 8 }}>No matches played yet.</div>}
             {ratings.map((r, i) => (
@@ -101,7 +101,7 @@ export default function AllStatsPage() {
       </div>
 
       <div className="card" style={{ marginTop: 18 }}>
-        <div className="card-title">MAVSUMMA-MAVSUM</div>
+        <div className="card-title">SEASON BY SEASON</div>
         {(!c.seasonHistory || c.seasonHistory.length === 0) && (
           <div className="sub" style={{ padding: 12 }}>No completed seasons yet - finish your first season to see a year-by-year breakdown here.</div>
         )}
@@ -125,7 +125,7 @@ export default function AllStatsPage() {
       </div>
 
       <div className="card" style={{ marginTop: 18 }}>
-        <div className="card-title">O'YINLAR TARIXI</div>
+        <div className="card-title">MATCH HISTORY</div>
         {history.length === 0 && <div className="sub" style={{ padding: 12 }}>No matches played yet.</div>}
         <div style={{ maxHeight: 420, overflowY: 'auto' }}>
           {history.map((h) => (

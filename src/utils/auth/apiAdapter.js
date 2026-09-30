@@ -12,10 +12,10 @@
 // qurilmada alohida login qilinadi (xuddi istalgan sayt kabi).
 //
 // Serverning manzili REACT_APP_API_BASE_URL orqali sozlanadi (.env fayliga
-// qarang). Standart holatda 'https://football-simulator-server.onrender.com' ga ulanadi.
+// qarang). Standart holatda http://localhost:4000 ga ulanadi.
 // ============================================================
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL || 'https://football-simulator-server.onrender.com';
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:4000';
 const TOKEN_KEY = 'ms_token';
 const CACHED_USER_KEY = 'ms_cached_user'; // faqat UI-ni tezroq ko'rsatish uchun, manba emas
 
@@ -42,10 +42,7 @@ async function apiFetch(path, options = {}) {
 
   let res;
   try {
-    const cleanBase = API_BASE.replace(/\/$/, '');
-    const cleanPath = path.startsWith('/') ? path : `/${path}`;
-    
-    res = await fetch(`${cleanBase}${cleanPath}`, { ...options, headers });
+    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
   } catch (err) {
     // Server ishlamayapti yoki tarmoq muammosi
     return { ok: false, error: "Serverga ulanib bo'lmadi. `server/` papkasida `npm start` ishlatilganini tekshiring.", networkError: true };

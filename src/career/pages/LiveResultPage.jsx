@@ -118,7 +118,7 @@ export default function LiveResultPage() {
       </div>
 
       <div className="card" style={{ marginBottom: 18 }}>
-        <div className="card-title">O'YIN VOQEALARI</div>
+        <div className="card-title">MATCH EVENTS</div>
         <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {passedEvents.length === 0 && (
             <div className="sub" style={{ padding: 8 }}>{finished ? 'A quiet match, no goals.' : 'Kick-off...'}</div>
@@ -140,7 +140,7 @@ export default function LiveResultPage() {
 
       {finished && (
         <div className="card card--glow-green" style={{ textAlign: 'center' }}>
-          <div className="card-title">SIZNING KO'RSATKICHINGIZ</div>
+          <div className="card-title">YOUR PERFORMANCE</div>
           {!pStats.played ? (
             <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 6 }}>
               You stayed on the bench this time - keep training to force your way into the XI.

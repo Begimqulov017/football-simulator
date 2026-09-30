@@ -32,7 +32,7 @@ export default function UsersPage({ currentUser }) {
     <AppShell>
       <div className="page-header">
         <div>
-          <h1>Foydalanuvchilar</h1>
+          <h1>Users</h1>
           <div className="sub">Football Career Online'dagi barcha premium o'yinchilarning klub statistikasi</div>
         </div>
       </div>

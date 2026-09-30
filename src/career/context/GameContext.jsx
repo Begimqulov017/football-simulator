@@ -37,6 +37,9 @@ function persistLocalSave(username, player) {
   }
 }
 
+// Transferlar tarixiga yozuv qo'shadi (Admin -> Players Stats'da ko'rinadi)
+const withTransferEntry = (career, entry) => ({ ...career, transferHistory: [...(career.transferHistory || []), entry].slice(-30) });
+
 export function GameProvider({ children, username }) {
   const [player, setPlayer] = useState(() => loadLocalSave(username));
   const [ready, setReady] = useState(false);
@@ -153,65 +156,15 @@ export function GameProvider({ children, username }) {
     setPlayer((prev) => (prev ? { ...prev, ...updater(prev) } : prev));
   }, []);
 
-  // 1-BOSQICH: kalendar ENDI faqat ADMIN tomonidan boshqariladi (server
-  // "umumiy dunyo" kuni - worldDate). Ilgari bu tugma cheklovsiz edi -
-  // foydalanuvchi xohlagancha bosib, admin hali yetib kelmagan kunlarga
-  // "o'tib ketishi" mumkin edi, natijada uning shaxsiy kalendari (bu yerda,
-  // client tomonida) va serverning umumiy dunyosi bir-biridan uzilib
-  // qolardi. Endi: agar bu o'yinchi allaqachon admin bosgan oxirgi kunga
-  // yetib olgan bo'lsa (gameDate >= worldDate), tugma hech narsa qilmaydi -
-  // admin "Kunni o'tkazish"ni bosishini kutish kerak. worldDate hali
-  // noma'lum bo'lsa (masalan offlayn/birinchi yuklanish) - eski xatti-
-  // harakat saqlanadi, aks holda o'yin butunlay muzlab qoladi.
-  const canAdvanceDay = useMemo(() => {
-    if (!player) return false;
-    if (!worldDate) return true;
-    return player.career.gameDate < worldDate;
-  }, [player, worldDate]);
-
-  // 11-BOSQICH: transfer muzokarasi (negotiate) qabul qilingandan keyin
-  // haqiqiy klub almashinuvini shu yerda amalga oshiramiz - season.js'dagi
-  // resolveContractNegotiations faqat "career.pendingClubMove" bayrog'ini
-  // qo'yadi (chunki u club/schedule kabi tashqi narsalarga tega olmaydi).
-  const applyPendingClubMove = useCallback((p) => {
-    const move = p.career.pendingClubMove;
-    if (!move) return p;
-    const newTeam = INITIAL_TEAMS.find((t) => t.id === move.teamId);
-    if (!newTeam) return { ...p, career: { ...p.career, pendingClubMove: null } };
-
-    if (p.club?.id) removePlayerFromClubRoster(p.club.id, p.id);
-    const tier = joinClubRoster(newTeam, {
-      id: p.id, name: `${p.name} ${p.surname}`, pos: p.position, ovr: p.overall,
-      stats: p.mainStats, nationality: p.nationality
-    });
-
-    const league = LEAGUES.find((l) => l.id === move.leagueId) || LEAGUES.find((l) => l.teamIds.includes(newTeam.id));
-    const baseCareer = { ...p.career, pendingClubMove: null, weeklyWage: move.wage, contract: { yearsTotal: move.years, signedDay: p.career.day }, contractTalksOpened: false, contractFailedNegotiations: 0, freeAgent: false };
-
-    if (move.freeAgentSigning || league?.id !== p.club?.leagueId) {
-      // Different league (or coming from free agency) - the local schedule
-      // needs to be rebuilt for the new league entirely.
-      const startDate = p.career.gameDate;
-      const schedule = buildSeasonSchedule(league, startDate);
-      const { domesticCup, continentalCup } = setupSeasonCups(p, league, startDate, schedule);
-      return {
-        ...p,
-        club: { id: newTeam.id, name: newTeam.name, logo: newTeam.logo, leagueId: league.id, leagueName: league.name, flag: newTeam.flag, country: league.country, tier },
-        career: { ...baseCareer, schedule, standings: initStandings(league.teamIds), topScorers: {}, domesticCup, continentalCup }
-      };
-    }
-
-    return { ...p, club: { ...p.club, id: newTeam.id, name: newTeam.name, logo: newTeam.logo, tier }, career: baseCareer };
-  }, []);
-
+  // Advances the in-game calendar by one day. When the new date lands on a
+  // scheduled matchday, the whole league's round is simulated (results,
+  // table, top scorers, the player's own match stats, messages, wages,
+  // injuries) via the season engine. This is only used for QUIET days now -
+  // matchdays go through prepareMatchday/commitMatchday below instead, so
+  // the outcome can be played back before it's applied.
   const nextDay = useCallback(() => {
-    setPlayer((prev) => {
-      if (!prev) return prev;
-      if (worldDate && prev.career.gameDate >= worldDate) return prev;
-      const advanced = advanceOneDay(prev);
-      return advanced.career.pendingClubMove ? applyPendingClubMove(advanced) : advanced;
-    });
-  }, [worldDate, applyPendingClubMove]);
+    setPlayer((prev) => (prev ? advanceOneDay(prev) : prev));
+  }, []);
 
   const matchdayNext = useMemo(() => isMatchdayNext(player), [player]);
 
@@ -259,17 +212,11 @@ export function GameProvider({ children, username }) {
 
   // Player-requested wage renegotiation with the current club, based on
   // recent form and overall growth since their First Rating.
-  // 3-BOSQICH: endi "cheksiz so'rash" mumkin emas - bitta faol taklif
-  // turgan bo'lsa YOKI oxirgi so'rovdan beri 20 kun o'tmagan bo'lsa,
-  // tugma bosilmaydi (bu MoneyPage'da ham tekshiriladi/ko'rsatiladi).
-  const CONTRACT_REQUEST_COOLDOWN_DAYS = 20;
   const requestNewContract = useCallback(() => {
     setPlayer((prev) => {
       if (!prev) return prev;
       const hasPending = prev.career.messages.some((m) => m.type === 'contract' && !m.resolved);
       if (hasPending) return prev;
-      const lastAsk = prev.career.lastContractRequestDay || 0;
-      if (prev.career.day - lastAsk < CONTRACT_REQUEST_COOLDOWN_DAYS) return prev;
       const offer = computeContractOffer(prev);
       const message = {
         id: `msg_${Date.now()}`,
@@ -280,38 +227,9 @@ export function GameProvider({ children, username }) {
         body: `Based on your recent form, ${prev.club.name} are offering a new ${offer.years}-year deal at $${offer.wage.toLocaleString()}/week (currently $${(prev.career.weeklyWage || 0).toLocaleString()}/week).`,
         read: false,
         resolved: false,
-        offer,
-        negotiation: { round: 0, counterOffer: null, awaitingClubSince: null }
+        offer
       };
-      return {
-        ...prev,
-        career: { ...prev.career, lastContractRequestDay: prev.career.day, messages: [...prev.career.messages, message] }
-      };
-    });
-  }, []);
-
-  // 3-BOSQICH: o'yinchi o'z summasi/muddatini yozib "Negotiate"ni bosganda
-  // shu yerga tushadi - bu ZUDLIK bilan sodir bo'ladi (kun kutilmaydi),
-  // klubning javobi esa keyingi kun (season.js'dagi
-  // resolveContractNegotiations orqali) tayyor bo'ladi.
-  const submitContractCounter = useCallback((messageId, counter) => {
-    setPlayer((prev) => {
-      if (!prev) return prev;
-      const msg = prev.career.messages.find((m) => m.id === messageId);
-      if (!msg || msg.resolved || (msg.type !== 'contract' && msg.type !== 'transfer')) return prev;
-      const wage = Math.max(1, Math.round(Number(counter.wage) || msg.offer.wage));
-      const years = Math.max(1, Math.min(6, Math.round(Number(counter.years) || msg.offer.years)));
-      return {
-        ...prev,
-        career: {
-          ...prev.career,
-          messages: prev.career.messages.map((m) => (m.id === messageId ? {
-            ...m,
-            read: true,
-            negotiation: { ...(m.negotiation || { round: 0 }), counterOffer: { wage, years }, awaitingClubSince: prev.career.gameDate }
-          } : m))
-        }
-      };
+      return { ...prev, career: { ...prev.career, messages: [...prev.career.messages, message] } };
     });
   }, []);
 
@@ -324,6 +242,7 @@ export function GameProvider({ children, username }) {
         ...prev,
         career: {
           ...prev.career,
+          ...withTransferEntry(prev.career, { type: 'renewal', date: prev.career.gameDate, from: prev.club?.name || null, fromLogo: prev.club?.logo || null, to: prev.club?.name || null, toLogo: prev.club?.logo || null, wage: msg.offer.wage, years: msg.offer.years || 4 }),
           weeklyWage: msg.offer.wage,
           contract: { yearsTotal: msg.offer.years || 4, signedDay: prev.career.day },
           contractTalksOpened: false,
@@ -367,7 +286,7 @@ export function GameProvider({ children, username }) {
           ...prev,
           club: { id: newTeam.id, name: newTeam.name, logo: newTeam.logo, leagueId: league.id, leagueName: league.name, flag: newTeam.flag, country: league.country, tier },
           career: {
-            ...prev.career,
+            ...withTransferEntry(prev.career, { type: 'free', date: prev.career.gameDate, from: prev.club?.name || null, fromLogo: prev.club?.logo || null, to: newTeam.name, toLogo: newTeam.logo, wage: msg.offer.wage, years: msg.offer.years || 4 }),
             weeklyWage: msg.offer.wage,
             contract: { yearsTotal: msg.offer.years || 4, signedDay: prev.career.day },
             contractTalksOpened: false,
@@ -384,7 +303,7 @@ export function GameProvider({ children, username }) {
         ...prev,
         club: { ...prev.club, id: newTeam.id, name: newTeam.name, logo: newTeam.logo, tier },
         career: {
-          ...prev.career,
+          ...withTransferEntry(prev.career, { type: 'transfer', date: prev.career.gameDate, from: prev.club?.name || null, fromLogo: prev.club?.logo || null, to: newTeam.name, toLogo: newTeam.logo, wage: msg.offer.wage }),
           weeklyWage: msg.offer.wage,
           messages: resolvedMessages
         }
@@ -398,11 +317,7 @@ export function GameProvider({ children, username }) {
       const msg = prev.career.messages.find((m) => m.id === messageId);
       const wasContractTalk = msg?.type === 'contract';
       const failedCount = (prev.career.contractFailedNegotiations || 0) + (wasContractTalk ? 1 : 0);
-      // 11-BOSQICH: agar bu "OXIRGI IMKON" (shartnoma tugashiga 3 kun
-      // qolgan) xabari bo'lsa, rad etish DARHOL erkin agent qiladi - bu
-      // haqida xabarning o'zida ochiq ogohlantirilgan edi. Aks holda eski
-      // 5-marta-rad-etish qoidasi ishlayveradi.
-      const forcedFreeAgent = wasContractTalk && (msg.isFinalChance || failedCount >= 5);
+      const forcedFreeAgent = wasContractTalk && failedCount >= 5;
       return {
         ...prev,
         career: {
@@ -473,9 +388,9 @@ export function GameProvider({ children, username }) {
   const value = {
     player, ready, createPlayer, updatePlayer, nextDay, resetSave,
     matchdayNext, pendingMatchday, prepareMatchday, commitMatchday,
-    worldDate, canAdvanceDay, hasUnwatchedResult, acknowledgeResult,
+    worldDate, hasUnwatchedResult, acknowledgeResult,
     pendingWorldMatch, refreshPendingWorldMatch,
-    markMessageRead, requestNewContract, submitContractCounter, acceptContractOffer, acceptTransferOffer, declineOffer,
+    markMessageRead, requestNewContract, acceptContractOffer, acceptTransferOffer, declineOffer,
     purchasePerk
   };
 

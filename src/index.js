@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import './career/career.css';
+import './career/career-light.css';
 import App from './App';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));

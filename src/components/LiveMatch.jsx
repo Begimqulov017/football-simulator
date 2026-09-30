@@ -13,7 +13,7 @@ import {
   checkPlainFoul,
   checkInjuryEvent,
   checkRandomMatchEvent,
-  getMinuteMicroDelta,
+  getPlayerAssistWeight,
   commentaryGoal,
   commentaryOffside,
   commentaryPenaltyGoal,
@@ -31,16 +31,28 @@ import {
 import { pickAutoFormation, buildPitchSlots, getMatchupModifier, selectBestXI } from '../utils/formations';
 import { rand, setSeed, clearSeed } from '../utils/rng';
 import { simulatePenaltyShootoutDetailed } from '../utils/tournamentEngine';
+import {
+  RATING_BASE, RATING_EVENTS, rollPasses, performanceToRating, emptyPerf, cleanSheetBonus,
+} from '../utils/sofaRating';
 import MatchTablo from './MatchTablo';
 import EventLog from './EventLog';
+import SegmentedTabs from './match/SegmentedTabs';
+import PitchCard from './match/PitchCard';
+import StatsCard from './match/StatsCard';
+import RatingsCard from './match/RatingsCard';
+import RatingBadge from './match/RatingBadge';
 
-const QUIET_NORMAL = 350;
-const NOTABLE_NORMAL = 1900;
-const QUIET_FAST = 70;
-const NOTABLE_FAST = 550;
+// ---- VAQT DINAMIKASI (Phase 2) ----
+// Oddiy o'yin: 1 soniya = 1 daqiqa.
+// Xavfli vaziyat / gol: simulyatsiya 0.3x tezlikka tushadi (1 daqiqa ~3.3 soniya),
+// shunda foydalanuvchi sharhni bemalol o'qiy oladi.
+// Quick Play: sokin daqiqalar ko'rsatilmasdan o'tkazib yuboriladi, faqat xavfli
+// hujumlar, zarbalar va gollar 0.3x tezlikda namoyish etiladi.
+const NORMAL_TICK_MS = 1000;
+const SLOWMO_FACTOR = 0.3;
+const SLOWMO_TICK_MS = Math.round(NORMAL_TICK_MS / SLOWMO_FACTOR); // ~3333ms
+const QUICK_QUIET_MS = 8;
 const SPEED_FINISH = 8;
-
-const DEFAULT_RATING = 6.5;
 
 const emptyStats = () => ({
   shots: 0, sot: 0, saves: 0, bigChances: 0, offsides: 0, fouls: 0, corners: 0, tackles: 0,
@@ -58,7 +70,7 @@ const emptyStats = () => ({
 // hisoblanardi), keyin YAKUNIY (foydalanuvchi ko'rgan) natija bilan
 // onFinish chaqiriladi. Berilmasa (ligada durang ruxsat etilgan holatlar),
 // avvalgidek durang bilan tugaydi.
-export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shootoutOnDraw, competitionLabel }) {
+export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shootoutOnDraw, competition }) {
   useEffect(() => {
     if (seed !== undefined && seed !== null) setSeed(seed);
     else clearSeed();
@@ -98,7 +110,9 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
   const [isRiskA, setIsRiskA] = useState(false);
   const [isRiskB, setIsRiskB] = useState(false);
 
-  const [playerRatings, setPlayerRatings] = useState({});
+  // Har bir o'yinchi uchun xom performance (pts, daqiqa, paslar). Reyting shundan hisoblanadi.
+  const [perf, setPerf] = useState({});
+  const [slowMo, setSlowMo] = useState(false);
   const [playerEventsMap, setPlayerEventsMap] = useState({});
   const [matchStats, setMatchStats] = useState({ a: emptyStats(), b: emptyStats() });
   const [possessionMin, setPossessionMin] = useState({ a: 0, b: 0 });
@@ -135,25 +149,83 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
     [currentPlayersB, formationB]
   );
 
-  const getRating = (id) => (playerRatings[id] !== undefined ? playerRatings[id] : DEFAULT_RATING);
-  const ratingClass = (v) => (v >= 7 ? 'rating-high' : v >= 6 ? 'rating-mid' : 'rating-low');
+  const playerRatings = useMemo(() => {
+    const lookup = new Map([...teamA.squad, ...teamB.squad].map((p) => [p.id, p]));
+    const idsA = new Set(teamA.squad.map((p) => p.id));
+    const out = {};
+    Object.keys(perf).forEach((id) => {
+      const player = lookup.get(id) || lookup.get(Number(id)) || {};
+      let pf = perf[id];
+      if (isFinished) {
+        const conceded = idsA.has(player.id) ? score.b : score.a;
+        if (conceded === 0) pf = { ...pf, cleanSheetBonus: cleanSheetBonus(player, pf.minutes) };
+      }
+      out[id] = performanceToRating(pf, player);
+    });
+    return out;
+  }, [perf, isFinished, score, teamA, teamB]);
 
-  const adjustRating = (id, delta) => {
-    setPlayerRatings((prev) => {
-      const current = prev[id] !== undefined ? prev[id] : DEFAULT_RATING;
-      const next = Math.max(4.0, Math.min(10.0, current + delta));
-      return { ...prev, [id]: Math.round(next * 100) / 100 };
+  const getRating = (id) => (playerRatings[id] !== undefined ? playerRatings[id] : RATING_BASE);
+
+  const addPts = (id, amount) => {
+    if (!amount) return;
+    setPerf((prev) => {
+      const cur = prev[id] || emptyPerf();
+      return { ...prev, [id]: { ...cur, pts: cur.pts + amount } };
     });
   };
-
-  const applyMicroDeltas = (playersA, playersB) => {
-    setPlayerRatings((prev) => {
+  const rate = (player, key, arg) => {
+    if (!player || player.id === undefined) return;
+    addPts(player.id, RATING_EVENTS[key](player, arg));
+  };
+  const rateTeam = (players, key) => {
+    setPerf((prev) => {
       const next = { ...prev };
-      [...playersA, ...playersB].forEach((p) => {
-        const d = getMinuteMicroDelta(p);
-        if (d === 0) return;
-        const current = next[p.id] !== undefined ? next[p.id] : DEFAULT_RATING;
-        next[p.id] = Math.round(Math.max(4.0, Math.min(10.0, current + d)) * 100) / 100;
+      (players || []).forEach((p) => {
+        const amt = RATING_EVENTS[key](p);
+        if (!amt) return;
+        const cur = next[p.id] || emptyPerf();
+        next[p.id] = { ...cur, pts: cur.pts + amt };
+      });
+      return next;
+    });
+  };
+  // Gol bo'lganda: gol urgan jamoa o'yinchilari biroz +, o'tkazib yuborganlar -,
+  // darvozabon va himoyachilar alohida jazolanadi.
+  const applyGoalTeamEffects = (scoringPlayers, concedingPlayers) => {
+    rateTeam(scoringPlayers, 'TEAM_GOAL_FOR');
+    rateTeam(concedingPlayers, 'TEAM_GOAL_AGAINST');
+    (concedingPlayers || []).forEach((p) => {
+      rate(p, p.pos === 'GK' ? 'GOAL_CONCEDED_GK' : 'GOAL_CONCEDED_DEF');
+    });
+  };
+  const pickCreator = (attackers, excludeId) => {
+    const pool = (attackers || []).filter((p) => p.id !== excludeId && p.pos !== 'GK');
+    if (!pool.length) return null;
+    const w = pool.map((p) => getPlayerAssistWeight(p));
+    const total = w.reduce((a, b) => a + b, 0);
+    let r = rand() * total;
+    for (let i = 0; i < pool.length; i += 1) {
+      if (r <= w[i]) return pool[i];
+      r -= w[i];
+    }
+    return pool[0];
+  };
+
+  // Har daqiqada: o'yin vaqti + paslar (aniq/xato) yig'iladi. rand() updater ICHIDA
+  // chaqirilmaydi (StrictMode / seed determinizmi uchun) — avval hisoblanadi.
+  const applyMinuteTick = (playersA, playersB, shareA) => {
+    const ovrA = calculateTeamOvr(playersA);
+    const ovrB = calculateTeamOvr(playersB);
+    const clampP = (v) => Math.max(0.92, Math.min(1.08, v));
+    const rolls = [];
+    playersA.forEach((p) => rolls.push({ id: p.id, ...rollPasses(p, shareA, clampP(1 + (ovrB - ovrA) / 150)) }));
+    playersB.forEach((p) => rolls.push({ id: p.id, ...rollPasses(p, 1 - shareA, clampP(1 + (ovrA - ovrB) / 150)) }));
+    setPerf((prev) => {
+      const next = { ...prev };
+      rolls.forEach(({ id, att, ok }) => {
+        const cur = next[id] || emptyPerf();
+        next[id] = { ...cur, minutes: cur.minutes + 1, passAtt: cur.passAtt + att, passOk: cur.passOk + ok };
       });
       return next;
     });
@@ -179,21 +251,30 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
     });
   };
 
-  const handleAttackOutcome = (side, teamKey, outcome, minute, opts = {}) => {
+  const applyAttackOutcome = (side, teamKey, outcome, minute, opts = {}) => {
     if (!outcome) return null;
     const isBig = opts.isBig !== false;
     const bigInc = isBig ? 1 : 0;
+    // Katta imkoniyat zarbaga olib kelgan bo'lsa — yaratuvchi (key pass) ballanadi
+    const creditKeyPass = (shooter) => {
+      if (isBig && rand() < 0.65) {
+        const c = pickCreator(opts.attackers, shooter.id);
+        if (c) rate(c, 'KEY_PASS');
+      }
+    };
 
     switch (outcome.result) {
       case 'OFFSIDE': {
         bumpMatchStat(teamKey, { offsides: 1 });
+        rate(outcome.scorer, 'OFFSIDE');
         const c = commentaryOffside(outcome.scorer.name);
         setMatchEvents((prev) => [...prev, { minute, side, icon: '❌', text: c.text, sub: c.sub }]);
         return { tickerText: `❌ ${outcome.scorer.name} ofsaydda qolib ketdi`, priority: 3 };
       }
       case 'OWN_GOAL': {
         setScore((s) => ({ ...s, [teamKey]: s[teamKey] + 1 }));
-        adjustRating(outcome.player.id, -0.5);
+        rate(outcome.player, 'OWN_GOAL');
+        applyGoalTeamEffects(opts.attackers, opts.defenders);
         bumpPlayerEvent(outcome.player.id, { ownGoal: 1 });
         setMatchEvents((prev) => [...prev, {
           minute, side, icon: '⚽', text: `GOL! (Avtogol)`, sub: `O'z darvozasiga: ${outcome.player.name}`,
@@ -203,9 +284,9 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
       case 'PENALTY_GOAL': {
         setScore((s) => ({ ...s, [teamKey]: s[teamKey] + 1 }));
         bumpMatchStat(teamKey, { shots: 1, sot: 1, bigChances: bigInc });
-        adjustRating(outcome.scorer.id, 0.6);
+        rate(outcome.scorer, 'PENALTY_GOAL');
         bumpPlayerEvent(outcome.scorer.id, { goals: 1 });
-        if (outcome.keeper) adjustRating(outcome.keeper.id, -0.15);
+        applyGoalTeamEffects(opts.attackers, opts.defenders);
         const c = commentaryPenaltyGoal(outcome.scorer.name);
         setMatchEvents((prev) => [...prev, { minute, side, icon: '⚽', text: c.text, sub: c.sub }]);
         goalEventsRef.current = [...goalEventsRef.current, {
@@ -216,8 +297,8 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
       }
       case 'PENALTY_MISSED': {
         bumpMatchStat(teamKey, { shots: 1, bigChances: bigInc });
-        adjustRating(outcome.scorer.id, -0.35);
-        if (outcome.keeper) adjustRating(outcome.keeper.id, 0.3);
+        rate(outcome.scorer, 'PENALTY_MISSED');
+        if (outcome.keeper) rate(outcome.keeper, 'SAVE', true);
         const c = commentaryPenaltyMissed(outcome.scorer.name, outcome.keeper?.name);
         setMatchEvents((prev) => [...prev, { minute, side, icon: '🥅', text: c.text, sub: c.sub }]);
         return { tickerText: `🥅 ${outcome.scorer.name} penaltini otkazib yubordi!`, priority: 4 };
@@ -226,9 +307,10 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
         const opponentKey = teamKey === 'a' ? 'b' : 'a';
         bumpMatchStat(teamKey, { shots: 1, sot: 1, bigChances: bigInc });
         bumpMatchStat(opponentKey, { saves: 1 });
-        adjustRating(outcome.scorer.id, -0.05);
+        rate(outcome.scorer, 'SHOT_ON_TARGET');
+        creditKeyPass(outcome.scorer);
         if (outcome.keeper) {
-          adjustRating(outcome.keeper.id, 0.15);
+          rate(outcome.keeper, 'SAVE', isBig);
           bumpPlayerEvent(outcome.keeper.id, { saves: 1 });
         }
         return outcome.keeper
@@ -237,19 +319,20 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
       }
       case 'MISSED': {
         bumpMatchStat(teamKey, { shots: 1, bigChances: isBig ? bigInc : 0 });
-        adjustRating(outcome.scorer.id, -0.03);
+        rate(outcome.scorer, isBig ? 'BIG_CHANCE_MISSED' : 'SHOT_OFF_TARGET');
+        creditKeyPass(outcome.scorer);
         return { tickerText: isBig ? tickerBigMiss(outcome.scorer.name) : tickerMiss(outcome.scorer.name), priority: isBig ? 4 : 1 };
       }
       case 'GOAL': {
         setScore((s) => ({ ...s, [teamKey]: s[teamKey] + 1 }));
         bumpMatchStat(teamKey, { shots: 1, sot: 1, bigChances: bigInc });
-        adjustRating(outcome.scorer.id, 0.5);
+        rate(outcome.scorer, 'GOAL');
         bumpPlayerEvent(outcome.scorer.id, { goals: 1 });
+        applyGoalTeamEffects(opts.attackers, opts.defenders);
         if (outcome.assister) {
-          adjustRating(outcome.assister.id, 0.3);
+          rate(outcome.assister, 'ASSIST');
           bumpPlayerEvent(outcome.assister.id, { assists: 1 });
         }
-        if (outcome.keeper) adjustRating(outcome.keeper.id, -0.2);
         const c = commentaryGoal(outcome.scorer.name, outcome.assister?.name);
         setMatchEvents((prev) => [...prev, { minute, side, icon: '⚽', text: c.text, sub: c.sub }]);
         goalEventsRef.current = [...goalEventsRef.current, {
@@ -261,6 +344,16 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
       default:
         return null;
     }
+  };
+
+  // Natijaga "zarba" va "xavfli vaziyat" bayroqlarini qo'shadi (tezlik boshqaruvi uchun).
+  const handleAttackOutcome = (side, teamKey, outcome, minute, opts = {}) => {
+    const res = applyAttackOutcome(side, teamKey, outcome, minute, opts);
+    if (!res || !outcome) return res;
+    const isBig = opts.isBig !== false;
+    const isShot = ['GOAL', 'SAVED', 'MISSED', 'PENALTY_GOAL', 'PENALTY_MISSED', 'OWN_GOAL'].includes(outcome.result);
+    const isGoal = ['GOAL', 'PENALTY_GOAL', 'OWN_GOAL'].includes(outcome.result);
+    return { ...res, shot: isShot, danger: isGoal || (isShot && isBig) };
   };
 
   useEffect(() => {
@@ -350,27 +443,32 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
       regChanceB *= formRatioB;
 
       let tickerBest = null;
+      let sawShot = false;
+      let sawDanger = false;
       const noteTicker = (result) => {
-        if (result && (!tickerBest || result.priority > tickerBest.priority)) tickerBest = result;
+        if (!result) return;
+        if (result.shot) sawShot = true;
+        if (result.danger) sawDanger = true;
+        if (!tickerBest || result.priority > tickerBest.priority) tickerBest = result;
       };
 
       if (roll < chanceA) {
         const outcome = resolveAttackOutcome(st.currentPlayersA, st.currentPlayersB);
-        noteTicker(handleAttackOutcome('left', 'a', outcome, nextTime, { isBig: true }));
+        noteTicker(handleAttackOutcome('left', 'a', outcome, nextTime, { isBig: true, attackers: st.currentPlayersA, defenders: st.currentPlayersB }));
       } else if (roll > 100 - chanceB) {
         const outcome = resolveAttackOutcome(st.currentPlayersB, st.currentPlayersA);
-        noteTicker(handleAttackOutcome('right', 'b', outcome, nextTime, { isBig: true }));
+        noteTicker(handleAttackOutcome('right', 'b', outcome, nextTime, { isBig: true, attackers: st.currentPlayersB, defenders: st.currentPlayersA }));
       }
 
       const rollRegA = rand() * 100;
       if (rollRegA < regChanceA) {
         const outcome = resolveRegularShot(st.currentPlayersA, st.currentPlayersB);
-        noteTicker(handleAttackOutcome('left', 'a', outcome, nextTime, { isBig: false }));
+        noteTicker(handleAttackOutcome('left', 'a', outcome, nextTime, { isBig: false, attackers: st.currentPlayersA, defenders: st.currentPlayersB }));
       }
       const rollRegB = rand() * 100;
       if (rollRegB < regChanceB) {
         const outcome = resolveRegularShot(st.currentPlayersB, st.currentPlayersA);
-        noteTicker(handleAttackOutcome('right', 'b', outcome, nextTime, { isBig: false }));
+        noteTicker(handleAttackOutcome('right', 'b', outcome, nextTime, { isBig: false, attackers: st.currentPlayersB, defenders: st.currentPlayersA }));
       }
 
       if (rollOffside(st.currentPlayersA)) bumpMatchStat('a', { offsides: 1 });
@@ -389,6 +487,8 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
       const { tackle, corner } = rollBackgroundStats(attackingPlayers, defendingPlayers);
       if (tackle) {
         bumpMatchStat(aHasBall ? 'b' : 'a', { tackles: 1 });
+        const tacklers = defendingPlayers.filter((p) => ['CB', 'LB', 'RB', 'CDM', 'CM'].includes(p.pos));
+        if (tacklers.length) rate(tacklers[Math.floor(rand() * tacklers.length)], 'TACKLE_WON');
         if (rand() < 0.25) {
           const defenders = defendingPlayers.filter((p) => ['CB', 'LB', 'RB', 'CDM'].includes(p.pos));
           const attackers = attackingPlayers.filter((p) => ['ST', 'CF', 'SS', 'LW', 'RW', 'CAM'].includes(p.pos));
@@ -406,13 +506,13 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
 
       const plainFoulA = checkPlainFoul(st.currentPlayersA);
       if (plainFoulA) {
-        bumpMatchStat('a', { fouls: 1 }); adjustRating(plainFoulA.id, -0.05);
+        bumpMatchStat('a', { fouls: 1 }); rate(plainFoulA, 'FOUL');
         const victimB = st.currentPlayersB.find((p) => ['ST', 'CF', 'LW', 'RW', 'CAM'].includes(p.pos)) || st.currentPlayersB[0];
         noteTicker({ tickerText: tickerFreeKick(st.teamB.name, victimB?.name || 'raqib'), priority: 1 });
       }
       const plainFoulB = checkPlainFoul(st.currentPlayersB);
       if (plainFoulB) {
-        bumpMatchStat('b', { fouls: 1 }); adjustRating(plainFoulB.id, -0.05);
+        bumpMatchStat('b', { fouls: 1 }); rate(plainFoulB, 'FOUL');
         const victimA = st.currentPlayersA.find((p) => ['ST', 'CF', 'LW', 'RW', 'CAM'].includes(p.pos)) || st.currentPlayersA[0];
         noteTicker({ tickerText: tickerFreeKick(st.teamA.name, victimA?.name || 'raqib'), priority: 1 });
       }
@@ -462,7 +562,7 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
       if (eventA) {
         if (eventA.type === 'YELLOW') {
           setYellowCards((prev) => [...prev, eventA.player.id]);
-          adjustRating(eventA.player.id, -0.25);
+          rate(eventA.player, 'YELLOW');
           bumpPlayerEvent(eventA.player.id, { yellow: true });
           bumpMatchStat('a', { fouls: 1 });
           setMatchEvents((prev) => [...prev, { minute: nextTime, side: 'left', icon: '🟨', text: `Sariq: ${eventA.player.name}` }]);
@@ -471,7 +571,7 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
           setCurrentPlayersA((prev) => prev.filter((p) => p.id !== eventA.player.id));
           setOffPitchA((prev) => [...prev, eventA.player.id]);
           setRedCardsA((r) => r + 1);
-          adjustRating(eventA.player.id, -1.0);
+          rate(eventA.player, 'RED');
           bumpPlayerEvent(eventA.player.id, { red: true });
           bumpMatchStat('a', { fouls: 1 });
           setMatchEvents((prev) => [...prev, { minute: nextTime, side: 'left', icon: '🟥', text: `QIZIL! ${eventA.player.name}` }]);
@@ -498,7 +598,7 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
       if (eventB) {
         if (eventB.type === 'YELLOW') {
           setYellowCards((prev) => [...prev, eventB.player.id]);
-          adjustRating(eventB.player.id, -0.25);
+          rate(eventB.player, 'YELLOW');
           bumpPlayerEvent(eventB.player.id, { yellow: true });
           bumpMatchStat('b', { fouls: 1 });
           setMatchEvents((prev) => [...prev, { minute: nextTime, side: 'right', icon: '🟨', text: `Sariq: ${eventB.player.name}` }]);
@@ -507,7 +607,7 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
           setCurrentPlayersB((prev) => prev.filter((p) => p.id !== eventB.player.id));
           setOffPitchB((prev) => [...prev, eventB.player.id]);
           setRedCardsB((r) => r + 1);
-          adjustRating(eventB.player.id, -1.0);
+          rate(eventB.player, 'RED');
           bumpPlayerEvent(eventB.player.id, { red: true });
           bumpMatchStat('b', { fouls: 1 });
           setMatchEvents((prev) => [...prev, { minute: nextTime, side: 'right', icon: '🟥', text: `QIZIL! ${eventB.player.name}` }]);
@@ -540,24 +640,28 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
         }
       }
 
-      applyMicroDeltas(st.currentPlayersA, st.currentPlayersB);
+      applyMinuteTick(st.currentPlayersA, st.currentPlayersB, possWeightA / ((possWeightA + possWeightB) || 1));
 
       setMatchTime(nextTime);
 
-      const isNotable = !!(tickerBest && tickerBest.priority >= 3);
+      // Gol, xavfli imkoniyat yoki qizil kartochka = "xavfli vaziyat". Quick Play'da
+      // oddiy zarbalar ham ko'rsatiladi; sokin daqiqalar deyarli bir zumda o'tadi.
+      const isDanger = sawDanger || !!(tickerBest && tickerBest.priority >= 5);
+      const slow = speedMode === 'quick' ? (isDanger || sawShot) : isDanger;
       let nextDelay;
       if (isFinishing) {
         nextDelay = SPEED_FINISH;
-      } else if (speedMode === 'fast') {
-        nextDelay = isNotable ? NOTABLE_FAST : QUIET_FAST;
+      } else if (slow) {
+        nextDelay = SLOWMO_TICK_MS;
       } else {
-        nextDelay = isNotable ? NOTABLE_NORMAL : QUIET_NORMAL;
+        nextDelay = speedMode === 'quick' ? QUICK_QUIET_MS : NORMAL_TICK_MS;
       }
+      setSlowMo(!isFinishing && slow);
       scheduleNext(nextDelay);
     }
 
     if (!isPaused && !isFinished) {
-      const initialDelay = isFinishing ? SPEED_FINISH : (speedMode === 'fast' ? QUIET_FAST : QUIET_NORMAL);
+      const initialDelay = isFinishing ? SPEED_FINISH : (speedMode === 'quick' ? QUICK_QUIET_MS : NORMAL_TICK_MS);
       scheduleNext(initialDelay);
     }
 
@@ -565,7 +669,7 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
   }, [isPaused, isFinished, speedMode, isFinishing]);
 
   useEffect(() => {
-    if (isFinished) setIsFinishing(false);
+    if (isFinished) { setIsFinishing(false); setSlowMo(false); }
   }, [isFinished]);
 
   const shootoutNeeded = !!(shootoutOnDraw && isFinished && score.a === score.b);
@@ -625,7 +729,7 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
 
   const toggleSpeed = () => {
     if (isFinishing) return;
-    setSpeedMode((prev) => (prev === 'fast' ? 'normal' : 'fast'));
+    setSpeedMode((prev) => (prev === 'quick' ? 'normal' : 'quick'));
   };
 
   const finishMatch = () => {
@@ -644,41 +748,83 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
   const possPctA = Math.round((possessionMin.a / possTotal) * 100);
   const possPctB = 100 - possPctA;
 
-  const renderBadges = (id) => {
-    const ev = playerEventsMap[id];
-    if (!ev) return null;
-    return (
-      <span className="player-badges">
-        {ev.goals > 0 && <span className="badge-pill badge-goal">⚽{ev.goals > 1 ? `×${ev.goals}` : ''}</span>}
-        {ev.assists > 0 && <span className="badge-pill badge-assist">🅰️{ev.assists > 1 ? `×${ev.assists}` : ''}</span>}
-        {ev.yellow && <span className="badge-pill badge-yellow">🟨</span>}
-        {ev.red && <span className="badge-pill badge-red">🟥</span>}
-        {ev.injured && <span className="badge-pill badge-injury">🩹</span>}
-      </span>
-    );
-  };
-
   const findHistoricPlayer = (team, id) => team.squad.find((p) => p.id === id);
 
-  const manOfMatch = useMemo(() => {
-    if (!isFinished) return null;
-    const ids = Object.keys(playerRatings);
-    if (ids.length === 0) return null;
-    let bestId = null;
-    let bestVal = -1;
-    ids.forEach((id) => {
-      if (playerRatings[id] > bestVal) { bestVal = playerRatings[id]; bestId = id; }
-    });
-    if (!bestId) return null;
-    const p = findHistoricPlayer(teamA, bestId) || findHistoricPlayer(teamB, bestId);
-    return p ? { name: p.name, rating: bestVal } : null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isFinished, playerRatings]);
+  // Jamoa bo'yicha pas statistikasi va reyting qatorlari
+  const { rowsA, rowsB, passA, passB } = useMemo(() => {
+    const build = (team) => {
+      const ids = new Set(team.squad.map((p) => p.id));
+      let att = 0;
+      let ok = 0;
+      const rows = [];
+      Object.keys(perf).forEach((key) => {
+        const pf = perf[key];
+        const player = team.squad.find((p) => String(p.id) === key);
+        if (!player || !ids.has(player.id)) return;
+        att += pf.passAtt;
+        ok += pf.passOk;
+        const ev = playerEventsMap[player.id] || {};
+        rows.push({
+          id: player.id, name: player.name, pos: player.pos, rating: playerRatings[key] ?? RATING_BASE,
+          minutes: pf.minutes, passAtt: pf.passAtt, passOk: pf.passOk,
+          goals: ev.goals || 0, assists: ev.assists || 0, saves: ev.saves || 0,
+        });
+      });
+      rows.sort((x, y) => y.rating - x.rating);
+      return { rows, att, ok };
+    };
+    const a = build(teamA);
+    const b = build(teamB);
+    return { rowsA: a.rows, rowsB: b.rows, passA: a, passB: b };
+  }, [perf, playerRatings, playerEventsMap, teamA, teamB]);
+
+  const motm = useMemo(() => {
+    const all = [...rowsA, ...rowsB];
+    if (!all.length) return null;
+    const best = all.reduce((m, r) => (r.rating > m.rating ? r : m), all[0]);
+    return { name: best.name, rating: best.rating };
+  }, [rowsA, rowsB]);
+
+  const accPct = (t) => (t.att ? Math.round((t.ok / t.att) * 100) : 0);
+
+  const statRows = [
+    { label: 'Ball egaligi', a: possPctA, b: possPctB, suffix: '%', highlight: true },
+    { label: 'Zarbalar', a: matchStats.a.shots, b: matchStats.b.shots },
+    { label: 'Aniq zarbalar', a: matchStats.a.sot, b: matchStats.b.sot },
+    { label: 'Katta imkoniyat', a: matchStats.a.bigChances, b: matchStats.b.bigChances },
+    { label: 'Seyvlar', a: matchStats.a.saves, b: matchStats.b.saves },
+    { label: 'Paslar', a: passA.att, b: passB.att },
+    { label: 'Pas aniqligi', a: accPct(passA), b: accPct(passB), suffix: '%' },
+    { label: 'Burchak zarbasi', a: matchStats.a.corners, b: matchStats.b.corners },
+    { label: 'Ofsaydlar', a: matchStats.a.offsides, b: matchStats.b.offsides },
+    { label: 'Tacklelar', a: matchStats.a.tackles, b: matchStats.b.tackles },
+    { label: 'Foullar', a: matchStats.a.fouls, b: matchStats.b.fouls },
+    { label: 'Sariq kartochka', a: yellowA, b: yellowB },
+    { label: 'Qizil kartochka', a: redCardsA, b: redCardsB },
+    { label: 'Almashtirishlar', a: subsCountA, b: subsCountB },
+    { label: 'OVR', a: currentOvrA, b: currentOvrB },
+  ];
+
+  const TABS = [
+    { key: 'summary', label: 'Summary' },
+    { key: 'lineups', label: 'Lineups' },
+    { key: 'stats', label: 'Stats' },
+    { key: 'ratings', label: 'Ratings' },
+  ];
+
+  const penA = shootout ? shootout.kicks.slice(0, shootout.revealed).filter((k) => k.side === 'a' && k.scored).length : 0;
+  const penB = shootout ? shootout.kicks.slice(0, shootout.revealed).filter((k) => k.side === 'b' && k.scored).length : 0;
 
   return (
-    <div className="match-screen">
+    <div className="font-sans text-ink bg-surface rounded-card p-3 sm:p-5 flex flex-col gap-4 w-full max-w-3xl mx-auto">
       {isFinished && onExit && (
-        <button className="live-exit-btn" onClick={onExit}>⬅ Chiqish</button>
+        <button
+          type="button"
+          onClick={onExit}
+          className="self-start text-sm font-bold text-ink-soft hover:text-ink bg-surface-card border border-surface-line rounded-control px-3 py-1.5 shadow-soft transition-colors"
+        >
+          ⬅ Chiqish
+        </button>
       )}
 
       <MatchTablo
@@ -691,244 +837,103 @@ export default function LiveMatch({ teamA, teamB, onExit, onFinish, seed, shooto
         isPaused={isPaused}
         isFinishing={isFinishing}
         speedMode={speedMode}
+        slowMo={slowMo}
         redCardsA={redCardsA}
         redCardsB={redCardsB}
         liveTicker={liveTicker}
-        competitionLabel={competitionLabel}
+        competition={competition}
         onTogglePause={() => setIsPaused(!isPaused)}
         onToggleSpeed={toggleSpeed}
         onFinish={finishMatch}
       />
 
-      <div className="match-tabs">
-        <button className={`match-tab-btn ${activeTab === 'summary' ? 'active' : ''}`} onClick={() => setActiveTab('summary')}>Summary</button>
-        <button className={`match-tab-btn ${activeTab === 'lineups' ? 'active' : ''}`} onClick={() => setActiveTab('lineups')}>Lineups</button>
-        <button className={`match-tab-btn ${activeTab === 'stats' ? 'active' : ''}`} onClick={() => setActiveTab('stats')}>Stats</button>
-      </div>
+      <SegmentedTabs tabs={TABS} active={activeTab} onChange={setActiveTab} />
 
-      <div className="match-tab-panel">
-        {activeTab === 'summary' && (
-          <EventLog
-            matchEvents={matchEvents}
-            liveChances={liveChances}
-            teamA={teamA}
-            teamB={teamB}
-            isRiskA={isRiskA}
-            isRiskB={isRiskB}
+      {activeTab === 'summary' && (
+        <EventLog
+          matchEvents={matchEvents}
+          liveChances={liveChances}
+          teamA={teamA}
+          teamB={teamB}
+          isRiskA={isRiskA}
+          isRiskB={isRiskB}
+        />
+      )}
+
+      {activeTab === 'lineups' && formationA && formationB && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <PitchCard
+            team={teamA} formation={formationA} slots={slotsA} tone="accent"
+            getRating={getRating} playerEventsMap={playerEventsMap}
+            bench={benchA} offPitch={offPitchA} findPlayer={findHistoricPlayer}
           />
-        )}
+          <PitchCard
+            team={teamB} formation={formationB} slots={slotsB} tone="brand"
+            getRating={getRating} playerEventsMap={playerEventsMap}
+            bench={benchB} offPitch={offPitchB} findPlayer={findHistoricPlayer}
+          />
+        </div>
+      )}
 
-        {activeTab === 'lineups' && formationA && formationB && (
-          <div>
-            <div className="pitches-row">
-              <div>
-                <div className="pitch-col-title title-a">{teamA.name}</div>
-                <div style={{ textAlign: 'center' }}>
-                  <span className="formation-badge">{formationA.name}</span>
-                </div>
-                <div className="pitch">
-                  {slotsA.map((s) => (
-                    <div key={s.player.id} className="pitch-player" style={{ left: `${s.x}%`, top: `${s.y}%` }}>
-                      <div className={`pitch-shirt pos-bg-${s.category.toLowerCase()}`}>{s.player.pos}</div>
-                      <span className={`pitch-rating ${ratingClass(getRating(s.player.id))}`}>{getRating(s.player.id).toFixed(1)}</span>
-                      <span className="pitch-player-name">{s.player.name.split(' ').slice(-1)[0]}</span>
-                      {renderBadges(s.player.id)}
-                    </div>
-                  ))}
-                </div>
-                {(benchA.length > 0 || offPitchA.length > 0) && (
-                  <div className="bench-list">
-                    <div className="squad-header" style={{ marginTop: '10px' }}>Zahira</div>
-                    {benchA.map((p) => (
-                      <div key={p.id} className="bench-item">{p.name} {renderBadges(p.id)}</div>
-                    ))}
-                    {offPitchA.map((id) => {
-                      const p = findHistoricPlayer(teamA, id);
-                      if (!p) return null;
-                      return <div key={id} className="bench-item bench-item-off">{p.name} {renderBadges(id)}</div>;
-                    })}
-                  </div>
-                )}
-              </div>
+      {activeTab === 'stats' && <StatsCard teamA={teamA} teamB={teamB} rows={statRows} />}
 
-              <div>
-                <div className="pitch-col-title title-b">{teamB.name}</div>
-                <div style={{ textAlign: 'center' }}>
-                  <span className="formation-badge">{formationB.name}</span>
-                </div>
-                <div className="pitch">
-                  {slotsB.map((s) => (
-                    <div key={s.player.id} className="pitch-player" style={{ left: `${s.x}%`, top: `${s.y}%` }}>
-                      <div className={`pitch-shirt pos-bg-${s.category.toLowerCase()}`}>{s.player.pos}</div>
-                      <span className={`pitch-rating ${ratingClass(getRating(s.player.id))}`}>{getRating(s.player.id).toFixed(1)}</span>
-                      <span className="pitch-player-name">{s.player.name.split(' ').slice(-1)[0]}</span>
-                      {renderBadges(s.player.id)}
-                    </div>
-                  ))}
-                </div>
-                {(benchB.length > 0 || offPitchB.length > 0) && (
-                  <div className="bench-list">
-                    <div className="squad-header" style={{ marginTop: '10px' }}>Zahira</div>
-                    {benchB.map((p) => (
-                      <div key={p.id} className="bench-item">{p.name} {renderBadges(p.id)}</div>
-                    ))}
-                    {offPitchB.map((id) => {
-                      const p = findHistoricPlayer(teamB, id);
-                      if (!p) return null;
-                      return <div key={id} className="bench-item bench-item-off">{p.name} {renderBadges(id)}</div>;
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'stats' && (
-          <div className="stats-grid">
-            <div className="stats-row">
-              <span className="stats-val" style={{ color: '#38bdf8' }}>{possPctA}%</span>
-              <span className="stats-label">Ball egaligi</span>
-              <span className="stats-val" style={{ color: '#f43f5e' }}>{possPctB}%</span>
-            </div>
-            <div className="stats-row">
-              <span className="stats-val" style={{ color: '#38bdf8' }}>{matchStats.a.shots}</span>
-              <span className="stats-label">Zarbalar</span>
-              <span className="stats-val" style={{ color: '#f43f5e' }}>{matchStats.b.shots}</span>
-            </div>
-            <div className="stats-row">
-              <span className="stats-val" style={{ color: '#38bdf8' }}>{matchStats.a.sot}</span>
-              <span className="stats-label">Aniq zarbalar</span>
-              <span className="stats-val" style={{ color: '#f43f5e' }}>{matchStats.b.sot}</span>
-            </div>
-            <div className="stats-row">
-              <span className="stats-val" style={{ color: '#38bdf8' }}>{matchStats.a.saves}</span>
-              <span className="stats-label">Seyvlar</span>
-              <span className="stats-val" style={{ color: '#f43f5e' }}>{matchStats.b.saves}</span>
-            </div>
-            <div className="stats-row">
-              <span className="stats-val" style={{ color: '#38bdf8' }}>{matchStats.a.bigChances}</span>
-              <span className="stats-label">Katta imkoniyat</span>
-              <span className="stats-val" style={{ color: '#f43f5e' }}>{matchStats.b.bigChances}</span>
-            </div>
-            <div className="stats-row">
-              <span className="stats-val" style={{ color: '#38bdf8' }}>{matchStats.a.corners}</span>
-              <span className="stats-label">Burchak zarbasi</span>
-              <span className="stats-val" style={{ color: '#f43f5e' }}>{matchStats.b.corners}</span>
-            </div>
-            <div className="stats-row">
-              <span className="stats-val" style={{ color: '#38bdf8' }}>{matchStats.a.offsides}</span>
-              <span className="stats-label">Ofsaydlar</span>
-              <span className="stats-val" style={{ color: '#f43f5e' }}>{matchStats.b.offsides}</span>
-            </div>
-            <div className="stats-row">
-              <span className="stats-val" style={{ color: '#38bdf8' }}>{matchStats.a.tackles}</span>
-              <span className="stats-label">Tacklelar</span>
-              <span className="stats-val" style={{ color: '#f43f5e' }}>{matchStats.b.tackles}</span>
-            </div>
-            <div className="stats-row">
-              <span className="stats-val" style={{ color: '#38bdf8' }}>{matchStats.a.fouls}</span>
-              <span className="stats-label">Foullar</span>
-              <span className="stats-val" style={{ color: '#f43f5e' }}>{matchStats.b.fouls}</span>
-            </div>
-            <div className="stats-row">
-              <span className="stats-val" style={{ color: '#38bdf8' }}>{currentOvrA}</span>
-              <span className="stats-label">OVR</span>
-              <span className="stats-val" style={{ color: '#f43f5e' }}>{currentOvrB}</span>
-            </div>
-            <div className="stats-row">
-              <span className="stats-val" style={{ color: '#38bdf8' }}>🟨 {yellowA}</span>
-              <span className="stats-label">Sariq kartochka</span>
-              <span className="stats-val" style={{ color: '#f43f5e' }}>🟨 {yellowB}</span>
-            </div>
-            <div className="stats-row">
-              <span className="stats-val" style={{ color: '#38bdf8' }}>🟥 {redCardsA}</span>
-              <span className="stats-label">Qizil kartochka</span>
-              <span className="stats-val" style={{ color: '#f43f5e' }}>🟥 {redCardsB}</span>
-            </div>
-            <div className="stats-row">
-              <span className="stats-val" style={{ color: '#38bdf8' }}>🔄 {subsCountA}</span>
-              <span className="stats-label">Almashtirishlar</span>
-              <span className="stats-val" style={{ color: '#f43f5e' }}>🔄 {subsCountB}</span>
-            </div>
-            {formationA && formationB && (
-              <div className="stats-row">
-                <span className="stats-val" style={{ color: '#38bdf8' }}>{formationA.name}</span>
-                <span className="stats-label">Taktika</span>
-                <span className="stats-val" style={{ color: '#f43f5e' }}>{formationB.name}</span>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      {activeTab === 'ratings' && (
+        <RatingsCard teamA={teamA} teamB={teamB} rowsA={rowsA} rowsB={rowsB} motm={motm} isFinished={isFinished} />
+      )}
 
       {shootout && (
-        <div className="card" style={{ marginTop: '16px', textAlign: 'center', padding: '16px' }}>
-          <div style={{ fontWeight: 700, letterSpacing: '0.5px', marginBottom: '6px' }}>⚽ PENALTI SERIYASI</div>
-          <div style={{ fontSize: '28px', fontWeight: 700, margin: '8px 0' }}>
-            {shootout.kicks.slice(0, shootout.revealed).filter((k) => k.side === 'a' && k.scored).length}
-            {' - '}
-            {shootout.kicks.slice(0, shootout.revealed).filter((k) => k.side === 'b' && k.scored).length}
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
+        <section className="bg-surface-card border border-surface-line rounded-card shadow-soft p-5 text-center">
+          <div className="text-xs font-extrabold uppercase tracking-wide text-ink-muted">⚽ Penalti seriyasi</div>
+          <div className="text-4xl font-black tabular-nums my-2">{penA} <span className="text-ink-subtle">-</span> {penB}</div>
+          <div className="flex justify-center gap-1.5 flex-wrap mb-3">
             {shootout.kicks.slice(0, shootout.revealed).map((k, i) => (
               <span
                 key={i}
                 title={`${k.kicker?.name || '?'} (${k.side === 'a' ? teamA.name : teamB.name})`}
-                style={{
-                  display: 'inline-block', width: 22, height: 22, borderRadius: '50%',
-                  lineHeight: '22px', fontSize: 13,
-                  background: k.scored ? '#22c55e' : '#ef4444', color: '#fff',
-                }}
+                className={`w-6 h-6 rounded-full text-xs font-extrabold text-white flex items-center justify-center motion-safe:animate-fs-pop ${k.scored ? 'bg-brand' : 'bg-red-500'}`}
               >
                 {k.scored ? '✓' : '✗'}
               </span>
             ))}
           </div>
           {shootout.revealed < shootout.kicks.length ? (
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-              marginTop: 6, padding: '10px 16px', borderRadius: 12,
-              background: 'rgba(255, 200, 60, 0.1)', border: '1px solid rgba(255, 200, 60, 0.4)'
-            }}>
+            <div className="text-sm text-ink-muted">
               {(() => {
                 const next = shootout.kicks[shootout.revealed];
-                if (!next) return null;
-                const teamObj = next.side === 'a' ? teamA : teamB;
-                return (
-                  <>
-                    <span style={{ fontSize: 22 }}>{teamObj?.logo || '⚽'}</span>
-                    <span style={{ fontSize: 14 }}>
-                      <span style={{ opacity: 0.7 }}>Zarba tepmoqda: </span>
-                      <b style={{ fontSize: 16, color: 'var(--accent-gold)' }}>{next.kicker?.name || '?'}</b>
-                      <span style={{ opacity: 0.7 }}> ({teamObj?.name})</span>
-                    </span>
-                  </>
-                );
+                return next ? `Zarba: ${next.kicker?.name || '?'} (${next.side === 'a' ? teamA.name : teamB.name})` : '';
               })()}
             </div>
           ) : (
             <>
-              <div style={{ opacity: 0.85, fontSize: 13, marginBottom: 10 }}>
+              <div className="text-sm text-ink-soft mb-3">
                 G'olib: <b>{shootout.winner === 'a' ? teamA.name : teamB.name}</b> ({shootout.penA} - {shootout.penB})
               </div>
-              <button onClick={finishAfterShootout} className="secondary-btn">Davom etish →</button>
+              <button
+                type="button"
+                onClick={finishAfterShootout}
+                className="bg-brand hover:bg-brand-dark text-white font-bold text-sm rounded-control border-0 cursor-pointer px-4 py-2 transition-colors"
+              >
+                Davom etish →
+              </button>
             </>
           )}
-        </div>
+        </section>
       )}
 
-      {isFinished && manOfMatch && (
-        <div className="motm-banner">
-          🏅 O'yinning eng yaxshi o'yinchisi: <b>{manOfMatch.name}</b>
-          <span className={`pitch-rating ${ratingClass(manOfMatch.rating)}`} style={{ marginLeft: '8px' }}>
-            {manOfMatch.rating.toFixed(1)}
-          </span>
+      {isFinished && motm && (
+        <div className="flex items-center justify-center gap-3 bg-surface-card border border-surface-line rounded-card shadow-soft px-4 py-3 text-sm">
+          <span>🏅 O'yinning eng yaxshi o'yinchisi:</span>
+          <b>{motm.name}</b>
+          <RatingBadge value={motm.rating} size="md" />
         </div>
       )}
 
       {isFinished && onExit && (
-        <button onClick={onExit} className="secondary-btn" style={{ marginTop: '16px' }}>
+        <button
+          type="button"
+          onClick={onExit}
+          className="bg-surface-card hover:bg-surface-muted border border-surface-line text-ink font-bold text-sm rounded-control px-4 py-2.5 shadow-soft transition-colors"
+        >
           ⬅ Chiqish
         </button>
       )}
