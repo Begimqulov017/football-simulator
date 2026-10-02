@@ -1,13 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { registerUser, getMeta } from '../utils/auth';
-import Icon from '../components/Icon';
+import AuthShell, { SubmitButton, Banner } from './auth/AuthShell';
+import AuthField from './auth/AuthField';
+import { validateUsername, validatePassword, routeServerError, passwordStrength } from './auth/authUtils';
 
+const STRENGTH = [
+  { label: '', color: 'rgba(255,255,255,.12)' },
+  { label: 'Zaif', color: '#f87171' },
+  { label: "O'rtacha", color: '#fbbf24' },
+  { label: 'Yaxshi', color: '#34d399' },
+  { label: 'Kuchli', color: '#10b981' },
+];
+
+// Props are unchanged (App.jsx): onSuccess(username), onGoLogin(), onBack().
 export default function RegisterPage({ onSuccess, onGoLogin, onBack }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState({}); // { username, password, password2, form }
   const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+  const [shake, setShake] = useState(0);
   const [meta, setMeta] = useState({ userCount: 0, maxUsers: 10, registrationOpen: true, loaded: false });
 
   // Ro'yxatdan o'tish ochiqmi va nechta joy qolgani — serverdan (barcha
@@ -19,75 +32,119 @@ export default function RegisterPage({ onSuccess, onGoLogin, onBack }) {
   }, []);
 
   const open = !meta.loaded || meta.registrationOpen;
+  const strength = passwordStrength(password);
+  const clear = (...keys) => setErrors((e) => {
+    const next = { ...e, form: undefined };
+    keys.forEach((k) => { next[k] = undefined; });
+    return next;
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (password !== password2) { setError('Parollar mos emas'); return; }
+    if (loading || done) return;
+
+    const local = {
+      username: validateUsername(username) || undefined,
+      password: validatePassword(password) || undefined,
+      password2: !password2 ? 'Parolni qayta kiriting' : password !== password2 ? 'Parollar mos emas' : undefined,
+    };
+    if (local.username || local.password || local.password2) {
+      setErrors(local);
+      setShake((n) => n + 1);
+      return;
+    }
+
+    setErrors({});
     setLoading(true);
     const res = await registerUser(username, password);
     setLoading(false);
-    if (!res.ok) { setError(res.error); return; }
-    setError('');
-    onSuccess(res.username);
+
+    if (!res.ok) {
+      setErrors(routeServerError(res));
+      setShake((n) => n + 1);
+      return;
+    }
+    setDone(true);
+    setTimeout(() => onSuccess(res.username), 550);
   };
 
+  const busy = loading || done;
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4 py-10">
-      <form className="w-full max-w-sm rounded-2xl bg-slate-900/80 backdrop-blur-md border border-slate-700 p-6 shadow-2xl flex flex-col gap-3" onSubmit={handleSubmit}>
-        <div className="flex items-center justify-between mb-2">
-          <button type="button" className="text-slate-300 hover:text-white transition-colors" onClick={onBack} aria-label="Orqaga">
-            <Icon name="back" />
-          </button>
-          <h2 className="text-xl font-black text-slate-50">Register</h2>
-          <button type="button" className="text-green-400 hover:text-green-300 text-sm font-semibold transition-colors" onClick={onGoLogin}>
-            Login
-          </button>
-        </div>
+    <AuthShell
+      title="Hisob yaratish"
+      subtitle="Bir necha soniyada ro'yxatdan o'ting va maydonga chiqing"
+      switchLabel="Kirish"
+      onSwitch={onGoLogin}
+      onBack={onBack}
+      shake={shake}
+    >
+      {!open ? (
+        <Banner kind="closed">
+          Ro'yxatdan o'tish yopiq — maksimal {meta.maxUsers} nafar foydalanuvchi allaqachon ro'yxatdan o'tgan.
+        </Banner>
+      ) : (
+        <form className="au-form" onSubmit={handleSubmit} noValidate>
+          {errors.form && <Banner>{errors.form}</Banner>}
 
-        {!open ? (
-          <div className="rounded-lg border border-red-500/40 bg-red-500/10 text-red-400 text-sm font-medium px-4 py-3 mt-1">
-            Ro'yxatdan o'tish yopiq — maksimal 10 nafar foydalanuvchi allaqachon ro'yxatdan o'tgan.
-          </div>
-        ) : (
-          <>
-            <input
-              className="w-full rounded-lg bg-slate-800 text-white placeholder-slate-500 border border-slate-700 px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500 transition-shadow"
-              type="text"
-              placeholder="Username (new)"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoFocus
-            />
-            <input
-              className="w-full rounded-lg bg-slate-800 text-white placeholder-slate-500 border border-slate-700 px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500 transition-shadow"
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            <input
-              className="w-full rounded-lg bg-slate-800 text-white placeholder-slate-500 border border-slate-700 px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500 transition-shadow"
-              type="password"
-              placeholder="Password (again)"
-              value={password2}
-              onChange={(e) => setPassword2(e.target.value)}
-            />
+          <AuthField
+            id="reg-username"
+            label="Yangi login"
+            icon="user"
+            value={username}
+            onChange={(v) => { setUsername(v); clear('username'); }}
+            error={errors.username}
+            showValid={!validateUsername(username)}
+            autoComplete="username"
+            autoFocus
+            disabled={busy}
+          />
 
-            {error && <div className="text-red-400 text-sm font-medium">{error}</div>}
+          <AuthField
+            id="reg-password"
+            label="Parol"
+            icon="lock"
+            type="password"
+            value={password}
+            onChange={(v) => { setPassword(v); clear('password', 'password2'); }}
+            error={errors.password}
+            autoComplete="new-password"
+            disabled={busy}
+          >
+            {password && !errors.password && (
+              <div className="au-meter" aria-hidden="true">
+                {[1, 2, 3, 4].map((i) => (
+                  <span key={i} style={i <= strength ? { background: STRENGTH[strength].color } : undefined} />
+                ))}
+                <b style={{ color: STRENGTH[strength].color }}>{STRENGTH[strength].label}</b>
+              </div>
+            )}
+          </AuthField>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:opacity-60 text-white font-bold py-2.5 mt-1 transition-colors"
-            >
-              {loading ? 'Yuborilmoqda...' : "Ro'yxatdan o'tish"}
-            </button>
-            <div className="text-center text-xs text-slate-400 mt-1">
-              Joylar: {meta.loaded ? `${meta.userCount}/${meta.maxUsers}` : '—'}
-            </div>
-          </>
-        )}
-      </form>
-    </div>
+          <AuthField
+            id="reg-password2"
+            label="Parolni takrorlang"
+            icon="lock"
+            type="password"
+            value={password2}
+            onChange={(v) => { setPassword2(v); clear('password2'); }}
+            error={errors.password2}
+            autoComplete="new-password"
+            disabled={busy}
+          />
+
+          <SubmitButton loading={loading} done={done} loadingText="Yuborilmoqda..." doneText="Hisob yaratildi!">
+            Ro'yxatdan o'tish
+          </SubmitButton>
+        </form>
+      )}
+
+      <div className="au-foot">
+        <span className={`au-slots${meta.loaded && !meta.registrationOpen ? ' full' : ''}`}>
+          <i />
+          Bo'sh joylar: {meta.loaded ? `${Math.max(meta.maxUsers - meta.userCount, 0)} / ${meta.maxUsers}` : '—'}
+        </span>
+      </div>
+    </AuthShell>
   );
 }

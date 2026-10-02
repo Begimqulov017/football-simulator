@@ -1,66 +1,88 @@
 import React, { useState } from 'react';
 import { loginUser } from '../utils/auth';
-import Icon from '../components/Icon';
+import AuthShell, { SubmitButton, Banner } from './auth/AuthShell';
+import AuthField from './auth/AuthField';
+import { routeServerError } from './auth/authUtils';
 
+// Props are unchanged (App.jsx): onSuccess(username), onGoRegister(), onBack().
 export default function LoginPage({ onSuccess, onGoRegister, onBack }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState({}); // { username, password, form }
   const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+  const [shake, setShake] = useState(0);
+
+  const clear = (key) => setErrors((e) => (e[key] || e.form ? { ...e, [key]: undefined, form: undefined } : e));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading || done) return;
+
+    const local = {
+      username: username.trim() ? undefined : 'Loginni kiriting',
+      password: password ? undefined : 'Parolni kiriting',
+    };
+    if (local.username || local.password) {
+      setErrors(local);
+      setShake((n) => n + 1);
+      return;
+    }
+
+    setErrors({});
     setLoading(true);
     const res = await loginUser(username, password);
     setLoading(false);
-    if (!res.ok) { setError(res.error); return; }
-    setError('');
-    onSuccess(res.username);
+
+    if (!res.ok) {
+      setErrors(routeServerError(res));
+      setShake((n) => n + 1);
+      return;
+    }
+    // Brief success state so the transition doesn't feel abrupt.
+    setDone(true);
+    setTimeout(() => onSuccess(res.username), 550);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4 py-10">
-      <form
-        className="w-full max-w-sm rounded-2xl bg-slate-900/80 backdrop-blur-md border border-slate-700 p-6 shadow-2xl flex flex-col gap-3"
-        onSubmit={handleSubmit}
-      >
-        <div className="flex items-center justify-between mb-2">
-          <button type="button" className="text-slate-300 hover:text-white transition-colors" onClick={onBack} aria-label="Orqaga">
-            <Icon name="back" />
-          </button>
-          <h2 className="text-xl font-black text-slate-50">Login</h2>
-          <button type="button" className="text-green-400 hover:text-green-300 text-sm font-semibold transition-colors" onClick={onGoRegister}>
-            Register
-          </button>
-        </div>
+    <AuthShell
+      title="Xush kelibsiz"
+      subtitle="Hisobingizga kiring va karyerangizni davom ettiring"
+      switchLabel="Ro'yxatdan o'tish"
+      onSwitch={onGoRegister}
+      onBack={onBack}
+      shake={shake}
+    >
+      <form className="au-form" onSubmit={handleSubmit} noValidate>
+        {errors.form && <Banner>{errors.form}</Banner>}
 
-        <input
-          className="w-full rounded-lg bg-slate-800 text-white placeholder-slate-500 border border-slate-700 px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500 transition-shadow"
-          type="text"
-          placeholder="username"
+        <AuthField
+          id="login-username"
+          label="Login"
+          icon="user"
           value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          onChange={(v) => { setUsername(v); clear('username'); }}
+          error={errors.username}
+          autoComplete="username"
           autoFocus
+          disabled={loading || done}
         />
-        <input
-          className="w-full rounded-lg bg-slate-800 text-white placeholder-slate-500 border border-slate-700 px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-500 transition-shadow"
+        <AuthField
+          id="login-password"
+          label="Parol"
+          icon="lock"
           type="password"
-          placeholder="password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(v) => { setPassword(v); clear('password'); }}
+          error={errors.password}
+          autoComplete="current-password"
+          disabled={loading || done}
         />
 
-        {error && <div className="text-red-400 text-sm font-medium">{error}</div>}
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:opacity-60 text-white font-bold py-2.5 mt-1 transition-colors"
-        >
-          {loading ? 'Tekshirilmoqda...' : 'Kirish'}
-        </button>
-        <div className="text-center text-xs text-slate-500 mt-1 cursor-default">forgot password?</div>
+        <SubmitButton loading={loading} done={done} loadingText="Tekshirilmoqda..." doneText="Muvaffaqiyatli!">
+          Kirish
+        </SubmitButton>
       </form>
-    </div>
+    </AuthShell>
   );
 }
