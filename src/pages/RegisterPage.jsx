@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { registerUser, getMeta } from '../utils/auth';
 import AuthShell, { SubmitButton, Banner } from './auth/AuthShell';
 import AuthField from './auth/AuthField';
-import { validateUsername, validatePassword, routeServerError, passwordStrength } from './auth/authUtils';
+import { validateUsername, validatePassword, routeServerError, passwordStrength, canAutoFocus } from './auth/authUtils';
 
 const STRENGTH = [
   { label: '', color: 'rgba(255,255,255,.12)' },
@@ -12,9 +12,11 @@ const STRENGTH = [
   { label: 'Kuchli', color: '#10b981' },
 ];
 
-// Props are unchanged (App.jsx): onSuccess(username), onGoLogin(), onBack().
-export default function RegisterPage({ onSuccess, onGoLogin, onBack }) {
-  const [username, setUsername] = useState('');
+// Props (App.jsx): onSuccess(username), onGoLogin(username?), onBack(), initialUsername.
+// initialUsername carries over what was typed on the Login screen, so switching
+// between the two forms never makes the person retype their login.
+export default function RegisterPage({ onSuccess, onGoLogin, onBack, initialUsername = '' }) {
+  const [username, setUsername] = useState(initialUsername);
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
   const [errors, setErrors] = useState({}); // { username, password, password2, form }
@@ -75,9 +77,11 @@ export default function RegisterPage({ onSuccess, onGoLogin, onBack }) {
       title="Hisob yaratish"
       subtitle="Bir necha soniyada ro'yxatdan o'ting va maydonga chiqing"
       switchLabel="Kirish"
-      onSwitch={onGoLogin}
+      onSwitch={() => { if (!busy) onGoLogin(username.trim()); }}
       onBack={onBack}
       shake={shake}
+      footerText="Hisobingiz bormi?"
+      footerAction="Kirish"
     >
       {!open ? (
         <Banner kind="closed">
@@ -96,7 +100,7 @@ export default function RegisterPage({ onSuccess, onGoLogin, onBack }) {
             error={errors.username}
             showValid={!validateUsername(username)}
             autoComplete="username"
-            autoFocus
+            autoFocus={canAutoFocus() && !initialUsername}
             disabled={busy}
           />
 
@@ -109,6 +113,7 @@ export default function RegisterPage({ onSuccess, onGoLogin, onBack }) {
             onChange={(v) => { setPassword(v); clear('password', 'password2'); }}
             error={errors.password}
             autoComplete="new-password"
+            autoFocus={canAutoFocus() && !!initialUsername}
             disabled={busy}
           >
             {password && !errors.password && (

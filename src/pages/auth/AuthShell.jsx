@@ -7,8 +7,12 @@ import './auth.css';
  * Shared frame for Login & Register: stadium backdrop + glass card + header
  * (back button, brand mark, title, switch-link). `shake` replays the shake
  * animation whenever it changes — pass an attempt/error counter.
+ *
+ * Phase 1: the small header link is easy to miss, so a full-width prompt
+ * ("Hisobingiz yo'qmi? Ro'yxatdan o'tish") sits under the form. Pass
+ * `footerText` + `footerAction` to show it; it calls the same `onSwitch`.
  */
-export default function AuthShell({ title, subtitle, switchLabel, onSwitch, onBack, shake = 0, children }) {
+export default function AuthShell({ title, subtitle, switchLabel, onSwitch, onBack, shake = 0, footerText, footerAction, children }) {
   const cardRef = useRef(null);
 
   // Replay the shake without remounting the card (remounting would drop input
@@ -24,7 +28,7 @@ export default function AuthShell({ title, subtitle, switchLabel, onSwitch, onBa
   return (
     <div className="au-root">
       <StadiumBackground />
-      <div ref={cardRef} className="au-card">
+      <div ref={cardRef} className="au-card" role="region" aria-labelledby="au-title">
         <div className="au-head">
           <button type="button" className="au-iconbtn" onClick={onBack} aria-label="Orqaga">
             <Icon name="back" size={18} />
@@ -32,9 +36,15 @@ export default function AuthShell({ title, subtitle, switchLabel, onSwitch, onBa
           <button type="button" className="au-link" onClick={onSwitch}>{switchLabel}</button>
         </div>
         <div className="au-brand"><Icon name="ball" size={30} strokeWidth={1.8} /></div>
-        <h1 className="au-title">{title}</h1>
+        <h1 className="au-title" id="au-title">{title}</h1>
         <p className="au-sub">{subtitle}</p>
         {children}
+        {footerAction && (
+          <div className="au-switch">
+            {footerText && <span>{footerText}</span>}
+            <button type="button" className="au-link strong" onClick={onSwitch}>{footerAction}</button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { forwardRef, useState } from 'react';
 import Icon from '../../components/Icon';
 
 // Icon.jsx has no "eye-off" glyph, so it lives here to keep that shared file untouched.
@@ -15,17 +15,28 @@ function EyeOff({ size = 18 }) {
  * Visual states: idle / focus / filled / invalid / valid. `error` shows an
  * inline message below the field; `showValid` adds a check once it's filled
  * and error-free.
+ *
+ * Phase 1 additions (all optional, so RegisterPage keeps working unchanged):
+ *  - ref is forwarded to the <input> (focus the first invalid field).
+ *  - `name`, `inputMode`, `enterKeyHint` for password managers / mobile keyboards.
+ *  - `capsHint` (password only): warns while Caps Lock is on.
  */
-export default function AuthField({
-  id, label, icon, type = 'text', value, onChange, error, showValid = false,
+const AuthField = forwardRef(function AuthField({
+  id, name, label, icon, type = 'text', value, onChange, error, showValid = false,
   autoFocus = false, autoComplete, disabled = false, onBlur, children,
-}) {
+  inputMode, enterKeyHint, capsHint = false,
+}, ref) {
   const [focused, setFocused] = useState(false);
   const [reveal, setReveal] = useState(false);
+  const [caps, setCaps] = useState(false);
   const isPassword = type === 'password';
   const filled = value !== '';
   const cls = ['au-field', focused && 'focus', filled && 'filled', error && 'invalid', !error && showValid && filled && 'valid']
     .filter(Boolean).join(' ');
+
+  const trackCaps = (e) => {
+    if (capsHint && e.getModifierState) setCaps(e.getModifierState('CapsLock'));
+  };
 
   return (
     <div className={cls}>
@@ -33,20 +44,27 @@ export default function AuthField({
         <span className="au-ico"><Icon name={icon} size={19} /></span>
         <div className="au-inwrap">
           <input
+            ref={ref}
             id={id}
+            name={name || id}
             className="au-input"
             type={isPassword && reveal ? 'text' : type}
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onFocus={() => setFocused(true)}
-            onBlur={() => { setFocused(false); if (onBlur) onBlur(); }}
+            onBlur={() => { setFocused(false); setCaps(false); if (onBlur) onBlur(); }}
+            onKeyDown={trackCaps}
+            onKeyUp={trackCaps}
             autoFocus={autoFocus}
             autoComplete={autoComplete}
+            inputMode={inputMode}
+            enterKeyHint={enterKeyHint}
             disabled={disabled}
             aria-invalid={!!error}
             aria-describedby={error ? `${id}-err` : undefined}
             spellCheck={false}
             autoCapitalize="none"
+            autoCorrect="off"
           />
           <label className="au-label" htmlFor={id}>{label}</label>
         </div>
@@ -57,6 +75,7 @@ export default function AuthField({
             className="au-eye"
             onClick={() => setReveal((r) => !r)}
             aria-label={reveal ? 'Parolni yashirish' : "Parolni ko'rsatish"}
+            aria-pressed={reveal}
             tabIndex={-1}
           >
             {reveal ? <EyeOff /> : <Icon name="eye" size={18} />}
@@ -69,7 +88,15 @@ export default function AuthField({
           <span>{error}</span>
         </div>
       )}
+      {isPassword && capsHint && caps && focused && !error && (
+        <div className="au-hint" role="status">
+          <Icon name="warning" size={14} />
+          <span>Caps Lock yoqilgan</span>
+        </div>
+      )}
       {children}
     </div>
   );
-}
+});
+
+export default AuthField;

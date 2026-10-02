@@ -175,7 +175,7 @@
 .au-inwrap { position: relative; flex: 1; height: 100%; margin-left: 12px; }
 .au-input {
   appearance: none; -webkit-appearance: none; width: 100%; height: 100%; padding: 18px 0 0;
-  background: transparent; border: 0; outline: 0; color: #fff; font: inherit; font-size: 15px; font-weight: 500;
+  background: transparent; border: 0; outline: 0; color: #fff; font: inherit; font-size: 16px; font-weight: 500;
   user-select: text; -webkit-user-select: text;
 }
 .au-input:-webkit-autofill {
@@ -251,6 +251,30 @@
 .au-root :focus-visible { outline: 2px solid #6ee7b7; outline-offset: 2px; }
 .au-box :focus-visible, .au-input:focus-visible { outline: none; }
 
+/* Caps Lock hint + "login not found -> register" prompt */
+.au-hint {
+  display: flex; align-items: center; gap: 6px; margin: 6px 4px 0; font-size: 12.5px; font-weight: 600; color: #fde68a;
+  animation: au-msg-in .28s cubic-bezier(.22, 1, .36, 1) both;
+}
+.au-hint svg { flex: none; }
+.au-cta-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 4px 4px 0; font-size: 12.5px; color: var(--au-muted);
+  animation: au-msg-in .28s cubic-bezier(.22, 1, .36, 1) both;
+}
+.au-inline-cta {
+  appearance: none; background: none; border: 0; padding: 4px 0; font: inherit; font-weight: 800; color: #6ee7b7; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.au-inline-cta:hover { color: #a7f3d0; }
+
+/* Full-width switch prompt under the form ("Hisobingiz yo'qmi? Ro'yxatdan o'tish") */
+.au-switch {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px 8px;
+  margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, .1);
+  font-size: 13.5px; color: var(--au-muted);
+}
+.au-link.strong { font-size: 14px; padding: 8px 2px; }
+
 /* ---------------- Keyframes ---------------- */
 @keyframes au-card-in { from { opacity: 0; transform: translateY(22px) scale(.97); } to { opacity: 1; transform: none; } }
 @keyframes au-shake { 10%, 90% { transform: translateX(-2px); } 20%, 80% { transform: translateX(4px); } 30%, 50%, 70% { transform: translateX(-7px); } 40%, 60% { transform: translateX(7px); } }
@@ -264,10 +288,49 @@
 @keyframes au-flare-pulse { 0%, 100% { opacity: .8; transform: scale(1); } 50% { opacity: 1; transform: scale(1.25); } }
 @keyframes au-beam-sway { 0%, 100% { transform: rotate(-4deg); opacity: .8; } 50% { transform: rotate(4deg); opacity: 1; } }
 
-@media (max-width: 420px) {
-  .au-root { padding: 20px 12px; align-items: flex-start; padding-top: 6vh; }
+/* ---------------- Responsive ----------------
+   Mobile-first: the base styles above fit a ~360px phone. Everything below
+   only adds to that. min-height uses dvh so mobile browser bars don't
+   push the card off-screen. */
+
+/* Phones (portrait): card sits near the top so the keyboard doesn't hide it,
+   and respects the notch / home-indicator safe areas. */
+@media (max-width: 480px) {
+  .au-root {
+    align-items: flex-start;
+    padding: max(20px, 5vh, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
   .au-card { padding: 22px 18px 20px; border-radius: 22px; }
   .au-title { font-size: 23px; }
+  .au-sub { font-size: 13px; margin-bottom: 18px; }
+}
+/* Very narrow phones (<= 360px) */
+@media (max-width: 360px) {
+  .au-card { padding: 20px 14px 18px; }
+  .au-box { height: 54px; padding: 0 12px; }
+  .au-title { font-size: 21px; }
+}
+/* Short landscape phones: drop the decorative logo so the form fits */
+@media (max-height: 560px) and (orientation: landscape) {
+  .au-root { align-items: flex-start; padding-top: max(14px, env(safe-area-inset-top)); }
+  .au-brand { display: none; }
+  .au-head { margin-bottom: 12px; }
+  .au-sub { margin-bottom: 14px; }
+}
+/* Touch screens: comfortable 44px tap targets */
+@media (hover: none) and (pointer: coarse) {
+  .au-iconbtn { width: 44px; height: 44px; }
+  .au-eye { width: 40px; height: 40px; }
+  .au-link { padding: 12px 4px; }
+  .au-link.strong, .au-inline-cta { padding: 12px 4px; }
+}
+/* Tablet and desktop: slightly roomier card */
+@media (min-width: 768px) {
+  .au-card { max-width: 440px; padding: 34px 32px 28px; }
+  .au-title { font-size: 28px; }
+}
+@media (min-width: 1280px) {
+  .au-card { max-width: 460px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .au-root *, .au-root *::before, .au-root *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }

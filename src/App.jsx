@@ -28,6 +28,10 @@ export default function App() {
   // Football Career Online while logged out.
   const [postAuthDestination, setPostAuthDestination] = useState('start');
 
+  // The login typed on one auth form is carried over when the person switches
+  // to the other one (Login <-> Register), so they never retype it.
+  const [authDraft, setAuthDraft] = useState('');
+
   // Sessiyani serverdan tekshiramiz (token localStorage'da, LEKIN haqiqiyligini
   // markazlashgan backend tasdiqlaydi — shuning uchun asinxron).
   useEffect(() => {
@@ -44,8 +48,13 @@ export default function App() {
   const handleAuthSuccess = async () => {
     const user = await getCurrentUser();
     setCurrentUser(user);
+    setAuthDraft('');
     setScreen(postAuthDestination);
   };
+
+  const leaveAuth = () => { setAuthDraft(''); setScreen('start'); };
+  const switchToRegister = (u) => { setAuthDraft(typeof u === 'string' ? u : ''); setScreen('register'); };
+  const switchToLogin = (u) => { setAuthDraft(typeof u === 'string' ? u : ''); setScreen('login'); };
 
   const handleLogout = async () => {
     await authLogout();
@@ -66,8 +75,8 @@ export default function App() {
   // The plain Login/Register buttons on the home screen should always land
   // back on the home screen after signing in - never straight into Football
   // Career Online, since that wasn't what was asked for.
-  const handleGoLogin = () => { setPostAuthDestination('start'); setScreen('login'); };
-  const handleGoRegister = () => { setPostAuthDestination('start'); setScreen('register'); };
+  const handleGoLogin = () => { setPostAuthDestination('start'); setAuthDraft(''); setScreen('login'); };
+  const handleGoRegister = () => { setPostAuthDestination('start'); setAuthDraft(''); setScreen('register'); };
 
   if (screen === 'matchsimulator') {
     return <Suspense fallback={<ScreenFallback />}><Home onExitToStart={() => setScreen('start')} /></Suspense>;
@@ -77,8 +86,9 @@ export default function App() {
     return (
       <LoginPage
         onSuccess={handleAuthSuccess}
-        onGoRegister={() => setScreen('register')}
-        onBack={() => setScreen('start')}
+        onGoRegister={switchToRegister}
+        onBack={leaveAuth}
+        initialUsername={authDraft}
       />
     );
   }
@@ -87,8 +97,9 @@ export default function App() {
     return (
       <RegisterPage
         onSuccess={handleAuthSuccess}
-        onGoLogin={() => setScreen('login')}
-        onBack={() => setScreen('start')}
+        onGoLogin={switchToLogin}
+        onBack={leaveAuth}
+        initialUsername={authDraft}
       />
     );
   }

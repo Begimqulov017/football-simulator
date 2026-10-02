@@ -17,6 +17,30 @@ export function validatePassword(v) {
   return '';
 }
 
+// Login only checks that the fields are filled in: the server stays the source
+// of truth for credentials (and older accounts may predate today's minimums),
+// so a "too short" rule here could lock a real person out.
+export function validateLoginUsername(v) {
+  return v.trim() ? '' : 'Loginni kiriting';
+}
+
+export function validateLoginPassword(v) {
+  return v ? '' : 'Parolni kiriting';
+}
+
+// True when the server's answer means "this login does not exist" - the one
+// failure where offering the Register screen is the natural next step.
+export function isUserNotFound(msg) {
+  return /topilmadi/i.test(msg || '');
+}
+
+// Auto-focusing on touch devices pops the keyboard over the card before the
+// person has even seen the form, so only do it with a fine pointer (mouse).
+export function canAutoFocus() {
+  if (typeof window === 'undefined' || !window.matchMedia) return true;
+  return window.matchMedia('(pointer: fine)').matches;
+}
+
 // The server answers with a single Uzbek sentence. Route it to the field it is
 // about so the red state appears on the right input; anything else (network
 // failure, "no slots left", ...) stays a form-level banner.
