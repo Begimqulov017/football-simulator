@@ -12,6 +12,7 @@
 import { INITIAL_TEAMS } from '../../data/teamsData';
 import { LEAGUES } from '../../data/leaguesData';
 import { getMergedSquad } from '../data/clubRosterStore';
+import { snapshotGoals, diffGoals, appendNews, buildRoundNews, buildCupNews, buildSeasonEndNews, buildMonthNews, buildTransferNews } from './newsGenerator';
 import { isMvpPerformance, resolveVeteranProgression, getRetirementChance, calcMainStats, calcGoalkeeperOVR, calcOVR, clampStat } from './statCalc';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -892,8 +893,17 @@ export function prepareNextDay(player) {
     }
     const effectivePlayer = clubTier === player.club.tier ? player : { ...player, club: { ...player.club, tier: clubTier } };
 
+    const goalsBefore = snapshotGoals(topScorers);
     const { updatedMatches, messages: roundMessages, playerPatch } = processRound(schedule[roundIdx], effectivePlayer, standings, topScorers);
     schedule = schedule.map((r, i) => (i === roundIdx ? { ...r, matches: updatedMatches } : r));
+
+    // News: blowout / upset / 9-10 ratings / Team of the Week (newsGenerator.js)
+    try {
+      career.newsFeed = appendNews(career.newsFeed, buildRoundNews({
+        round: schedule[roundIdx].round, date: newDate, day: newDay, matches: updatedMatches,
+        scorerDelta: diffGoals(goalsBefore, topScorers), player: effectivePlayer, playerPatch
+      }));
+    } catch (err) { console.error('News (round) failed', err); }
     messages = [...messages, ...roundMessages];
     if (playerPatch?.careerUpdate) career = { ...career, ...playerPatch.careerUpdate };
     if (playerPatch?.potential !== undefined) potential = playerPatch.potential;
@@ -930,6 +940,9 @@ export function prepareNextDay(player) {
       messages = [...messages, outcome.message];
       const fixture = cupRun.fixtures[cupRun.stage];
       const opponent = INITIAL_TEAMS.find((t) => t.id === fixture.opponentId);
+      try {
+        career.newsFeed = appendNews(career.newsFeed, buildCupNews({ player, cupRun, outcome, opponent, date: newDate, day: newDay }));
+      } catch (err) { console.error('News (cup) failed', err); }
       matchInfo = {
         opponentName: opponent?.name || 'Cup opponent',
         opponentLogo: opponent?.logo || '⚽',
@@ -959,6 +972,7 @@ export function prepareNextDay(player) {
         const transfers = maybeGenerateTransferMarketActivity(newDate);
         if (transfers.length) {
           career.transferLog = [...(career.transferLog || []), ...transfers].slice(-150);
+          career.newsFeed = appendNews(career.newsFeed, buildTransferNews(transfers, newDay));
         }
       }
     }
@@ -973,10 +987,23 @@ export function prepareNextDay(player) {
     career.money = (career.money || 0) + (career.weeklyWage || 0);
   }
 
+  // News: Team of the Month - fires on the first day of a new calendar month,
+  // looking back at the month that just ended.
+  const prevMonth = player.career.gameDate.slice(0, 7);
+  if (newDate.slice(0, 7) !== prevMonth) {
+    try {
+      career.newsFeed = appendNews(career.newsFeed, buildMonthNews({ player: { ...player, career }, monthKey: prevMonth, date: newDate, day: newDay }));
+    } catch (err) { console.error('News (month) failed', err); }
+  }
+
   // Season end: once every fixture in the schedule has been played, crown a
   // champion, hand out the Golden Boot, record this season in history, and
   // generate the next one - seasons run indefinitely, one after another.
   if (schedule.length && schedule.every((r) => r.matches.every((m) => m.played))) {
+    // News: league champions - must be built BEFORE standings are reset.
+    try {
+      career.newsFeed = appendNews(career.newsFeed, buildSeasonEndNews({ player, standings, topScorers, date: newDate, day: newDay }));
+    } catch (err) { console.error('News (season end) failed', err); }
     const seasonResult = finalizeSeason(player, career, standings, topScorers, schedule, messages);
     career = { ...career, ...seasonResult };
     schedule = seasonResult.schedule;
