@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import AppShell from '../components/AppShell';
 import { fetchAllCareerUsers, checkBackendVersion, REQUIRED_SERVER_VERSION } from '../utils/careerApi';
 import Icon from '../../components/Icon';
+import { displayRating } from '../utils/statCalc';
 
 function formatMoney(n) {
   if (n == null) return '-';
@@ -82,7 +83,7 @@ export default function UsersPage({ currentUser }) {
                 </div>
                 <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--accent-gold)' }}>
-                    {u.overall ?? '-'}
+                    {displayRating(u.overall) ?? '-'}
                   </div>
                   <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>OVR</div>
                 </div>

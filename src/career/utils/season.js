@@ -13,7 +13,7 @@ import { INITIAL_TEAMS } from '../../data/teamsData';
 import { LEAGUES } from '../../data/leaguesData';
 import { getMergedSquad } from '../data/clubRosterStore';
 import { snapshotGoals, diffGoals, appendNews, buildRoundNews, buildCupNews, buildSeasonEndNews, buildMonthNews, buildTransferNews } from './newsGenerator';
-import { isMvpPerformance, resolveVeteranProgression, getRetirementChance, calcMainStats, calcGoalkeeperOVR, calcOVR, clampStat } from './statCalc';
+import { isMvpPerformance, resolveVeteranProgression, getRetirementChance, calcMainStats, calcGoalkeeperOVR, calcOVR, clampPrecise } from './statCalc';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -363,13 +363,13 @@ function processRound(round, player, standings, topScorers) {
       let potential = player.potential;
       let injury = player.career.injury;
 
-      if (pStats.rating < 5.0 && Math.random() < 0.3) potential = Math.max(player.overall, potential - 1);
+      if (pStats.rating < 5.0 && Math.random() < 0.3) potential = Math.max(Math.ceil(player.overall), potential - 1);
       if (player.age >= 24 && player.age <= 29 && pStats.rating >= 8.5 && Math.random() < 0.4) {
         potential = Math.min(99, potential + 1);
       }
       if (pStats.injured) {
         injury = { daysLeft: pStats.injuryDays, description: 'Match injury' };
-        potential = Math.max(player.overall, potential - randInt(1, 3));
+        potential = Math.max(Math.ceil(player.overall), potential - randInt(1, 3));
       }
 
       let body = `${resultLine}. You played ${pStats.minutes}' and rated ${pStats.rating}/10`;
@@ -812,10 +812,10 @@ export function prepareNextDay(player) {
       const isGk = player.position === 'GK';
       const decline = 1 + Math.random(); // 1.0-2.0 stat point, har yili
       const newSubStats = {};
-      Object.keys(subStats || {}).forEach((k) => { newSubStats[k] = clampStat(subStats[k] - decline); });
+      Object.keys(subStats || {}).forEach((k) => { newSubStats[k] = clampPrecise(subStats[k] - decline); });
       subStats = newSubStats;
-      mainStats = isGk ? subStats : calcMainStats(subStats);
-      overall = isGk ? calcGoalkeeperOVR(subStats) : calcOVR(player.position, mainStats);
+      mainStats = isGk ? subStats : calcMainStats(subStats, { precise: true });
+      overall = isGk ? calcGoalkeeperOVR(subStats, { precise: true }) : calcOVR(player.position, mainStats, { precise: true });
       messages = [...messages, {
         id: newId('msg'), type: 'club', date: newDate, from: player.club.name,
         subject: 'Age is catching up',

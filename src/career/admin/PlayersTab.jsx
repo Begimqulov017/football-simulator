@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import RatingBadge from '../../components/match/RatingBadge';
 import { fetchAdminPlayers } from '../utils/careerApi';
 import { useFetch, Panel, Loading, ErrorBox, Empty, Stat, inputCls } from './adminUi';
+import { displayRating } from '../utils/statCalc';
 
 const SORTS = {
   goals: { label: 'Gollar', get: (p) => p.goals },
@@ -92,7 +93,7 @@ export default function PlayersTab() {
                         <div className="text-[11px] text-ink-muted">@{p.username}{p.isAdmin ? ' · admin' : ''}</div>
                       </td>
                       <td className="px-2 whitespace-nowrap">{p.club?.logo} {p.club?.name || <span className="text-ink-muted">Erkin agent</span>}</td>
-                      <td className="px-2 text-center tabular-nums">{p.overall}<span className="text-ink-subtle">/{p.potential}</span></td>
+                      <td className="px-2 text-center tabular-nums">{displayRating(p.overall)}<span className="text-ink-subtle">/{p.potential}</span></td>
                       <td className="px-2 text-center tabular-nums">{p.appearances}</td>
                       <td className="px-2 text-center tabular-nums font-extrabold">{p.goals}</td>
                       <td className="px-2 text-center tabular-nums font-extrabold">{p.assists}</td>

@@ -138,6 +138,7 @@ const SUB = [
   { key: 'leagues', label: 'Ligalar' },
   { key: 'ucl', label: 'Champions League' },
   { key: 'uel', label: 'Europa League' },
+  { key: 'acl', label: 'AFC Champions League' },
   { key: 'intl', label: 'Xalqaro turnirlar' },
   { key: 'sim', label: 'Simulyatsiya tarixi' },
 ];
@@ -150,6 +151,7 @@ export default function LeaguesTab() {
       {sub === 'leagues' && <LeagueBrowser />}
       {sub === 'ucl' && <CompetitionList key="ucl" fetcher={fetchContinental} pick={(d) => d.active.filter((c) => c.key === 'ucl')} mode="club" emptyText="Chempionlar Ligasi mavsum boshida (1-sentabrdan) avtomatik yaratiladi. Adminda kunlarni o'tkazing." />}
       {sub === 'uel' && <CompetitionList key="uel" fetcher={fetchContinental} pick={(d) => d.active.filter((c) => c.key === 'uel')} mode="club" emptyText="Yevropa Ligasi mavsum boshida (1-sentabrdan) avtomatik yaratiladi." />}
+      {sub === 'acl' && <CompetitionList key="acl" fetcher={fetchContinental} pick={(d) => d.active.filter((c) => c.key === 'acl')} mode="club" emptyText="AFC Champions League mavsum boshida (1-sentabrdan) avtomatik yaratiladi." />}
       {sub === 'intl' && <CompetitionList key="intl" fetcher={fetchInternational} pick={(d) => d.tournaments} mode="nation" emptyText="Hozir faol xalqaro turnir yo'q (Jahon Chempionati, Yevro va h.k. kalendar bo'yicha boshlanadi)." />}
       {sub === 'sim' && <SimHistory />}
     </div>

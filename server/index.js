@@ -27,13 +27,18 @@ const engine = require('./engine');
 const international = require('./international');
 const continental = require('./continental');
 const awards = require('./awards');
+const { mergeServerOwnedFields } = require('./careerMerge');
+
+
+// Phase 7: player.overall is stored with 2 decimals; everyone else sees it rounded naturally (72.50 -> 73).
+const roundOvr = (n) => (n == null ? n : Math.round(Math.round(n * 100) / 100));
 
 const PORT = process.env.PORT || 4000;
 
 // Bumped every time server/index.js gets new endpoints/fields the frontend
 // depends on, so the frontend can detect "siz eski backend'ni ishlatyapsiz,
 // qayta deploy qiling" instead of showing a confusing generic network error.
-const SERVER_VERSION = 12;
+const SERVER_VERSION = 13;
 const MAX_USERS = 10; // admin ham shu songa kiradi
 
 // Retiring at or above this rating gets its own headline in the season
@@ -118,7 +123,7 @@ function careerSummary(u) {
     name: p.name,
     surname: p.surname,
     position: p.position,
-    overall: p.overall,
+    overall: roundOvr(p.overall),
     potential: p.potential,
     age: p.age,
     club: p.club ? {
@@ -328,7 +333,9 @@ app.post('/api/career/save', authMiddleware, (req, res) => {
   const { player } = req.body || {};
   const db = req.db;
   const target = db.users.find((u) => u.username === req.user.username);
-  target.careerSave = player || null;
+  // Server yozgan maydonlar (mukofotlar, terma jamoa) klientning eskirgan
+  // nusxasi bilan ustidan yozilib ketmasin - birlashtiramiz.
+  target.careerSave = player ? mergeServerOwnedFields(target.careerSave, player) : null;
   target.careerSavedAt = new Date().toISOString();
   writeDB(db);
   res.json({ ok: true });
@@ -382,7 +389,7 @@ app.get('/api/career/club-roster/:clubId', authMiddleware, (req, res) => {
       username: u.username,
       name: `${u.careerSave.name} ${u.careerSave.surname}`,
       position: u.careerSave.position,
-      overall: u.careerSave.overall,
+      overall: roundOvr(u.careerSave.overall),
       tier: u.careerSave.club?.tier || 'bench',
       isYou: u.username === req.user.username
     }));
@@ -473,9 +480,9 @@ app.post('/api/career/submit-match-result', authMiddleware, (req, res) => {
     const mySquad = world.squads[myTeamId] || [];
     const myPlayerId = req.user.careerSave?.id;
     const remainingGoals = Math.max(0, (myTeamGoals || 0) - (myGoals || 0));
-    engine.distributeGoals(
+    engine.distributeMatch(
       mySquad, myTeamId, pending.isHome ? homeTeam.name : awayTeam.name,
-      remainingGoals, world.topScorers, [myPlayerId].filter(Boolean)
+      remainingGoals, (pending.isHome ? golB : golA) || 0, world.topScorers, [myPlayerId].filter(Boolean)
     );
   }
 
@@ -488,8 +495,8 @@ app.post('/api/career/submit-match-result', authMiddleware, (req, res) => {
   const humanEntries = [];
   usersInLeagueForMatch.forEach((u) => {
     const cid = u.careerSave.club.id;
-    if (cid === pending.home) humanEntries.push({ side: 'home', id: u.careerSave.id, name: `${u.careerSave.name} ${u.careerSave.surname}`, pos: u.careerSave.position, ovr: u.careerSave.overall });
-    if (cid === pending.away) humanEntries.push({ side: 'away', id: u.careerSave.id, name: `${u.careerSave.name} ${u.careerSave.surname}`, pos: u.careerSave.position, ovr: u.careerSave.overall });
+    if (cid === pending.home) humanEntries.push({ side: 'home', id: u.careerSave.id, name: `${u.careerSave.name} ${u.careerSave.surname}`, pos: u.careerSave.position, ovr: roundOvr(u.careerSave.overall) });
+    if (cid === pending.away) humanEntries.push({ side: 'away', id: u.careerSave.id, name: `${u.careerSave.name} ${u.careerSave.surname}`, pos: u.careerSave.position, ovr: roundOvr(u.careerSave.overall) });
   });
   m.played = true; m.pending = false; m.golA = golA; m.golB = golB; m.humanPlayed = true; m.humanEntries = humanEntries;
 
@@ -855,8 +862,28 @@ function rolloverSeason(world, league, db) {
     championId: championId || null,
     championName,
     table: table.slice(0, 5),
-    topScorers: topScorerList.slice(0, 3)
+    topScorers: topScorerList.slice(0, 3),
+    ...(() => {
+      const lead = engine.buildLeaders(world.topScorers, { limit: 1 });
+      return { topAssist: lead.assists[0] || null, topRated: lead.ratings[0] || null };
+    })()
   }].slice(-20);
+
+  // Phase 5: kubok g'olibi arxivi (yangi mavsumda world.cup almashtirilgani uchun
+  // aks holda kubok tarixi yo'qolib ketardi).
+  if (world.cup) {
+    const lastRound = world.cup.rounds?.[world.cup.rounds.length - 1];
+    const fin = lastRound?.matches?.[0];
+    const cupChamp = world.cup.championId || null;
+    const cupRunner = cupChamp && fin ? (fin.home === cupChamp ? fin.away : fin.home) : null;
+    const nm = (id) => (id ? engine.INITIAL_TEAMS.find((t) => t.id === id)?.name || id : null);
+    world.cupHistory = [...(world.cupHistory || []), {
+      season: finishedSeason, name: world.cup.name,
+      championId: cupChamp, championName: nm(cupChamp),
+      runnerUpId: cupRunner, runnerUpName: nm(cupRunner),
+      finalScore: fin && cupChamp ? { golA: fin.golA, golB: fin.golB, home: fin.home, away: fin.away } : null,
+    }].slice(-20);
+  }
 
   // 3) News: the champion, the famous retirements (OVR >= 80) called out
   //    separately from the long tail, and the academy intake headline.
@@ -1009,24 +1036,98 @@ function resolveCupRoundForLeague(db, leagueId, newDate) {
 // world (season/day/date) if one has been created yet, plus a flag for the
 // requesting user's own club/league. Any logged-in user can call this - it's
 // what lets someone browse a league they've never played in.
+const LEAGUE_REGION = {
+  uzbekistan_super_league: 'AFC', saudi_pro_league: 'AFC', j1_league: 'AFC', k_league: 'AFC',
+  qatar_stars_league: 'AFC', uae_pro_league: 'AFC', iran_pro_league: 'AFC', iraqi_premier_league: 'AFC',
+  chinese_super_league: 'AFC', a_league: 'AFC', mls: 'CONCACAF',
+};
+const regionOfLeague = (id) => LEAGUE_REGION[id] || 'UEFA';
+const teamInfo = (id) => engine.INITIAL_TEAMS.find((t) => t.id === id) || { name: id, logo: '⚽' };
+
 app.get('/api/leagues', authMiddleware, (req, res) => {
   const db = req.db;
   const myLeagueId = req.user.careerSave?.club?.leagueId || null;
   const leagues = engine.LEAGUES.map((l) => {
     const world = db.leagueWorlds?.[l.id];
+    const top = world?.standings ? engine.sortedTable(world.standings)[0] : null;
+    const lastChamp = (world?.seasonHistory || []).slice(-1)[0] || null;
     return {
       id: l.id,
       name: l.name,
       country: l.country,
       flag: l.flag,
+      region: regionOfLeague(l.id),
+      division: 1,
       teamCount: l.teamIds.length,
       isMine: l.id === myLeagueId,
       season: world?.season || null,
       day: world?.day || null,
       gameDate: world?.gameDate || null,
+      leader: top && top.played > 0 ? { id: top.teamId, name: teamInfo(top.teamId).name, logo: teamInfo(top.teamId).logo, pts: top.pts, played: top.played } : null,
+      lastChampion: lastChamp ? { season: lastChamp.season, id: lastChamp.championId, name: lastChamp.championName, logo: teamInfo(lastChamp.championId).logo } : null,
     };
   });
   res.json({ ok: true, worldDate: db.worldDate || null, leagues });
+});
+
+// ------------------------------------------------------------
+// Phase 5: Leagues & Tournaments Dashboard (faqat o'qish; world YARATMAYDI)
+// ------------------------------------------------------------
+const cupStageLabel = (matchCount) => ({ 1: 'Final', 2: 'Yarim final', 4: 'Chorak final', 8: '1/8 final' }[matchCount] || `${matchCount * 2} jamoa bosqichi`);
+
+// Bitta liga: statistika peshqadamlari + chempionlar tarixi + kubok g'oliblari
+app.get('/api/hub/league/:leagueId', authMiddleware, (req, res) => {
+  const db = req.db;
+  const league = engine.LEAGUES.find((l) => l.id === req.params.leagueId);
+  if (!league) return res.status(404).json({ ok: false, error: 'Liga topilmadi' });
+  const world = db.leagueWorlds?.[league.id] || null;
+  const champions = (world?.seasonHistory || []).slice().reverse().map((h) => ({
+    season: h.season, id: h.championId, name: h.championName, logo: teamInfo(h.championId).logo,
+    pts: h.table?.[0]?.pts ?? null, played: h.table?.[0]?.played ?? null,
+    topScorer: h.topScorers?.[0] || null, topAssist: h.topAssist || null, topRated: h.topRated || null,
+  }));
+  const cupChampions = (world?.cupHistory || []).slice().reverse().map((h) => ({
+    season: h.season, name: h.name, id: h.championId, champion: h.championName, logo: h.championId ? teamInfo(h.championId).logo : null,
+    runnerUp: h.runnerUpName, runnerUpLogo: h.runnerUpId ? teamInfo(h.runnerUpId).logo : null, finalScore: h.finalScore,
+  }));
+  res.json({
+    ok: true,
+    started: !!world,
+    league: { id: league.id, name: league.name, country: league.country, flag: league.flag, region: regionOfLeague(league.id) },
+    season: world?.season || null, day: world?.day || null, gameDate: world?.gameDate || null,
+    leaders: engine.buildLeaders(world?.topScorers || {}, { limit: 10 }),
+    champions, cupChampions,
+  });
+});
+
+// Barcha ligalarning ichki kuboklari (joriy holat + g'oliblar tarixi)
+app.get('/api/hub/cups', authMiddleware, (req, res) => {
+  const db = req.db;
+  const cups = engine.LEAGUES.map((league) => {
+    const world = db.leagueWorlds?.[league.id] || null;
+    const cup = world?.cup || null;
+    let current = null;
+    if (cup?.rounds?.length) {
+      const round = cup.rounds[cup.rounds.length - 1];
+      const real = round.matches.filter((m) => m.away !== null);
+      current = {
+        label: cupStageLabel(round.matches.length), round: round.round, date: round.date,
+        played: real.filter((m) => m.played).length, total: real.length,
+      };
+    }
+    const history = (world?.cupHistory || []).slice().reverse().map((h) => ({
+      season: h.season, id: h.championId, champion: h.championName, logo: h.championId ? teamInfo(h.championId).logo : null,
+      runnerUp: h.runnerUpName, runnerUpLogo: h.runnerUpId ? teamInfo(h.runnerUpId).logo : null, finalScore: h.finalScore,
+    }));
+    return {
+      leagueId: league.id, leagueName: league.name, country: league.country, flag: league.flag, region: regionOfLeague(league.id),
+      started: !!cup, name: cup?.name || `${league.country} Cup`, season: world?.season || null,
+      current, championId: cup?.championId || null,
+      champion: cup?.championId ? { name: teamInfo(cup.championId).name, logo: teamInfo(cup.championId).logo } : null,
+      history,
+    };
+  });
+  res.json({ ok: true, cups });
 });
 
 // Read-only: current shared schedule/standings for a league, so any client
@@ -1304,7 +1405,7 @@ app.get('/api/admin/players', authMiddleware, adminMiddleware, (req, res) => {
       position: p?.position || null,
       nationality: p?.nationality || null,
       age: p?.age ?? null,
-      overall: p?.overall ?? null,
+      overall: roundOvr(p?.overall) ?? null,
       potential: p?.potential ?? null,
       club: p?.club ? { id: p.club.id, name: p.club.name, logo: p.club.logo, leagueName: p.club.leagueName, flag: p.club.flag, tier: p.club.tier, role: p.club.role || null } : null,
       goals: c.goals || 0,
@@ -1393,7 +1494,11 @@ app.get('/api/admin/awards-preview/:leagueId', authMiddleware, adminMiddleware, 
 // Chempionlar Ligasi / Yevropa Ligasi (hamma login qilgan foydalanuvchi ko'ra oladi)
 app.get('/api/continental', authMiddleware, (req, res) => {
   const c = continental.ensureContinental(req.db);
-  const strip = (comp) => ({ ...comp, results: comp.results.slice(-40) });
+  // topScorers (har bir o'yinchining to'liq statistikasi) javobda faqat peshqadamlar ko'rinishida yuboriladi
+  const strip = (comp) => {
+    const leaders = engine.buildLeaders(comp.topScorers, { limit: 10 });
+    return { ...comp, results: comp.results.slice(-40), topScorers: leaders.scorers, leaders };
+  };
   res.json({ ok: true, active: c.active.map(strip), history: c.history, news: c.newsLog.slice(0, 40) });
 });
 
@@ -1441,7 +1546,9 @@ app.get('/api/international', authMiddleware, (req, res) => {
     startDate: t.startDate, finished: t.finished, winner: t.winner, runnerUp: t.runnerUp,
     groups: t.groups.map((g) => ({ name: g.name, table: Object.values(g.table).sort((a, b) => (b.pts - a.pts) || ((b.gf - b.ga) - (a.gf - a.ga))) })),
     knockout: t.knockout,
-    topScorers: Object.values(t.topScorers).sort((a, b) => b.goals - a.goals).slice(0, 10),
+    confederation: t.confederation || null,
+    topScorers: engine.buildLeaders(t.topScorers, { limit: 10 }).scorers,
+    leaders: engine.buildLeaders(t.topScorers, { limit: 10 }),
     recentResults: t.results.slice(-12)
   }));
   res.json({

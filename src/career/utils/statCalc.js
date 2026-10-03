@@ -78,6 +78,29 @@ export const GK_SUB_STAT_WEIGHTS = {
 
 const clamp = (n, min = 0, max = 99) => Math.max(min, Math.min(max, Math.round(n)));
 
+// ---------------------------------------------------------------------------
+// PHASE 7 - high-precision ratings
+// ---------------------------------------------------------------------------
+// Player sub-stats / main stats / OVR may now be stored as 2-decimal floats
+// (e.g. 72.12). Legacy saves (plain integers) keep working untouched.
+//   * Training page  -> shows the exact value: formatPrecise(72.12) = "72.12"
+//   * Everywhere else -> displayRating(72.50) = 73, displayRating(72.49) = 72
+// Because stored values are always rounded to 2 decimals first, the 72.50
+// boundary is exact (no 72.4999999 float surprises).
+export const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+
+export const clampPrecise = (n, min = 0, max = 99) => Math.max(min, Math.min(max, round2(n)));
+
+// Natural rounding for every non-training UI surface. null/undefined pass
+// through so callers can keep their `?? '--'` fallbacks.
+export const displayRating = (n) => (n == null || Number.isNaN(Number(n)) ? null : Math.round(round2(n)));
+
+// Exact value for the Training page ("72.12"). Always `decimals` places.
+export const formatPrecise = (n, decimals = 2) => (n == null || Number.isNaN(Number(n)) ? '--' : Number(n).toFixed(decimals));
+
+// "+0.12" / "-0.03" / "+0.00"
+export const formatDelta = (n, decimals = 2) => `${n < 0 ? '-' : '+'}${Math.abs(Number(n) || 0).toFixed(decimals)}`;
+
 // Weighted average of an object of { key: value } against a { key: weight } map.
 function weightedAverage(values, weights) {
   let total = 0;
@@ -92,24 +115,25 @@ function weightedAverage(values, weights) {
 }
 
 // Turn a set of sub-stats into the 6 main stats (PAC/SHO/PAS/DRI/DEF/PHY).
-export function calcMainStats(subStats) {
+export function calcMainStats(subStats, { precise = false } = {}) {
+  const fix = precise ? clampPrecise : clamp;
   const mains = {};
   Object.entries(SUB_STAT_WEIGHTS).forEach(([mainKey, weights]) => {
-    mains[mainKey] = clamp(weightedAverage(subStats, weights));
+    mains[mainKey] = fix(weightedAverage(subStats, weights));
   });
   return mains;
 }
 
 // Goalkeeper overall is simply its own weighted sub-stat block.
-export function calcGoalkeeperOVR(gkSubStats) {
-  return clamp(weightedAverage(gkSubStats, GK_SUB_STAT_WEIGHTS));
+export function calcGoalkeeperOVR(gkSubStats, { precise = false } = {}) {
+  return (precise ? clampPrecise : clamp)(weightedAverage(gkSubStats, GK_SUB_STAT_WEIGHTS));
 }
 
 // Outfield overall rating for a given position, from the 6 main stats.
-export function calcOVR(position, mainStats) {
+export function calcOVR(position, mainStats, { precise = false } = {}) {
   if (position === 'GK') return mainStats.ovr || 0;
   const weights = POSITION_WEIGHTS[position] || POSITION_WEIGHTS.CM;
-  return clamp(weightedAverage(mainStats, weights));
+  return (precise ? clampPrecise : clamp)(weightedAverage(mainStats, weights));
 }
 
 // Generate a plausible sub-stat spread for a target main-stat value, so a
@@ -188,14 +212,117 @@ export const TRAINING_FOCUS = {
 // are noticeably slow to earn (e.g. only 2 OVR of room left trains at
 // roughly a tenth of full speed) - climbing all the way to your ceiling
 // should feel like a season-long grind, not a couple of weeks.
-export function computeTrainingGain(focusId, age, potential, currentOvr) {
+export function computeTrainingGain(focusId, age, potential, currentOvr, rng = Math.random) {
   const focus = TRAINING_FOCUS[focusId];
   if (!focus) return 0;
   const ageMult = age <= 29 ? (getAgeMultiplier(age) || 0.3) : 0.3;
   const room = Math.max(0, potential - currentOvr);
   const roomFactor = Math.pow(Math.min(1, room / 15), 1.7) * 0.9 + 0.05;
-  const variance = 0.55 + Math.random() * 0.7;
+  const variance = 0.55 + rng() * 0.7;
   return Math.round(focus.statGain * ageMult * roomFactor * variance * 100) / 100;
+}
+
+// ---------------------------------------------------------------------------
+// PHASE 7 - one full training session, as a pure function.
+// ---------------------------------------------------------------------------
+// Takes the current player + the 3 chosen main stats + a focus, and returns
+//   patch  - the fields to merge into the player (overall/subStats/mainStats/career)
+//   report - an exact, per-attribute breakdown for the UI (also saved on
+//            career.lastTraining so the Training page can show it again later)
+// Each chosen main stat gets its own random roll (0.6-1.4x, mean 1.0) and so
+// does every sub-attribute inside it (0.75-1.25x), so a session reads like
+// "PAC +0.12, SHO +0.08, PHY +0.25" instead of the same number three times.
+// The yearly OVR cap (yearlyOvrCap) still applies to the whole session.
+export function simulateTrainingSession({ player, selected, focusId, rng = Math.random }) {
+  const isGk = player.position === 'GK';
+  const focusDef = TRAINING_FOCUS[focusId];
+  const career = player.career;
+
+  const baseGain = computeTrainingGain(focusId, player.age, player.potential, player.overall, rng);
+  const fullGain = baseGain * (career.perks?.fitnessTrainer ? 1.25 : 1);
+
+  // Roll every multiplier ONCE so scaling a session down to the yearly cap
+  // keeps the relative proportions between attributes.
+  const rolls = {};
+  selected.forEach((key) => {
+    const subKeys = isGk ? [key] : Object.keys(SUB_STAT_WEIGHTS[key] || {});
+    const subs = {};
+    subKeys.forEach((sk) => { subs[sk] = 0.75 + rng() * 0.5; });
+    rolls[key] = { mult: 0.6 + rng() * 0.8, subs };
+  });
+
+  const applyGain = (scale) => {
+    const stats = { ...player.subStats };
+    selected.forEach((key) => {
+      Object.entries(rolls[key].subs).forEach(([sk, m]) => {
+        stats[sk] = clampPrecise((stats[sk] || 0) + fullGain * scale * rolls[key].mult * m);
+      });
+    });
+    const mainStats = isGk ? stats : calcMainStats(stats, { precise: true });
+    const ovr = isGk ? calcGoalkeeperOVR(stats, { precise: true }) : calcOVR(player.position, mainStats, { precise: true });
+    return { stats, mainStats, ovr };
+  };
+
+  const preview = applyGain(1);
+  const rawDelta = Math.max(0, preview.ovr - player.overall);
+  const cap = yearlyOvrCap(player.age);
+  const used = career.growthUsedThisYear || 0;
+  const remaining = Math.max(0, cap - used);
+  const scale = rawDelta > 0 ? Math.min(1, remaining / rawDelta) : 1;
+
+  const result = scale >= 1 ? preview : applyGain(scale);
+  const newOvr = round2(Math.min(result.ovr, player.potential));
+  const actualDelta = Math.max(0, round2(newOvr - player.overall));
+
+  let injury = career.injury;
+  let newInjury = null;
+  if (!injury && rng() < focusDef.injuryRisk) {
+    injury = { daysLeft: Math.floor(rng() * 8) + 3, description: 'Training injury' };
+    newInjury = injury;
+  }
+
+  const stats = {};
+  selected.forEach((key) => {
+    const before = player.mainStats[key] ?? 0;
+    const after = result.mainStats[key] ?? before;
+    stats[key] = {
+      before, after, delta: round2(after - before),
+      subs: Object.keys(rolls[key].subs).map((sk) => {
+        const sb = player.subStats[sk] ?? 0;
+        const sa = result.stats[sk] ?? sb;
+        return { key: sk, before: sb, after: sa, delta: round2(sa - sb) };
+      })
+    };
+  });
+
+  const report = {
+    date: career.gameDate,
+    focus: focusId,
+    ovrBefore: round2(player.overall),
+    ovrAfter: newOvr,
+    ovrDelta: actualDelta,
+    capped: scale < 1,
+    capReached: remaining <= 0,
+    injury: newInjury,
+    stats
+  };
+
+  return {
+    patch: {
+      overall: newOvr,
+      subStats: result.stats,
+      mainStats: result.mainStats,
+      career: {
+        ...career,
+        trainingDate: career.gameDate,
+        stamina: clampStat(career.stamina - focusDef.staminaCost, 0, 100),
+        growthUsedThisYear: round2(used + actualDelta),
+        injury,
+        lastTraining: report
+      }
+    },
+    report
+  };
 }
 
 export function clampStat(n, min = 0, max = 99) {

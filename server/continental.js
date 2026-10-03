@@ -21,10 +21,21 @@ const UEFA_LEAGUE_IDS = [
   'primeira_liga', 'eredivisie', 'belgian_pro_league', 'super_lig', 'swiss_super_league',
 ];
 
-const COMPETITIONS = [
-  { key: 'ucl', name: 'UEFA Champions League', short: 'CL', size: 32, perLeagueCap: 5, offset: 0 },
-  { key: 'uel', name: 'UEFA Europa League', short: 'EL', size: 32, perLeagueCap: 4, offset: 1 },
+// AFC Champions League (Phase 5): Osiyo ligalaridagi klublar. O'yindagi AFC
+// klublari soni oz (52 ta), shuning uchun 16 jamoali format (4 guruh).
+const AFC_LEAGUE_IDS = [
+  'uzbekistan_super_league', 'saudi_pro_league', 'j1_league', 'k_league', 'qatar_stars_league',
+  'uae_pro_league', 'iran_pro_league', 'iraqi_premier_league', 'chinese_super_league', 'a_league',
 ];
+
+// `pool` - qaysi klublar to'plamidan tanlanadi; bir pool ichidagi turnirlar
+// (UCL/UEL) bir klubni ikki marta olmaydi.
+const COMPETITIONS = [
+  { key: 'ucl', name: 'UEFA Champions League', short: 'CL', size: 32, perLeagueCap: 5, offset: 0, pool: 'uefa' },
+  { key: 'uel', name: 'UEFA Europa League', short: 'EL', size: 32, perLeagueCap: 4, offset: 1, pool: 'uefa' },
+  { key: 'acl', name: 'AFC Champions League', short: 'ACL', size: 16, perLeagueCap: 3, offset: 2, pool: 'afc' },
+];
+const POOL_LEAGUES = { uefa: UEFA_LEAGUE_IDS, afc: AFC_LEAGUE_IDS };
 
 // Mavsum yili Y uchun sanalar (offset — EL bir kun keyin o'ynaydi)
 const GROUP_MMDD = ['-09-15', '-10-27', '-12-01'];
@@ -71,9 +82,9 @@ const pushNews = (c, entry) => { c.newsLog = [entry, ...c.newsLog].slice(0, 120)
 // ------------------------------------------------------------
 // Ishtirokchilarni tanlash va guruhlarga bo'lish
 // ------------------------------------------------------------
-function rankedEuropeanClubs(db) {
+function rankedClubs(db, leagueIds) {
   const list = [];
-  UEFA_LEAGUE_IDS.forEach((lid) => {
+  leagueIds.forEach((lid) => {
     const league = LEAGUES.find((l) => l.id === lid);
     if (!league) return;
     league.teamIds.forEach((id) => {
@@ -148,8 +159,8 @@ function playMatch(db, comp, aId, bId, allowDraw) {
   const { golA, golB } = engine.simulateTeamMatch(sa, sb);
   const nameA = comp.clubs[aId].name;
   const nameB = comp.clubs[bId].name;
-  engine.distributeGoals(sa, aId, nameA, golA, comp.topScorers, []);
-  engine.distributeGoals(sb, bId, nameB, golB, comp.topScorers, []);
+  engine.distributeMatch(sa, aId, nameA, golA, golB, comp.topScorers, []);
+  engine.distributeMatch(sb, bId, nameB, golB, golA, comp.topScorers, []);
   let penalties = null;
   if (!allowDraw && golA === golB) {
     const edge = (comp.clubs[aId].strength - comp.clubs[bId].strength) / 40;
@@ -241,12 +252,17 @@ function advanceContinental(db, date) {
   const season = seasonYearOf(date);
   if (date >= `${season}${SEASON_START_MMDD}`) {
     const exists = (key) => [...c.active, ...c.history].some((x) => x.id === `${key}_${season}`);
-    if (COMPETITIONS.some((d) => !exists(d.key))) {
-      const ranked = rankedEuropeanClubs(db);
-      const taken = new Set();
-      COMPETITIONS.forEach((def) => {
-        if (exists(def.key)) return;
-        const field = pickField(ranked, def.size, def.perLeagueCap, taken);
+    // Turnir birinchi guruh kunidan KEYIN yaratilsa, guruh o'yinlari hech qachon
+    // o'ynalmay qolardi - shuning uchun bunday mavsum o'tkazib yuboriladi.
+    const canStart = (def) => date <= addDays(`${season}${GROUP_MMDD[0]}`, def.offset);
+    const pending = COMPETITIONS.filter((d) => !exists(d.key) && canStart(d));
+    if (pending.length) {
+      const ranked = {};
+      const taken = {};
+      pending.forEach((def) => {
+        ranked[def.pool] = ranked[def.pool] || rankedClubs(db, POOL_LEAGUES[def.pool]);
+        taken[def.pool] = taken[def.pool] || new Set();
+        const field = pickField(ranked[def.pool], def.size, def.perLeagueCap, taken[def.pool]);
         if (!field) return;
         const comp = createCompetition(def, season, field);
         c.active.push(comp);
@@ -276,11 +292,11 @@ function advanceContinental(db, date) {
           detail: `Finalda ${comp.clubs[comp.runnerUp].name} mag'lub bo'ldi${scorers[0] ? ` · eng ko'p gol: ${scorers[0].name} (${scorers[0].goals})` : ''}`,
         });
         c.history = [{
-          id: comp.id, name: comp.name, short: comp.short, season: comp.season,
+          id: comp.id, key: comp.key, name: comp.name, short: comp.short, season: comp.season,
           winner: { id: comp.winner, name: w.name, logo: w.logo },
           runnerUp: { id: comp.runnerUp, name: comp.clubs[comp.runnerUp].name, logo: comp.clubs[comp.runnerUp].logo },
-          topScorer: scorers[0] || null, final: comp.knockout[comp.knockout.length - 1].ties[0],
-        }, ...c.history].slice(0, 30);
+          topScorer: scorers[0] || null, topAssist: engine.buildLeaders(comp.topScorers, { limit: 1 }).assists[0] || null, final: comp.knockout[comp.knockout.length - 1].ties[0],
+        }, ...c.history].slice(0, 60);
       }
     }
   });
@@ -290,4 +306,4 @@ function advanceContinental(db, date) {
   return events;
 }
 
-module.exports = { advanceContinental, ensureContinental, COMPETITIONS, UEFA_LEAGUE_IDS };
+module.exports = { advanceContinental, ensureContinental, COMPETITIONS, UEFA_LEAGUE_IDS, AFC_LEAGUE_IDS };

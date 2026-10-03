@@ -1,0 +1,231 @@
+/* =========================================================================
+   PHASE 8 — Transfer Hub + Negotiation Room
+   Hamma selektor .career-app ostida (career.css / career-light.css
+   o'zgaruvchilariga tayanadi, shuning uchun light/dark ikkalasida ishlaydi).
+   ========================================================================= */
+
+/* ---------- Tabs ---------- */
+.career-app .tx-tabs {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px;
+  padding: 4px; border-radius: 14px; background: var(--bg-panel-2); border: 1px solid var(--glass-border);
+  width: fit-content; max-width: 100%;
+}
+.career-app .tx-tab {
+  border: 0; background: transparent; color: var(--text-secondary); cursor: pointer;
+  padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 700;
+  display: inline-flex; align-items: center; gap: 8px; transition: background .15s, color .15s;
+}
+.career-app .tx-tab:hover { color: var(--text-primary); }
+.career-app .tx-tab.active { background: var(--bg-elevated); color: var(--text-primary); box-shadow: var(--shadow-card); }
+.career-app .tx-tab .tx-count {
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; font-size: 10px; font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent-green); color: #fff;
+}
+
+/* ---------- Pills / status indicators ---------- */
+.career-app .tx-pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; white-space: nowrap; border: 1px solid var(--glass-border);
+  background: var(--bg-panel-2); color: var(--text-secondary);
+}
+.career-app .tx-pill::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.career-app .tx-pill.green { color: #047857; background: #ECFDF5; border-color: #A7F3D0; }
+.career-app .tx-pill.gold { color: #B45309; background: #FFFBEB; border-color: #FDE68A; }
+.career-app .tx-pill.red { color: #B91C1C; background: #FEF2F2; border-color: #FECACA; }
+.career-app .tx-pill.blue { color: #0369A1; background: #F0F9FF; border-color: #BAE6FD; }
+.career-app .tx-pill.pulse::before { animation: txPulse 1.4s ease-in-out infinite; }
+@keyframes txPulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(1.5); } }
+
+/* ---------- Summary strip ---------- */
+.career-app .tx-summary {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px;
+}
+.career-app .tx-stat { padding: 14px 16px; }
+.career-app .tx-stat .tx-stat-label { font-size: 11px; color: var(--text-secondary); letter-spacing: .04em; }
+.career-app .tx-stat .tx-stat-value { font-size: 20px; font-weight: 800; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.career-app .tx-stat .tx-stat-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+/* ---------- Toolbar (real-time filters) ---------- */
+.career-app .tx-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+.career-app .tx-input, .career-app .tx-select {
+  height: 40px; border-radius: 12px; border: 1px solid var(--glass-border-strong); background: var(--bg-elevated);
+  color: var(--text-primary); font-size: 13px; padding: 0 12px; font-family: inherit;
+}
+.career-app .tx-input { flex: 1 1 240px; min-width: 0; padding-left: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: 12px center; }
+.career-app .tx-input:focus, .career-app .tx-select:focus { outline: 2px solid rgba(16,185,129,.35); border-color: var(--accent-green); }
+.career-app .tx-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.career-app .tx-chip {
+  border: 1px solid var(--glass-border-strong); background: var(--bg-elevated); color: var(--text-secondary);
+  border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer;
+}
+.career-app .tx-chip.active { background: var(--text-primary); color: var(--bg-elevated); border-color: var(--text-primary); }
+.career-app .tx-result-count { font-size: 12px; color: var(--text-muted); margin: 0 0 12px; }
+
+/* ---------- Club cards ---------- */
+.career-app .tx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.career-app .tx-club { display: flex; flex-direction: column; gap: 12px; padding: 16px; min-width: 0; }
+.career-app .tx-club.is-active { border-color: #FDE68A; }
+.career-app .tx-club.is-current { border-color: #BAE6FD; }
+.career-app .tx-club.is-muted { opacity: .62; }
+.career-app .tx-club-head { display: flex; align-items: center; gap: 12px; }
+.career-app .tx-logo {
+  width: 44px; height: 44px; border-radius: 50%; background: var(--bg-panel-2); border: 1px solid var(--glass-border);
+  display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0;
+}
+.career-app .tx-club-name { font-weight: 800; font-size: 15px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.career-app .tx-club-league { font-size: 12px; color: var(--text-secondary); }
+.career-app .tx-club-meta { display: grid; grid-template-columns: 1fr 1.5fr 1fr; gap: 8px; }
+.career-app .tx-meta { background: var(--bg-panel-2); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+.career-app .tx-meta .k { font-size: 10px; letter-spacing: .05em; color: var(--text-muted); text-transform: uppercase; font-weight: 700; }
+.career-app .tx-meta .v { font-size: 13px; font-weight: 800; margin-top: 2px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.career-app .tx-club-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; flex-wrap: wrap; }
+.career-app .tx-turns { display: inline-flex; gap: 4px; }
+.career-app .tx-turns i { width: 18px; height: 5px; border-radius: 3px; background: var(--glass-border-strong); display: block; }
+.career-app .tx-turns i.on { background: var(--accent-green); }
+.career-app .tx-empty { text-align: center; padding: 36px 16px; color: var(--text-secondary); font-size: 13px; }
+
+/* ---------- History table ---------- */
+.career-app .tx-table-wrap { overflow-x: auto; }
+.career-app .tx-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 760px; }
+.career-app .tx-table th {
+  text-align: left; font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted);
+  padding: 8px 10px; border-bottom: 1px solid var(--glass-border); white-space: nowrap;
+}
+.career-app .tx-table td { padding: 12px 10px; border-bottom: 1px solid var(--glass-border); vertical-align: middle; }
+.career-app .tx-table tr:last-child td { border-bottom: 0; }
+.career-app .tx-table .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.career-app .tx-move { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 700; }
+.career-app .tx-move .arrow { color: var(--text-muted); }
+
+/* ---------- Negotiation room (modal) ---------- */
+.career-app .tx-overlay {
+  position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center;
+  padding: 16px; background: rgba(15, 23, 42, .55); backdrop-filter: blur(4px); animation: txFade .18s ease-out;
+}
+.career-app .tx-modal {
+  width: 100%; max-width: 640px; max-height: 94vh; overflow-y: auto; background: var(--bg-elevated);
+  border: 1px solid var(--glass-border); border-radius: 22px; box-shadow: 0 24px 64px rgba(15,23,42,.35);
+  display: flex; flex-direction: column; outline: none; animation: txPop .22s ease-out;
+}
+@keyframes txFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes txPop { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+.career-app .tx-modal-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px 22px 12px;
+  position: sticky; top: 0; z-index: 2; background: var(--bg-elevated); border-radius: 22px 22px 0 0;
+}
+.career-app .tx-modal-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.career-app .tx-modal-title h2 { font-size: 18px; line-height: 1.2; margin: 0; }
+.career-app .tx-modal-title .sub { font-size: 12px; color: var(--text-secondary); }
+.career-app .tx-x {
+  width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--glass-border); background: var(--bg-panel-2);
+  color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.career-app .tx-x:hover:not(:disabled) { color: var(--text-primary); }
+.career-app .tx-x:disabled { opacity: .4; cursor: not-allowed; }
+.career-app .tx-modal-body { padding: 16px 22px 22px; display: flex; flex-direction: column; gap: 16px; }
+.career-app .tx-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+
+/* stepper */
+.career-app .tx-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.career-app .tx-step { border-radius: 12px; padding: 10px 12px; background: var(--bg-panel-2); border: 1.5px solid transparent; }
+.career-app .tx-step .n { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: var(--text-muted); text-transform: uppercase; }
+.career-app .tx-step .t { font-size: 12.5px; font-weight: 800; margin-top: 2px; }
+.career-app .tx-step.done { background: #ECFDF5; }
+.career-app .tx-step.done .n { color: #047857; }
+.career-app .tx-step.now { border-color: var(--accent-green); background: var(--bg-elevated); }
+.career-app .tx-step.now .n { color: var(--accent-green-dim); }
+.career-app .tx-step.final-now { border-color: #F59E0B; background: #FFFBEB; }
+.career-app .tx-step.final-now .n { color: #B45309; }
+
+/* thread */
+.career-app .tx-thread { display: flex; flex-direction: column; gap: 8px; }
+.career-app .tx-bubble { max-width: 92%; padding: 10px 12px; border-radius: 14px; font-size: 12.5px; line-height: 1.45; }
+.career-app .tx-bubble .who { font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; margin-bottom: 3px; opacity: .75; }
+.career-app .tx-bubble .terms { margin-top: 5px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.career-app .tx-bubble.you { align-self: flex-end; background: var(--text-primary); color: var(--bg-elevated); border-bottom-right-radius: 4px; }
+.career-app .tx-bubble.club { align-self: flex-start; background: var(--bg-panel-2); border: 1px solid var(--glass-border); border-bottom-left-radius: 4px; }
+.career-app .tx-bubble.club.final { background: #FFFBEB; border-color: #FDE68A; }
+.career-app .tx-bubble.club.accept { background: #ECFDF5; border-color: #A7F3D0; }
+
+/* final-turn banner */
+.career-app .tx-lockbar {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; font-size: 12.5px; font-weight: 700;
+  background: #FFFBEB; border: 1px solid #FDE68A; color: #92400E;
+}
+
+/* terms editor */
+.career-app .tx-field-label { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 12px; font-weight: 800; color: var(--text-secondary); margin-bottom: 8px; }
+.career-app .tx-field-label .val { font-size: 18px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.career-app .tx-roles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.career-app .tx-role {
+  text-align: left; border: 2px solid var(--glass-border); background: var(--bg-elevated); color: var(--text-primary);
+  border-radius: 12px; padding: 10px 12px; cursor: pointer; font-family: inherit; transition: border-color .15s, background .15s;
+}
+.career-app .tx-role:hover:not(:disabled) { border-color: var(--text-muted); }
+.career-app .tx-role.on { border-color: var(--accent-green); background: #ECFDF5; }
+.career-app .tx-role:disabled { cursor: not-allowed; opacity: .6; }
+.career-app .tx-role .rt { font-size: 13px; font-weight: 800; }
+.career-app .tx-role .rd { font-size: 11px; color: var(--text-secondary); margin-top: 2px; line-height: 1.35; }
+.career-app .tx-role .rb { display: inline-block; margin-top: 6px; font-size: 10px; font-weight: 800; color: #047857; letter-spacing: .04em; text-transform: uppercase; }
+.career-app .tx-range { width: 100%; accent-color: #10B981; }
+.career-app .tx-range-legend { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.career-app .tx-years { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.career-app .tx-year {
+  border: 2px solid var(--glass-border); background: var(--bg-elevated); color: var(--text-secondary); border-radius: 10px;
+  padding: 8px 0; font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit;
+}
+.career-app .tx-year.on { border-color: var(--accent-green); background: #ECFDF5; color: #047857; }
+.career-app .tx-year:disabled { cursor: not-allowed; opacity: .6; }
+.career-app .tx-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: var(--text-secondary); cursor: pointer; }
+.career-app .tx-hint { font-size: 11px; color: var(--text-muted); margin-top: 6px; line-height: 1.4; }
+
+/* willingness meter */
+.career-app .tx-meter { background: var(--bg-panel-2); border: 1px solid var(--glass-border); border-radius: 14px; padding: 14px; }
+.career-app .tx-meter-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; font-weight: 800; margin-bottom: 8px; }
+.career-app .tx-bar { position: relative; height: 10px; border-radius: 6px; background: var(--glass-border-strong); overflow: visible; }
+.career-app .tx-bar .fill { height: 100%; border-radius: 6px; transition: width .35s ease, background .2s; }
+.career-app .tx-bar .fill.good { background: #10B981; }
+.career-app .tx-bar .fill.warn { background: #F59E0B; }
+.career-app .tx-bar .fill.bad { background: #EF4444; }
+.career-app .tx-bar .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--text-primary); border-radius: 1px; }
+.career-app .tx-bar-legend { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+.career-app .tx-rows { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+.career-app .tx-rows li { display: grid; grid-template-columns: 10px 110px 1fr; gap: 8px; align-items: center; font-size: 12px; }
+.career-app .tx-rows .dot { width: 8px; height: 8px; border-radius: 50%; }
+.career-app .tx-rows .dot.good { background: #10B981; }
+.career-app .tx-rows .dot.warn { background: #F59E0B; }
+.career-app .tx-rows .dot.bad { background: #EF4444; }
+.career-app .tx-rows .lbl { font-weight: 800; }
+.career-app .tx-rows .note { color: var(--text-secondary); }
+
+/* actions */
+.career-app .tx-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.career-app .tx-actions .btn { flex: 1 1 160px; justify-content: center; }
+.career-app .btn-danger-soft { color: var(--accent-red); border-color: #FECACA; background: #FEF2F2; }
+
+/* success */
+.career-app .tx-done { text-align: center; padding: 26px 22px 22px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.career-app .tx-done .big { font-size: 22px; font-weight: 800; }
+.career-app .tx-done-grid { width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.career-app .tx-tick { width: 76px; height: 76px; }
+.career-app .tx-tick path { stroke-dasharray: 60; stroke-dashoffset: 60; animation: txDraw .6s .15s ease-out forwards; }
+@keyframes txDraw { to { stroke-dashoffset: 0; } }
+
+@media (max-width: 560px) {
+  .career-app .tx-overlay { align-items: flex-end; padding: 0; }
+  .career-app .tx-modal { max-width: none; border-radius: 22px 22px 0 0; max-height: 96vh; }
+  .career-app .tx-modal-head { padding: 16px 16px 10px; }
+  .career-app .tx-modal-body { padding: 14px 16px 18px; }
+  .career-app .tx-roles { grid-template-columns: 1fr; }
+  .career-app .tx-steps .t { font-size: 11px; }
+  .career-app .tx-rows li { grid-template-columns: 10px 92px 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .career-app .tx-overlay, .career-app .tx-modal, .career-app .tx-pill.pulse::before, .career-app .tx-tick path { animation: none; }
+  .career-app .tx-tick path { stroke-dashoffset: 0; }
+  .career-app .tx-bar .fill { transition: none; }
+}

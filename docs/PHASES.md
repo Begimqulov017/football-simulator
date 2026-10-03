@@ -37,3 +37,65 @@ rating/potential ochilishi, Negotiate modal (maosh, muddat, Key Player/Rotation)
   mavsum tugaganda avtomatik; marosim paneli `/awards`.
 - Career butunlay Clean Light (`career-light.css`), mobil layout tuzatildi, lazy loading (bosh bundle 194 -> 54 kB gzip),
   `prefers-reduced-motion` qo'llab-quvvatlanadi.
+
+## Phase 3 — Profile Page
+- `ProfilePage.jsx`: o'yinchi kartasi, tablar (Overview / Attributes / Career / Honours), radar chart, International Status
+  (squad o'rni yoki "Not Called Up Yet" + minimal OVR), Trophy Cabinet (Individual / Club / Country, qulflangan holat, ochilish animatsiyasi).
+- `server/careerMerge.js` + `utils/honoursSync.js`: server yozgan mukofotlar/terma jamoa ma'lumoti klient saqlashi bilan ustidan yozilmaydi.
+  `/api/career/save` birlashtiradi, GameContext poll'i klientga qo'shadi. `SERVER_VERSION = 13`.
+
+## Phase 4 — Club Page & Pitch Lineup
+- `ClubPage.jsx` + `src/career/club/*`: katta taktik maydon (o'yinchi familiyasi doira ostida), maysa teksturasi, Bench paneli,
+  zamonaviy squad jadvali, taktika sliderlari (Attacking/Defensive), chemistry vidjeti va klub kubogi paneli.
+
+## Phase 5 (Dashboard) — Leagues & Tournaments Dashboard
+**Sahifa:** `src/career/pages/LeaguesPage.jsx` (`/leagues?tab=leagues|cups|continental|international`) — 4 bo'lim, faol bo'lim URL'da saqlanadi.
+Simulyatsiya tarixi foydalanuvchilarga ko'rinmaydi: u faqat Admin panelida (`/admin` → Ligalar/Turnirlar). Adminga sahifa tepasida o'sha yerga o'tish tugmasi bor.
+
+| Bo'lim | Fayl | Manba |
+|---|---|---|
+| Ligalar | `src/career/leagues/LeaguesView.jsx` | `/api/leagues` + `/api/hub/league/:id` |
+| Kuboklar | `src/career/leagues/CupsView.jsx` | `/api/hub/cups` |
+| Kontinental (UCL, UEL, AFC CL) | `src/career/leagues/ContinentalView.jsx` | `/api/continental` |
+| Xalqaro (World Cup, Euro, Asian Cup, Nations League, Copa, AFCON) | `src/career/leagues/InternationalView.jsx` | `/api/international` |
+
+Umumiy komponentlar: `StatLeaders.jsx` (Top Scorers / Assists / Cards / Rating), `TrophyCabinet.jsx` (g'oliblar tarixi + eng ko'p titul), `shared.jsx`.
+
+**Backend o'zgarishlari (SERVER_VERSION 13):**
+- `server/engine.js` — `distributeMatch()` har o'yinda gol, assist, o'yinlar soni, sariq/qizil kartochka va reytingni yozadi; `buildLeaders()` peshqadamlar jadvalini quradi. Eski DB yozuvlari (faqat `goals`) buzilmaydi.
+- `server/continental.js` — **AFC Champions League** (`acl`, 16 klub, 4 guruh, Osiyo ligalaridan); UCL/UEL/ACL endi "pool"lar bo'yicha tanlanadi.
+- `server/international.js` — **UEFA Nations League** (toq yillarda, 16 jamoa); tarix yozuvlariga `key` qo'shildi.
+- `server/index.js` — `/api/hub/league/:id`, `/api/hub/cups`; `/api/leagues` ga `region`, `division`, `leader`, `lastChampion`; `rolloverSeason` endi kubok g'olibini `world.cupHistory`ga arxivlaydi va `seasonHistory`ga eng yaxshi assistchi/reyting qo'shadi.
+- Test: `node tests/test_hub_stats.js` (server/ papkasidan: `cd server && node ../tests/test_hub_stats.js`).
+
+**Cheklovlar:** o'yin ma'lumotlarida hozircha faqat 1-divizion ligalar bor — UI `division` maydoni bo'yicha guruhlaydi, shuning uchun server quyi liga qaytarsa "2-divizion" bo'limi o'zi paydo bo'ladi. Kubok o'yinlaridagi o'yinchi statistikasi mavjud tizim bo'yicha liga statistikasiga qo'shiladi (alohida kubok statistikasi yo'q). Statistika yangi o'ynalgan o'yinlardan boshlab yig'iladi (eski o'yinlar uchun kartochka/reyting yo'q).
+
+## Phase 6 — Dynamic Messages & Notifications
+- `MessagesPage.jsx`: Coach / Club / National / System filtrlari, yulduzcha (favorite) boshqaruvi.
+- `utils/messageGenerator.js` + `useProceduralMessages.js`: o'yindan keyingi hisobot, murabbiy maslahati, jamoadosh dialoglari,
+  terma jamoa chaqiruvi/milestone xabarlari. `AppShell.jsx`: o'qilmagan xabarlar uchun qizil badge.
+
+## Phase 7 — High-Precision Training Engine
+- `statCalc.js`: ichki 2 xonali aniqlik (`72.12`). `round2`, `clampPrecise`, `displayRating` (>=72.50 → 73, <=72.49 → 72), `formatPrecise`, `formatDelta`;
+  `calcMainStats/calcOVR/calcGoalkeeperOVR` endi `{ precise: true }` qabul qiladi. `simulateTrainingSession()` — sof (pure) funksiya: har bir tanlangan stat
+  va uning ichki atributlari o'z tasodifiy ko'paytirgichini oladi, yillik OVR limiti (`yearlyOvrCap`) saqlanadi, hisobot `career.lastTraining`ga yoziladi.
+- `TrainingPage.jsx`: aniq qiymatlar (72.12 OVR), kartalar ostida +0.12 chiplari, "Session breakdown" kartasi (atribut bo'yicha), silliq progress barlar,
+  sanab chiquvchi (ticking) hisoblagichlar, level-up toast'lar. `utils/useAnimatedNumber.js` — yangi hook.
+- Boshqa joylarda `displayRating()` bilan butun songa yaxlitlanadi (AppShell, Profile, Club, Users, PlayersTab, roster, server).
+- `season.js`: keksa yoshdagi pasayish ham aniq (precise); potential endi `Math.ceil(overall)` dan pastga tushmaydi (kasr bo'lib qolmasligi uchun).
+
+## Phase 8 — Interaktiv transfer muzokarasi
+- `src/career/transfers/transferUtils.js` — toza mantiq: bozor bahosi, transfer summasi (release clause = aniq summa),
+  klub qiziqishi (hot/open/monitoring/closed), 3 bosqichli holat mashinasi
+  (`offer` → `counter` → `final` → `accepted | walked | rejected`). Natija DETERMINISTIK: "Club willingness"
+  ko'rsatkichi va qaror bir xil formuladan chiqadi. 3-tur o'zgarmas (`submitOffer` hech narsa qilmaydi).
+- `src/career/transfers/NegotiationModal.jsx` — muzokara xonasi: rol (Star/Key/Rotation/Prospect), haftalik maosh,
+  muddat (1–6 yil), release clause; chat tarixi, 3 bosqichli stepper, Esc/fokus/mobil bottom-sheet.
+- `src/career/pages/TransfersPage.jsx` — 4 tab: Transfer Hub (real vaqt qidiruv + liga/status/saralash), Negotiations,
+  My Transfers (tarix jadvali), World Feed (avvalgi top-10/recent).
+- `GameContext.jsx` — `saveNegotiation` (holat saqlanadi, modal yopilsa ham davom etadi) va
+  `completeNegotiatedTransfer` (klub/liga/shartnoma, tarix, dunyo lentasi, yangilik, xabar; boshqa ligada mavsum qayta quriladi).
+- `career.negotiations`, `career.contract.releaseClause`, `transferHistory` yozuvlariga `fee/role/releaseClause/turns` qo'shildi
+  (eski saqlanmalar bilan mos: yangi maydonlar ixtiyoriy).
+- Rad etilgan/tashlab ketilgan klub bilan 30 kun cooldown. Kiruvchi taklif (Messages) shu yerda ochiladi.
+- Test: `node tests/test_transfer_negotiation.js` (10 ta tekshiruv).

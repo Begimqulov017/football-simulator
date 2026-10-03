@@ -4,6 +4,9 @@ import { INITIAL_TEAMS } from '../../data/teamsData';
 import { advanceOneDay, prepareNextDay, isMatchdayNext, computeContractOffer, buildSeasonSchedule, initStandings, setupSeasonCups } from '../utils/season';
 import { LEAGUES } from '../../data/leaguesData';
 import { saveCareerToServer, loadCareerFromServer, ackMatchResult } from '../utils/careerApi';
+import { mergeServerHonours } from '../utils/honoursSync';
+import { displayRating } from '../utils/statCalc';
+import { appendNews, buildTransferNews } from '../utils/newsGenerator';
 
 const GameContext = createContext(null);
 
@@ -101,6 +104,10 @@ export function GameProvider({ children, username }) {
       if (serverPlayer?.career?.lastMatchResult && !serverPlayer.career.lastMatchResult.seenAt) {
         setPlayer((prev) => (prev ? { ...prev, career: { ...prev.career, lastMatchResult: serverPlayer.career.lastMatchResult } } : prev));
       }
+      // Server yozadigan maydonlar (mavsum mukofotlari, terma jamoa caps/kubogi,
+      // kubok satrlari) - sahifani qayta ochmasdan ham Profile'da ko'rinsin va
+      // keyingi avto-saqlash ularni serverdan o'chirib yubormasin.
+      if (serverPlayer) setPlayer((prev) => mergeServerHonours(prev, serverPlayer));
       // 6-BAND: 15+ kun kutilgan o'yin serverda avtomatik hal qilinganda,
       // server foydalanuvchining career.messages'iga yangi xabar qo'shadi -
       // lekin bu poll faqat lastMatchResult'ni ko'chirardi, shuning uchun
@@ -143,10 +150,10 @@ export function GameProvider({ children, username }) {
     updatePlayerInClubRoster(player.club.id, player.id, {
       name: `${player.name} ${player.surname}`,
       pos: player.position,
-      ovr: player.overall,
+      ovr: displayRating(player.overall),
       tier: player.club.tier
     });
-  }, [player?.overall, player?.club?.tier, player?.club?.id, player?.id, player?.name, player?.surname, player?.position]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [displayRating(player?.overall), player?.club?.tier, player?.club?.id, player?.id, player?.name, player?.surname, player?.position]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const createPlayer = useCallback((newPlayer) => {
     setPlayer(newPlayer);
@@ -269,7 +276,7 @@ export function GameProvider({ children, username }) {
 
       if (prev.club?.id) removePlayerFromClubRoster(prev.club.id, prev.id);
       const tier = joinClubRoster(newTeam, {
-        id: prev.id, name: `${prev.name} ${prev.surname}`, pos: prev.position, ovr: prev.overall,
+        id: prev.id, name: `${prev.name} ${prev.surname}`, pos: prev.position, ovr: displayRating(prev.overall),
         stats: prev.mainStats, nationality: prev.nationality
       });
 
@@ -306,6 +313,119 @@ export function GameProvider({ children, username }) {
           ...withTransferEntry(prev.career, { type: 'transfer', date: prev.career.gameDate, from: prev.club?.name || null, fromLogo: prev.club?.logo || null, to: newTeam.name, toLogo: newTeam.logo, wage: msg.offer.wage }),
           weeklyWage: msg.offer.wage,
           messages: resolvedMessages
+        }
+      };
+    });
+  }, []);
+
+  // ---------------------------------------------------------------------
+  // PHASE 8 — Interactive Transfer Negotiation
+  // ---------------------------------------------------------------------
+  // Har bir klub bo'yicha muzokara holatini (turn, thread, draft...) saqlaydi.
+  // Shu tufayli modal yopilsa ham, sahifa yangilansa ham muzokara qolgan
+  // joyidan davom etadi. Eski yopilgan muzokaralar 40 tadan oshsa tozalanadi.
+  const saveNegotiation = useCallback((teamId, negotiation) => {
+    setPlayer((prev) => {
+      if (!prev) return prev;
+      const all = { ...(prev.career.negotiations || {}), [teamId]: negotiation };
+      const keys = Object.keys(all);
+      if (keys.length > 40) {
+        const live = ['offer', 'counter', 'final', 'accepted'];
+        keys
+          .filter((k) => !live.includes(all[k].stage))
+          .sort((a, b) => (all[a].closedDay || 0) - (all[b].closedDay || 0))
+          .slice(0, keys.length - 40)
+          .forEach((k) => { delete all[k]; });
+      }
+      return { ...prev, career: { ...prev.career, negotiations: all } };
+    });
+  }, []);
+
+  // Muzokarada kelishilgan transferni rasmiylashtiradi: klub/ligasi, maosh,
+  // shartnoma (rol + release clause bilan), transfer tarixi, dunyo transfer
+  // lentasi, yangilik va xabar. Boshqa liga bo'lsa mavsum yangidan quriladi
+  // (xuddi erkin agent shartnomasidagi kabi).
+  const completeNegotiatedTransfer = useCallback((deal) => {
+    setPlayer((prev) => {
+      if (!prev) return prev;
+      const newTeam = INITIAL_TEAMS.find((t) => t.id === deal.teamId);
+      const league = LEAGUES.find((l) => l.teamIds.includes(deal.teamId));
+      if (!newTeam || !league || prev.club?.id === newTeam.id || !deal.terms) return prev;
+
+      const { wage, years, role, clause } = deal.terms;
+      const fee = deal.fee || 0;
+      const wasFree = !!prev.career.freeAgent;
+      const oldName = prev.club?.name || null;
+      const oldLogo = prev.club?.logo || null;
+
+      if (prev.club?.id) removePlayerFromClubRoster(prev.club.id, prev.id);
+      const naturalTier = joinClubRoster(newTeam, {
+        id: prev.id, name: `${prev.name} ${prev.surname}`, pos: prev.position, ovr: displayRating(prev.overall),
+        stats: prev.mainStats, nationality: prev.nationality
+      });
+      const tier = role === 'star' || role === 'key' ? 'starter' : naturalTier;
+      if (tier !== naturalTier) updatePlayerInClubRoster(newTeam.id, prev.id, { tier });
+
+      const sameLeague = league.id === prev.club?.leagueId;
+      let club;
+      let seasonPatch = {};
+      if (sameLeague) {
+        club = { ...prev.club, id: newTeam.id, name: newTeam.name, logo: newTeam.logo, tier, role };
+      } else {
+        const startDate = prev.career.gameDate;
+        const schedule = buildSeasonSchedule(league, startDate);
+        const { domesticCup, continentalCup } = setupSeasonCups(prev, league, startDate, schedule);
+        club = {
+          id: newTeam.id, name: newTeam.name, logo: newTeam.logo, leagueId: league.id, leagueName: league.name,
+          flag: newTeam.flag || league.flag, country: league.country, tier, role
+        };
+        seasonPatch = { schedule, standings: initStandings(league.teamIds), topScorers: {}, domesticCup, continentalCup };
+      }
+
+      const date = prev.career.gameDate;
+      const historyEntry = {
+        id: `tr_${Date.now()}`, type: wasFree ? 'free' : 'transfer', date,
+        from: oldName, fromLogo: oldLogo, to: newTeam.name, toLogo: newTeam.logo,
+        wage, years, role, releaseClause: clause ?? null, fee, turns: deal.turns || 1,
+        leagueName: league.name, ovr: displayRating(prev.overall)
+      };
+      const logEntry = {
+        id: `transfer_${Date.now()}`, date, playerName: `${prev.name} ${prev.surname}`, playerPos: prev.position,
+        ovr: displayRating(prev.overall), fromClub: oldName || 'Free agent', fromLogo: oldLogo || '🆓',
+        toClub: newTeam.name, toLogo: newTeam.logo, fee, isUser: true
+      };
+
+      const live = ['offer', 'counter', 'final', 'accepted'];
+      const negotiations = Object.fromEntries(
+        Object.entries(prev.career.negotiations || {}).map(([k, n]) => [
+          k, live.includes(n.stage) ? { ...n, stage: k === newTeam.id ? 'signed' : 'withdrawn', closedDay: prev.career.day } : n
+        ])
+      );
+
+      const welcome = {
+        id: `msg_${Date.now()}`, type: 'club', date, from: newTeam.name, subject: `Welcome to ${newTeam.name}!`,
+        body: `Your move${oldName ? ` from ${oldName}` : ''} is official${fee > 0 ? ` (fee: $${fee.toFixed(1)}M)` : ' (free transfer)'}. You'll play as ${role === 'star' ? 'a Star Player' : role === 'key' ? 'a Key Player' : role === 'rotation' ? 'a Rotation player' : 'a Prospect'} on a ${years}-year deal worth $${wage.toLocaleString()}/week${clause != null ? `, release clause $${clause}M` : ''}.`,
+        read: false, resolved: true
+      };
+      const messages = prev.career.messages
+        .map((m) => (deal.messageId && m.id === deal.messageId ? { ...m, resolved: true, read: true, outcome: 'accepted' } : m))
+        .concat(welcome);
+
+      return {
+        ...prev,
+        club,
+        career: {
+          ...withTransferEntry(prev.career, historyEntry),
+          ...seasonPatch,
+          weeklyWage: wage,
+          contract: { yearsTotal: years, signedDay: prev.career.day, role, releaseClause: clause ?? null },
+          contractTalksOpened: false,
+          contractFailedNegotiations: 0,
+          freeAgent: false,
+          negotiations,
+          transferLog: [...(prev.career.transferLog || []), logEntry].slice(-150),
+          newsFeed: appendNews(prev.career.newsFeed, buildTransferNews([logEntry], prev.career.day)),
+          messages
         }
       };
     });
@@ -391,6 +511,7 @@ export function GameProvider({ children, username }) {
     worldDate, hasUnwatchedResult, acknowledgeResult,
     pendingWorldMatch, refreshPendingWorldMatch,
     markMessageRead, requestNewContract, acceptContractOffer, acceptTransferOffer, declineOffer,
+    saveNegotiation, completeNegotiatedTransfer,
     purchasePerk
   };
 

@@ -4,6 +4,7 @@ import AppShell from '../components/AppShell';
 import { useGame } from '../context/GameContext';
 import { fetchPendingMatchDetail, submitMatchResult } from '../utils/careerApi';
 import LiveMatch from '../../components/LiveMatch';
+import { displayRating } from '../utils/statCalc';
 
 // 4-BAND: bu sahifa umumiy dunyodagi foydalanuvchining O'Z o'yinini
 // avvalgi "server darhol hal qiladi, statistikani taxmin qiladi" usuli
@@ -39,7 +40,7 @@ export default function WorldMatchPage() {
   // to'rttasi kifoya.
   const myEntry = useMemo(() => (player ? {
     id: player.id, name: `${player.name} ${player.surname}`,
-    pos: player.position, ovr: player.overall, stamina: 100, isHuman: true,
+    pos: player.position, ovr: displayRating(player.overall), stamina: 100, isHuman: true,
   } : null), [player]);
 
   const handleFinish = useCallback(async (result) => {

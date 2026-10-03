@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useGame } from '../context/GameContext';
 import { useExit, useCurrentUser } from '../context/ExitContext';
+import useProceduralMessages from '../utils/useProceduralMessages';
+import { unreadCounts } from '../utils/messageGenerator';
 import Icon from '../../components/Icon';
+import { displayRating } from '../utils/statCalc';
 
 const NAV_ITEMS = [
   { to: '/home', icon: 'home', label: 'Home' },
@@ -19,10 +22,55 @@ const NAV_ITEMS = [
   { to: '/users', icon: 'users', label: 'Users' }
 ];
 
+const BADGE_STYLE = {
+  marginLeft: 'auto',
+  background: 'var(--accent-red)',
+  boxShadow: '0 0 0 2px var(--bg-base), 0 0 10px rgba(239, 68, 68, 0.6)',
+  flex: 'none'
+};
+
+// Red notification marker. `count` = number pill (Messages); no count = a plain dot.
+function NavBadge({ count, label }) {
+  if (!count) return null;
+  return count === true ? (
+    <span aria-label={label} title={label} style={{ ...BADGE_STYLE, width: 9, height: 9, borderRadius: '50%' }} />
+  ) : (
+    <span
+      aria-label={label}
+      title={label}
+      style={{
+        ...BADGE_STYLE, minWidth: 20, height: 20, padding: '0 6px', borderRadius: 10,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        color: '#fff', fontSize: 11, fontWeight: 700, lineHeight: 1
+      }}
+    >
+      {count > 99 ? '99+' : count}
+    </span>
+  );
+}
+
 export default function AppShell({ children }) {
   const { player } = useGame();
   const onExit = useExit();
   const currentUser = useCurrentUser();
+
+  // Generates match reports / coach advice / call-ups etc. into the inbox.
+  // Lives here (not on MessagesPage) so the badge updates on every page.
+  useProceduralMessages();
+
+  const unread = useMemo(() => unreadCounts(player?.career?.messages), [player?.career?.messages]);
+
+  const badgeFor = (to) => {
+    if (to === '/messages') {
+      return unread.total
+        ? <NavBadge count={unread.total} label={`${unread.total} unread message${unread.total === 1 ? '' : 's'}`} />
+        : null;
+    }
+    if (to === '/national-team') {
+      return unread.national ? <NavBadge count label="Unread national team message" /> : null;
+    }
+    return null;
+  };
 
   return (
     <div className="app-shell">
@@ -31,7 +79,7 @@ export default function AppShell({ children }) {
           <div className="club-badge">{player?.club?.logo || '⚽'}</div>
           <div>
             <div className="name">{player ? `${player.name} ${player.surname}` : 'Player'}</div>
-            <div className="rating">OVR {player?.overall ?? '--'}</div>
+            <div className="rating">OVR {displayRating(player?.overall) ?? '--'}</div>
           </div>
         </div>
         {NAV_ITEMS.map((item) => (
@@ -42,6 +90,7 @@ export default function AppShell({ children }) {
           >
             <span className="icon"><Icon name={item.icon} size={17} /></span>
             <span>{item.label}</span>
+            {badgeFor(item.to)}
           </NavLink>
         ))}
         {currentUser?.isAdmin && (

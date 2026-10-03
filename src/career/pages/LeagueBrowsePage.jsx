@@ -75,7 +75,7 @@ export default function LeagueBrowsePage() {
           <h1>{world.leagueName}</h1>
           <div className="sub">Mavsum {world.season} · Kun {world.day} · {world.gameDate}</div>
         </div>
-        <button className="btn" onClick={() => navigate('/leagues')}>← Barcha ligalar</button>
+        <button className="btn" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/leagues'))}>← Barcha ligalar</button>
       </div>
 
       <div className="card">

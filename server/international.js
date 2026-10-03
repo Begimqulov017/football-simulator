@@ -25,6 +25,10 @@ const { LEAGUES } = require('./gamedata/leaguesData');
 const { INITIAL_TEAMS } = require('./gamedata/teamsData');
 const { NATIONS, nationsOf, nationalityFor, flagFor, confederationOf } = require('./gamedata/nationsData');
 
+
+// Phase 7: player.overall is stored with 2 decimals; everyone else sees it rounded naturally (72.50 -> 73).
+const roundOvr = (n) => (n == null ? n : Math.round(Math.round(n * 100) / 100));
+
 const SQUAD_SIZE = 23;
 const MIN_SQUAD_FOR_ELIGIBILITY = 11; // smaller nations simply don't enter
 const BREAK_INTERVAL_DAYS = 70;
@@ -83,7 +87,7 @@ function buildPlayerPool(db) {
       id: cs.id || `user_${u.username}`,
       name: `${cs.name} ${cs.surname}`.trim(),
       pos: cs.position,
-      ovr: cs.overall || 60,
+      ovr: roundOvr(cs.overall) || 60,
       age: cs.age || null,
       nationality: cs.nationality,
       clubId: cs.club?.id || null,
@@ -166,6 +170,10 @@ function tournamentsForYear(year) {
       { key: 'africa_cup', name: 'Africa Cup of Nations', confederation: 'CAF', size: 8 }
     ];
   }
+  // Toq yillarda (Jahon/qit'a chempionatlari bo'lmagan yillar) - Millatlar Ligasi
+  if (year % 2 === 1) {
+    return [{ key: 'nations_league', name: 'UEFA Nations League', confederation: 'UEFA', size: 16 }];
+  }
   return [];
 }
 
@@ -190,7 +198,7 @@ function humanPseudoPlayer(db, username) {
   return {
     username,
     id: cs.id,
-    overall: cs.overall,
+    overall: roundOvr(cs.overall),
     position: cs.position,
     // Everyone called up is in the national team's first XI picture.
     club: { tier: 'starter' },
@@ -216,8 +224,8 @@ function playNationalMatch(db, teamA, teamB, topScorers, allowDraw) {
 
   const humanIdsA = teamA.squad.filter((p) => p.username).map((p) => p.id);
   const humanIdsB = teamB.squad.filter((p) => p.username).map((p) => p.id);
-  engine.distributeGoals(teamA.squad, teamA.country, teamA.country, golA - humanGoals('home'), topScorers, humanIdsA);
-  engine.distributeGoals(teamB.squad, teamB.country, teamB.country, golB - humanGoals('away'), topScorers, humanIdsB);
+  engine.distributeMatch(teamA.squad, teamA.country, teamA.country, golA - humanGoals('home'), golB, topScorers, humanIdsA);
+  engine.distributeMatch(teamB.squad, teamB.country, teamB.country, golB - humanGoals('away'), golA, topScorers, humanIdsB);
 
   // Human goals still belong in the tournament's top-scorer table.
   humanResults.forEach((h) => {
@@ -225,8 +233,7 @@ function playNationalMatch(db, teamA, teamB, topScorers, allowDraw) {
     const team = h.side === 'home' ? teamA : teamB;
     const entry = team.squad.find((p) => p.username === h.username);
     if (!entry) return;
-    topScorers[entry.id] = topScorers[entry.id] || { id: entry.id, name: entry.name, teamId: team.country, teamName: team.country, goals: 0 };
-    topScorers[entry.id].goals += h.pStats.goals;
+    engine.ensureStat(topScorers, entry, team.country, team.country).goals += h.pStats.goals;
   });
 
   let penalties = null;
@@ -508,7 +515,7 @@ function advanceInternational(db, date) {
           detail: `Finalda ${t.runnerUp} mag'lub bo'ldi${scorers[0] ? ` · eng ko'p gol: ${scorers[0].name} (${scorers[0].goals})` : ''}`
         });
         intl.history = [{
-          id: t.id, name: t.name, year: t.year, winner: t.winner, runnerUp: t.runnerUp,
+          id: t.id, key: t.key, name: t.name, year: t.year, winner: t.winner, runnerUp: t.runnerUp,
           topScorer: scorers[0] || null, finalScore: t.knockout[t.knockout.length - 1]?.ties[0] || null
         }, ...intl.history].slice(0, 40);
       }

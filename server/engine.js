@@ -159,18 +159,136 @@ function weightedPick(list) {
   return list[list.length - 1];
 }
 
-function distributeGoals(squad, teamId, teamName, goalsCount, topScorers, excludeIds) {
-  if (!squad?.length || goalsCount <= 0) return;
+// ------------------------------------------------------------
+// PHASE 5 - o'yinchi statistikasi (gol, assist, kartochka, reyting).
+// `topScorers` obyekti nomi saqlanib qoldi (eski DB bilan mos), lekin endi
+// har bir yozuv to'liq statistika: goals/assists/yellow/red/apps/ratingSum.
+// Eski yozuvlarda yangi maydonlar yo'q - ensureStat ularni 0 bilan to'ldiradi.
+// ------------------------------------------------------------
+const STAT_FIELDS = ['goals', 'assists', 'yellow', 'red', 'apps', 'ratingSum'];
+
+function ensureStat(map, p, teamId, teamName) {
+  if (!map[p.id]) map[p.id] = { id: p.id, name: p.name, pos: p.pos || null, teamId, teamName };
+  const s = map[p.id];
+  STAT_FIELDS.forEach((k) => { if (s[k] == null) s[k] = 0; });
+  if (!s.pos && p.pos) s.pos = p.pos;
+  return s;
+}
+
+const CREATE_WEIGHT = { CAM: 1, LW: 0.9, RW: 0.9, CM: 0.8, LM: 0.7, RM: 0.7, ST: 0.5, CDM: 0.3, LB: 0.4, RB: 0.4, CB: 0.08, GK: 0.02 };
+const YELLOW_RATE = { CB: 0.13, CDM: 0.13, CM: 0.1, LB: 0.09, RB: 0.09, CAM: 0.07, LM: 0.07, RM: 0.07, ST: 0.07, LW: 0.06, RW: 0.06, GK: 0.02 };
+const RED_RATE = 0.006;
+const DEF_POS = ['CB', 'LB', 'RB'];
+
+function weightedPickBy(list, weightFn) {
+  const weights = list.map((p) => Math.max(1, p.ovr || 60) ** 2 * weightFn(p));
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (!total) return list[list.length - 1];
+  let r = Math.random() * total;
+  for (let i = 0; i < list.length; i += 1) { r -= weights[i]; if (r <= 0) return list[i]; }
+  return list[list.length - 1];
+}
+
+// Gollarni (va ~70% gollarga assistni) tarqatadi. Qaytaradi: { [playerId]: { g, a } }
+function distributeGoals(squad, teamId, teamName, goalsCount, topScorers, excludeIds = []) {
+  const contrib = {};
+  if (!squad?.length || goalsCount <= 0) return contrib;
   const pool = squad.filter((p) => !excludeIds.includes(p.id));
   const attackers = pool.filter((p) => (ATTACK_WEIGHT[p.pos] ?? 0) > 0.3);
   const list = attackers.length ? attackers : pool;
-  if (!list.length) return;
+  if (!list.length) return contrib;
   for (let i = 0; i < goalsCount; i += 1) {
     const scorer = weightedPick(list);
     if (!scorer) continue;
-    if (!topScorers[scorer.id]) topScorers[scorer.id] = { id: scorer.id, name: scorer.name, teamId, teamName, goals: 0 };
-    topScorers[scorer.id].goals += 1;
+    ensureStat(topScorers, scorer, teamId, teamName).goals += 1;
+    contrib[scorer.id] = contrib[scorer.id] || { g: 0, a: 0 };
+    contrib[scorer.id].g += 1;
+    if (Math.random() < 0.7) {
+      const helpers = pool.filter((p) => p.id !== scorer.id);
+      if (helpers.length) {
+        const helper = weightedPickBy(helpers, (p) => CREATE_WEIGHT[p.pos] ?? 0.2);
+        ensureStat(topScorers, helper, teamId, teamName).assists += 1;
+        contrib[helper.id] = contrib[helper.id] || { g: 0, a: 0 };
+        contrib[helper.id].a += 1;
+      }
+    }
   }
+  return contrib;
+}
+
+// Asosiy 11 talik: eng kuchli darvozabon + eng kuchli 10 maydon o'yinchisi
+// (har biri ~10% ehtimol bilan dam oladi, shunda tarkib biroz aylanadi).
+function pickStartingXI(squad, excludeIds) {
+  const pool = squad.filter((p) => !excludeIds.includes(p.id)).sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+  const xi = [];
+  const gk = pool.find((p) => p.pos === 'GK');
+  if (gk) xi.push(gk);
+  const outfield = pool.filter((p) => p.pos !== 'GK');
+  for (let i = 0; i < outfield.length && xi.length < 11; i += 1) {
+    const needed = 11 - xi.length;
+    if (outfield.length - i > needed && Math.random() < 0.1) continue;
+    xi.push(outfield[i]);
+  }
+  return xi;
+}
+
+function matchRating(p, { goals, assists, yellow, red, won, lost, conceded }) {
+  let r = 6.0 + (Math.random() + Math.random() + Math.random() - 1.5) * 0.7 + ((p.ovr || 70) - 70) / 90;
+  r += won ? 0.35 : lost ? -0.3 : 0;
+  r += Math.min(goals, 3) * 0.8 + assists * 0.5;
+  const back = p.pos === 'GK' || DEF_POS.includes(p.pos);
+  if (conceded === 0) r += p.pos === 'GK' ? 0.8 : back ? 0.45 : p.pos === 'CDM' ? 0.2 : 0;
+  else if (back) r -= Math.min(conceded, 4) * 0.12;
+  r -= yellow * 0.2 + red * 1.4;
+  return Math.round(clamp(r, 4, 10) * 10) / 10;
+}
+
+// Bitta jamoaning bitta o'yindagi TO'LIQ statistikasi: gollar + assistlar +
+// o'yinlar soni + kartochkalar + reyting. `goalsAgainst` - jamoa o'tkazib
+// yuborgan gollar (toza o'yin / yutqazish reytingga ta'sir qiladi).
+function distributeMatch(squad, teamId, teamName, goalsFor, goalsAgainst, statsMap, excludeIds = []) {
+  if (!squad?.length) return;
+  const contrib = distributeGoals(squad, teamId, teamName, goalsFor, statsMap, excludeIds);
+  const xi = pickStartingXI(squad, excludeIds);
+  const inXI = new Set(xi.map((p) => p.id));
+  Object.keys(contrib).forEach((id) => {
+    if (inXI.has(id)) return;
+    const p = squad.find((x) => x.id === id);
+    if (p) { xi.push(p); inXI.add(id); }
+  });
+  const won = goalsFor > goalsAgainst;
+  const lost = goalsFor < goalsAgainst;
+  xi.forEach((p) => {
+    const s = ensureStat(statsMap, p, teamId, teamName);
+    const c = contrib[p.id] || { g: 0, a: 0 };
+    const red = Math.random() < RED_RATE ? 1 : 0;
+    const yellow = !red && Math.random() < (YELLOW_RATE[p.pos] ?? 0.07) ? 1 : 0;
+    const rating = matchRating(p, { goals: c.g, assists: c.a, yellow, red, won, lost, conceded: goalsAgainst });
+    s.apps += 1;
+    s.yellow += yellow;
+    s.red += red;
+    s.ratingSum = Math.round((s.ratingSum + rating) * 10) / 10;
+  });
+}
+
+// Statistika xaritasidan peshqadamlar jadvallari. Reyting uchun kamida
+// `minApps` o'yin kerak (eng ko'p o'ynaganning 40%i, kamida 1).
+function buildLeaders(statsMap, { limit = 10 } = {}) {
+  const all = Object.values(statsMap || {}).map((s) => ({
+    id: s.id, name: s.name, pos: s.pos || null, teamId: s.teamId, teamName: s.teamName,
+    goals: s.goals || 0, assists: s.assists || 0, yellow: s.yellow || 0, red: s.red || 0, apps: s.apps || 0,
+    rating: s.apps ? Math.round(((s.ratingSum || 0) / s.apps) * 100) / 100 : null,
+  }));
+  const maxApps = all.reduce((m, x) => Math.max(m, x.apps), 0);
+  const minApps = Math.max(1, Math.floor(maxApps * 0.4));
+  const top = (arr, cmp) => arr.sort(cmp).slice(0, limit);
+  return {
+    minApps,
+    scorers: top(all.filter((x) => x.goals > 0), (a, b) => b.goals - a.goals || b.assists - a.assists || a.apps - b.apps),
+    assists: top(all.filter((x) => x.assists > 0), (a, b) => b.assists - a.assists || b.goals - a.goals),
+    cards: top(all.filter((x) => x.yellow + x.red > 0), (a, b) => (b.red * 3 + b.yellow) - (a.red * 3 + a.yellow) || b.red - a.red),
+    ratings: top(all.filter((x) => x.apps >= minApps && x.rating != null), (a, b) => b.rating - a.rating || b.apps - a.apps),
+  };
 }
 
 function applyResultToStandings(standings, homeId, awayId, golA, golB) {
@@ -208,8 +326,8 @@ function resolveMatch(homeTeam, awayTeam, homeSquad, awaySquad, humanHome, human
 
   const humanHomeIds = humanHome.map((h) => h.id).filter(Boolean);
   const humanAwayIds = humanAway.map((h) => h.id).filter(Boolean);
-  distributeGoals(homeSquad, homeTeam.id, homeTeam.name, golA - humanHomeGoals, topScorers, humanHomeIds);
-  distributeGoals(awaySquad, awayTeam.id, awayTeam.name, golB - humanAwayGoals, topScorers, humanAwayIds);
+  distributeMatch(homeSquad, homeTeam.id, homeTeam.name, golA - humanHomeGoals, golB, topScorers, humanHomeIds);
+  distributeMatch(awaySquad, awayTeam.id, awayTeam.name, golB - humanAwayGoals, golA, topScorers, humanAwayIds);
 
   return { golA, golB, humanResults };
 }
@@ -487,7 +605,7 @@ function buildNextCupRound(prevRound) {
 
 module.exports = {
   addDays, generateRoundRobinRounds, buildSeasonSchedule, initStandings,
-  teamStrength, simulateTeamMatch, simulateHumanPlayerMatch, distributeGoals,
+  teamStrength, simulateTeamMatch, simulateHumanPlayerMatch, distributeGoals, distributeMatch, ensureStat, buildLeaders,
   applyResultToStandings, resolveMatch, generateMatchSeed,
   initWorldSquad, randomAcademyPlayer, ageAndRefreshSquad,
   isSeasonComplete, sortedTable,

@@ -17,7 +17,7 @@ const TOKEN_KEY = 'ms_token';
 // gains endpoints/fields the frontend depends on (career save/sync, admin
 // passwords, delete-user, etc). Lets us show a precise "backend hali
 // yangilanmagan" message instead of a confusing generic error.
-export const REQUIRED_SERVER_VERSION = 12;
+export const REQUIRED_SERVER_VERSION = 13;
 
 export async function checkBackendVersion() {
   try {
@@ -202,3 +202,11 @@ export async function fetchAwards(leagueId) {
   return data.ok ? data : { ok: false, awards: [] };
 }
 export const fetchAwardsPreview = (leagueId) => apiFetch(`/api/admin/awards-preview/${encodeURIComponent(leagueId)}`);
+
+// ---- Phase 5: Leagues & Tournaments Dashboard ----
+// Bitta liga: statistika peshqadamlari (gol/assist/kartochka/reyting), chempionlar
+// tarixi va ichki kubok g'oliblari. Hamma login qilgan foydalanuvchi uchun ochiq.
+export const fetchHubLeague = (leagueId) => apiFetch(`/api/hub/league/${encodeURIComponent(leagueId)}`);
+
+// Barcha ligalarning ichki kuboklari: joriy bosqich, g'olib va g'oliblar tarixi.
+export const fetchHubCups = () => apiFetch('/api/hub/cups');

@@ -58,6 +58,8 @@ export function tournamentsForYear(year) {
       { key: 'africa_cup', name: 'Afrika Kubogi', size: 8 },
     ];
   }
+  // Toq yillarda - UEFA Millatlar Ligasi (server/international.js bilan bir xil)
+  if (year % 2 === 1) return [{ key: 'nations_league', name: 'Millatlar Ligasi', size: 16 }];
   return [];
 }
 
