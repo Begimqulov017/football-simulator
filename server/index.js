@@ -27,7 +27,7 @@ const engine = require('./engine');
 const international = require('./international');
 const continental = require('./continental');
 const awards = require('./awards');
-const { mergeServerOwnedFields } = require('./careerMerge');
+// const { mergeServerOwnedFields } = require('./careerMerge');
 
 
 // Phase 7: player.overall is stored with 2 decimals; everyone else sees it rounded naturally (72.50 -> 73).
