@@ -11,10 +11,11 @@ import { INITIAL_TEAMS } from '../../data/teamsData';
 import { LEAGUES } from '../../data/leaguesData';
 import { getMergedSquad } from '../data/clubRosterStore';
 import { displayRating } from '../utils/statCalc';
+import { computeStartingWage } from '../utils/season';
 
 // Phase 7: o'yinchi OVR ichki 2 xonali saqlanadi; transfer bozori hamma ko'rgan butun songa tayanadi.
 const ovrOf = (p) => displayRating(p?.overall) ?? 60;
-import { computeStartingWage } from '../utils/season';
+
 
 export const MAX_TURNS = 3;
 export const COOLDOWN_DAYS = 30; // rad etilgan/tashlab ketilgan klub bilan qayta gaplashish uchun
