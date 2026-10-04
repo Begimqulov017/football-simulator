@@ -67,6 +67,9 @@ export function GameProvider({ children, username }) {
   const saveTimer = useRef(null);
   const firstLoad = useRef(true);
   const ackRevRef = useRef(0); // mijoz ko'rgan oxirgi admin-tahrir versiyasi
+  // Serverda bu akkaunt uchun karyera BORLIGI tasdiqlanganmi (yuklashda topildi yoki saqlash muvaffaqiyatli bo'ldi).
+  // Yangi yaratilgan, hali saqlanmagan karyerani poll "serverda yo'q" deb o'chirib yubormasligi uchun.
+  const savedOnServerRef = useRef(false);
 
   // Ilova ochilganda avval serverdan (markazlashgan, boshqa qurilmadagi eng
   // so'nggi holat) tortib olishga urinamiz; topilmasa shu qurilmadagi mahalliy
@@ -82,6 +85,7 @@ export function GameProvider({ children, username }) {
         // Server o'ylagan karyera allaqachon admin tahririni o'z ichiga oladi —
         // faqat versiyani eslab qolamiz (patch qayta qo'llanmaydi).
         ackRevRef.current = adminEdit?.rev || 0;
+        savedOnServerRef.current = !!serverPlayer;
         // The server gave an authoritative answer - trust it completely,
         // even when it's null. Falling back to a stale local save here is
         // exactly what let a wiped or never-existing career keep showing up
@@ -123,10 +127,15 @@ export function GameProvider({ children, username }) {
         // The account no longer has a career on the server (e.g. an admin
         // ran "Wipe Data" while this tab was open) - clear it here too
         // instead of leaving a now-fictional career on screen.
+        // LEKIN: karyera hali serverga HECH QACHON saqlanmagan bo'lsa (yangi yaratilgan, saqlash
+        // yo'lda yoki rad etilgan) uni o'chirmaymiz - aks holda forma qaytib qolardi.
+        if (!savedOnServerRef.current) return;
+        savedOnServerRef.current = false;
         setPlayer(null);
         persistLocalSave(username, null);
         return;
       }
+      if (confirmed && serverPlayer) savedOnServerRef.current = true;
       if (serverPlayer?.career?.lastMatchResult && !serverPlayer.career.lastMatchResult.seenAt) {
         setPlayer((prev) => (prev ? { ...prev, career: { ...prev.career, lastMatchResult: serverPlayer.career.lastMatchResult } } : prev));
       }
@@ -162,11 +171,24 @@ export function GameProvider({ children, username }) {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       saveCareerToServer(player, ackRevRef.current).then((r) => {
-        // Server rad etdi: admin shu orada tahrirlagan. Patch'ni qo'llaymiz —
-        // o'zgargan `player` yangi saqlashni o'zi ishga tushiradi (yangi ackRev bilan).
+        if (r && r.ok) {
+          savedOnServerRef.current = true;
+          if (r.ackRev) ackRevRef.current = r.ackRev; // wipe'dan keyingi yangi karyera qabul qilindi
+          return;
+        }
+        // Server rad etdi: admin shu orada karyerani tahrirlagan yoki wipe qilgan.
         if (r && r.conflict && r.adminEdit) {
           ackRevRef.current = r.adminEdit.rev;
-          setPlayer((prev) => applyAdminPatch(prev, r.adminEdit.patch));
+          if (r.adminEdit.patch) {
+            // Tahrir: patch'ni qo'llaymiz — o'zgargan `player` yangi saqlashni o'zi ishga tushiradi.
+            setPlayer((prev) => applyAdminPatch(prev, r.adminEdit.patch));
+          } else {
+            // Wipe: bu ESKI karyera (yangisi bo'lsa server qabul qilgan bo'lardi) - uni qaytarib
+            // yozmaymiz, sahifa boshlang'ich formaga qaytadi.
+            savedOnServerRef.current = false;
+            setPlayer(null);
+            persistLocalSave(username, null);
+          }
         }
       }).catch(() => {});
     }, 1200);

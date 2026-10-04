@@ -5,18 +5,22 @@ import { generateSubStatsForMain, generateGkSubStats, calcMainStats, calcGoalkee
 const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
-// Step 1: First Rating -> random 65-73.
+// Step 1: First Rating -> random 67-73 (minimum 67).
+export const FIRST_RATING_MIN = 67;
+export const FIRST_RATING_MAX = 73;
 export function rollFirstRating() {
-  return randInt(65, 73);
+  return randInt(FIRST_RATING_MIN, FIRST_RATING_MAX);
 }
 
-// Step 2: First Potential -> a single rounded band, 73-90, so it always sits
-// close enough above your First Rating to feel earned but never wildly out of
-// reach. (Potential isn't locked in forever - great prime-years performances
+// Step 2: First Potential -> a single rounded band, 80-90 (minimum 80), so it
+// always sits close enough above your First Rating to feel earned but never
+// wildly out of reach. (Potential isn't locked in forever - great prime-years performances
 // can nudge it up later, while injuries and poor games can knock it down.)
+export const POTENTIAL_MIN = 80;
+export const POTENTIAL_MAX = 90;
 export function rollPotential(firstRating) {
-  const min = Math.min(90, Math.max(73, firstRating));
-  const potential = randInt(min, 90);
+  const min = Math.min(POTENTIAL_MAX, Math.max(POTENTIAL_MIN, firstRating));
+  const potential = randInt(min, POTENTIAL_MAX);
   return { potential, tier: potential >= 82 ? 'high' : 'low' };
 }
 

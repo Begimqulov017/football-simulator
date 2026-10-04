@@ -118,3 +118,11 @@ Umumiy komponentlar: `StatLeaders.jsx` (Top Scorers / Assists / Cards / Rating),
   `/api/mod/users/:username/mute`, audit) = Phase 10, admin VA moderator uchun. Mute qilingan foydalanuvchi `POST /api/chat` da 403 `code: muted`.
 - `SERVER_VERSION` va `REQUIRED_SERVER_VERSION` = 14.
 - `tests/test_phase9_10_integration.js`: haqiqiy server kodi bilan 37 ta tekshiruv (rollar, chat, mute, admin-edit, auto-sim, hub...).
+
+## Tuzatish: karyera "yo'qolib qolish" va boshlang'ich reyting
+- Muammo: admin akkaunt "Wipe Data" qilingach (server `adminEdit` yozadi), yangi yaratilgan karyera saqlashda `conflict` deb rad etilar,
+  klient uni qayta yubormas va 20 soniyalik poll "serverda karyera yo'q" deb ism-familya formasiga qaytarar edi.
+- `/api/career/save`: wipe'dan KEYIN yaratilgan (`createdAt` > `adminEdit.at`) karyera qabul qilinadi; eskirgan nusxa hamon rad etiladi.
+- `GameContext`: serverga hali saqlanmagan karyerani poll o'chirmaydi; wipe konfliktida eski karyera qaytarib yozilmaydi.
+- `playerGen.js`: boshlang'ich reyting 67–73 (min 67), potential 80–90 (min 80, hech qachon reytingdan past emas).
+

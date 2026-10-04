@@ -354,7 +354,18 @@ app.post('/api/career/save', authMiddleware, (req, res) => {
   // hali buni ko'rmagan bo'lsa (ackRev eskirgan) - saqlashni RAD etamiz, aks holda
   // mijozning eski nusxasi adminning o'zgarishini ustidan yozib yuborardi.
   if (target.adminEdit && (target.adminEdit.rev || 0) > (Number(ackRev) || 0)) {
-    return res.json({ ok: false, conflict: true, adminEdit: target.adminEdit });
+    // Wipe Data (patch: null) dan KEYIN o'yinchi yangi karyera boshlagan bo'lsa (karyera
+    // wipe vaqtidan keyin yaratilgan) - bu eskirgan nusxa emas, yangi karyera: qabul qilamiz
+    // va mijozga yangi versiyani qaytaramiz. Aks holda yangi karyera hech qachon saqlanmasdi.
+    const wipedThenCreated = !target.adminEdit.patch && player && player.createdAt
+      && Date.parse(player.createdAt) > Date.parse(target.adminEdit.at || 0);
+    if (!wipedThenCreated) {
+      return res.json({ ok: false, conflict: true, adminEdit: target.adminEdit });
+    }
+    target.careerSave = player;
+    target.careerSavedAt = new Date().toISOString();
+    writeDB(db);
+    return res.json({ ok: true, ackRev: target.adminEdit.rev });
   }
   // Server yozgan maydonlar (mukofotlar, terma jamoa) klientning eskirgan
   // nusxasi bilan ustidan yozilib ketmasin - birlashtiramiz.
