@@ -27,8 +27,11 @@ const engine = require('./engine');
 const international = require('./international');
 const continental = require('./continental');
 const awards = require('./awards');
-// const { mergeServerOwnedFields } = require('./careerMerge');
-
+const { mergeServerOwnedFields } = require('./careerMerge');
+const globalAwards = require('./globalAwards');
+const chat = require('./chat');
+const registerAdminTools = require('./adminTools');
+const { moderationView, roleOf, isMuted } = require('./roles');
 
 // Phase 7: player.overall is stored with 2 decimals; everyone else sees it rounded naturally (72.50 -> 73).
 const roundOvr = (n) => (n == null ? n : Math.round(Math.round(n * 100) / 100));
@@ -38,7 +41,7 @@ const PORT = process.env.PORT || 4000;
 // Bumped every time server/index.js gets new endpoints/fields the frontend
 // depends on, so the frontend can detect "siz eski backend'ni ishlatyapsiz,
 // qayta deploy qiling" instead of showing a confusing generic network error.
-const SERVER_VERSION = 13;
+const SERVER_VERSION = 14; // 14: Phase 9 (terma jamoa hub, global chat/awards) + Phase 10 (rollar, mute/suspend, avto-sim, fixture, news forcing, admin-edit conflict)
 const MAX_USERS = 10; // admin ham shu songa kiradi
 
 // Retiring at or above this rating gets its own headline in the season
@@ -96,7 +99,8 @@ function ensureAdminSeeded() {
 // Yordamchi funksiyalar
 // ------------------------------------------------------------
 function publicUser(u) {
-  return { username: u.username, canAccessPro: !!u.canAccessPro, isAdmin: !!u.isAdmin };
+  const m = moderationView(u);
+  return { username: u.username, canAccessPro: !!u.canAccessPro, isAdmin: !!u.isAdmin, role: m.role, muted: m.muted };
 }
 
 // Faqat ADMIN paneli uchun — parolni ham (ochiq matn) qo'shib qaytaradi.
@@ -107,6 +111,7 @@ function adminUserView(u) {
     password: u.password || '(noma\'lum — eski akkaunt)',
     canAccessPro: !!u.canAccessPro,
     isAdmin: !!u.isAdmin,
+    ...moderationView(u),
     createdAt: u.createdAt || null,
     hasCareerSave: !!u.careerSave,
   };
@@ -186,12 +191,21 @@ function withLock(fn) {
   };
 }
 
+// Middleware bo'lmagan (masalan taymer) ishlar uchun: xuddi shu zanjirga ulanadi,
+// shuning uchun avto-simulyatsiya HECH QACHON boshqa so'rov bilan aralashib ketmaydi.
+function runLocked(fn) {
+  const p = dbLock.then(() => fn()).catch((err) => { console.error('runLocked xatosi:', err); });
+  dbLock = p.then(() => undefined, () => undefined);
+  return p;
+}
+
 const authMiddleware = withLock(function (req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   const db = readDB();
   const user = getUserFromToken(db, token);
   if (!user) return res.status(401).json({ ok: false, error: 'Sessiya topilmadi — qaytadan kiring' });
+  if (user.suspended) return res.status(403).json({ ok: false, code: 'suspended', error: `Akkauntingiz to'xtatilgan${user.suspended.reason ? `: ${user.suspended.reason}` : ''}` });
   req.user = user;
   req.db = db;
   req.token = token;
@@ -262,6 +276,9 @@ app.post('/api/login', withLock((req, res) => {
   if (!bcrypt.compareSync(password || '', user.passwordHash)) {
     return res.json({ ok: false, error: "Parol noto'g'ri" });
   }
+  if (user.suspended) {
+    return res.json({ ok: false, code: 'suspended', error: `Akkauntingiz to'xtatilgan${user.suspended.reason ? `: ${user.suspended.reason}` : ''}. Admin bilan bog'laning.` });
+  }
   const token = issueSession(db, user.username);
   res.json({ ok: true, token, user: publicUser(user) });
 }));
@@ -330,9 +347,15 @@ app.delete('/api/users/:username', authMiddleware, adminMiddleware, (req, res) =
 
 // O'z karyera saqlanmasini yozish (har bir muhim o'zgarishdan keyin frontend chaqiradi)
 app.post('/api/career/save', authMiddleware, (req, res) => {
-  const { player } = req.body || {};
+  const { player, ackRev } = req.body || {};
   const db = req.db;
   const target = db.users.find((u) => u.username === req.user.username);
+  // PHASE 10 (state consistency): admin karyerani tahrirlagan bo'lsa va mijoz
+  // hali buni ko'rmagan bo'lsa (ackRev eskirgan) - saqlashni RAD etamiz, aks holda
+  // mijozning eski nusxasi adminning o'zgarishini ustidan yozib yuborardi.
+  if (target.adminEdit && (target.adminEdit.rev || 0) > (Number(ackRev) || 0)) {
+    return res.json({ ok: false, conflict: true, adminEdit: target.adminEdit });
+  }
   // Server yozgan maydonlar (mukofotlar, terma jamoa) klientning eskirgan
   // nusxasi bilan ustidan yozilib ketmasin - birlashtiramiz.
   target.careerSave = player ? mergeServerOwnedFields(target.careerSave, player) : null;
@@ -350,7 +373,11 @@ app.get('/api/career/mine', authMiddleware, (req, res) => {
     if (world) worldDate = world.gameDate;
   }
   const pendingWorldMatch = findPendingMatchForUser(req.db, req.user);
-  res.json({ ok: true, player: cs || null, savedAt: req.user.careerSavedAt || null, worldDate, pendingWorldMatch });
+  res.json({
+    ok: true, player: cs || null, savedAt: req.user.careerSavedAt || null, worldDate, pendingWorldMatch,
+    adminEdit: req.user.adminEdit || null,
+    forcedNews: adminTools.forcedNewsFor(req.db, req.user.username),
+  });
 });
 
 // Marks the player's most recent shared-world match result as "seen" (so
@@ -836,6 +863,16 @@ function rolloverSeason(world, league, db) {
   } catch (err) {
     console.error('Awards hisoblashda xatolik:', err.message);
   }
+  // Phase 9: global mukofotlar uchun shu liganing nomzodlarini saqlab qo'yamiz; barcha
+  // jonli ligalar mavsumni tugatgach Ballon d'Or / Golden Boot / Team of the Season yakunlanadi.
+  try {
+    if (db) {
+      globalAwards.recordLeagueSnapshot(db, world, league, finishedSeason);
+      globalAwards.tryFinalizeGlobal(db, finishedSeason);
+    }
+  } catch (err) {
+    console.error('Global awards xatoligi:', err.message);
+  }
   const championId = table[0]?.teamId;
   const championName = engine.INITIAL_TEAMS.find((t) => t.id === championId)?.name || championId || '—';
   const topScorerList = Object.values(world.topScorers || {}).sort((a, b) => b.goals - a.goals).slice(0, 10);
@@ -1182,6 +1219,10 @@ app.post('/api/admin/wipe-data', authMiddleware, adminMiddleware, (req, res) => 
   db.international = { activeTournaments: [], history: [], newsLog: [], lastDate: null };
   delete db.worldDate;
   db.sessions = {};
+  db.chat = { messages: [], pinnedId: null, seq: 0 };
+  db.chatAudit = [];
+  db.adminNews = [];
+  db.autoSim = { enabled: false, intervalMinutes: 60, daysPerTick: 1, lastRunAt: null, nextRunAt: null, runs: 0, lastSummary: null, lastBy: null };
 
   const newToken = issueSession(db, adminUser.username); // also calls writeDB(db)
 
@@ -1313,6 +1354,17 @@ function advanceWorldOnce(db) {
   // abadiy to'xtatib qo'yardi.
   const autoResolvedPending = autoResolveStalePendingMatches(db, newDate);
 
+  // Phase 9 tuzatish: oxirgi tur o'yini avtomatik hal qilinsa (inson o'yinchining pending o'yini),
+  // yuqoridagi tekshiruv bu kunda ishlamaydi va mavsum abadiy tugamay qolardi.
+  engine.LEAGUES.forEach((lg) => {
+    const w = db.leagueWorlds?.[lg.id];
+    if (w && engine.isSeasonComplete(w)) {
+      seasonRollovers.push({ league: w.leagueName, ...rolloverSeason(w, lg, db) });
+    }
+  });
+  // Global mukofotlar: barcha ligalar tugagan yoki kutish muddati o'tgan mavsumlarni yakunlaydi
+  try { globalAwards.finalizeDue(db, newDate); } catch (err) { console.error('Global awards finalizeDue:', err.message); }
+
   // Injury recovery. The shared world hands out match injuries but nothing on
   // the server ever healed them, so an injured player stayed injured forever
   // as far as the server was concerned - which quietly made them permanently
@@ -1364,12 +1416,13 @@ function countPending(db) {
 // ADMIN: dunyo kalendarini `days` kunga (1..31) siljitadi. Foydalanuvchisi bor
 // o'yinlar hal qilinmaydi — o'yinchi o'sha kunga "yetib kelguncha" KUTISH
 // (pending) holatida turadi; 15 kundan ko'p kutilganlar avtomatik hal qilinadi.
-app.post('/api/admin/advance-world-day', authMiddleware, adminMiddleware, (req, res) => {
-  const db = req.db;
-  const days = Math.max(1, Math.min(31, Number(req.body?.days) || 1));
+// BITTA kirish nuqtasi: qo'lda (+1 / +X kun) ham, avtomatik rejim ham SHU
+// funksiyadan o'tadi (Phase 10 - "unified engine"). Mantiq faqat advanceWorldOnce'da.
+function advanceDays(db, days, by) {
+  const n = Math.max(1, Math.min(31, Number(days) || 1));
   let last = null;
   const agg = { matches: [], seasonRollovers: [], internationalEvents: [], continentalEvents: [], autoResolvedPending: [], resolvedMatches: 0 };
-  for (let i = 0; i < days; i += 1) {
+  for (let i = 0; i < n; i += 1) {
     last = advanceWorldOnce(db);
     agg.resolvedMatches += last.resolvedMatches;
     agg.matches.push(...last.matches);
@@ -1377,10 +1430,19 @@ app.post('/api/admin/advance-world-day', authMiddleware, adminMiddleware, (req, 
     agg.internationalEvents.push(...last.internationalEvents);
     agg.continentalEvents.push(...last.continentalEvents);
     agg.autoResolvedPending.push(...(last.autoResolvedPending || []));
-    logSimulation(db, last, req.user.username);
+    logSimulation(db, last, by);
   }
+  return { worldDate: last.worldDate, days: n, ...agg, matches: agg.matches.slice(-60), pendingNow: countPending(db) };
+}
+
+// ADMIN: dunyo kalendarini `days` kunga (1..31) siljitadi. Foydalanuvchisi bor
+// o'yinlar hal qilinmaydi — o'yinchi o'sha kunga "yetib kelguncha" KUTISH
+// (pending) holatida turadi; 15 kundan ko'p kutilganlar avtomatik hal qilinadi.
+app.post('/api/admin/advance-world-day', authMiddleware, adminMiddleware, (req, res) => {
+  const db = req.db;
+  const out = advanceDays(db, req.body?.days, req.user.username);
   writeDB(db);
-  res.json({ ok: true, worldDate: last.worldDate, days, ...agg, matches: agg.matches.slice(-60), pendingNow: countPending(db) });
+  res.json({ ok: true, ...out });
 });
 
 // ============================================================
@@ -1527,6 +1589,8 @@ app.post('/api/admin/users/:username/wipe', authMiddleware, adminMiddleware, (re
   if (!target) return res.status(404).json({ ok: false, error: 'Foydalanuvchi topilmadi' });
   target.careerSave = null;
   target.careerSavedAt = null;
+  // rev monoton o'sadi (eski patch yangi karyeraga qo'llanib ketmasin)
+  target.adminEdit = { rev: ((target.adminEdit && target.adminEdit.rev) || 0) + 1, patch: null, at: new Date().toISOString(), by: req.user.username };
   writeDB(db);
   res.json({ ok: true });
 });
@@ -1578,11 +1642,75 @@ app.get('/api/international/nation/:country', authMiddleware, (req, res) => {
   });
 });
 
+
+// ============================================================
+// PHASE 9 — National Team Hub, Global Chat, Global Awards
+// ============================================================
+
+// National Team Hub: boshlang'ich 11 + zaxira, fixtures va (o'zim uchun) chaqiruv shartlari
+app.get('/api/international/hub/:country', authMiddleware, (req, res) => {
+  const hub = international.nationHub(req.db, req.params.country, req.user.username);
+  if (!hub) return res.status(404).json({ ok: false, error: "Bu mamlakat uchun yetarli futbolchi yo'q" });
+  const eligibility = international.eligibilityFor(req.db, req.params.country, req.user.username);
+  res.json({ ok: true, hub, eligibility, worldDate: req.db.worldDate || null });
+});
+
+// ---- Global chat ----
+app.get('/api/chat', authMiddleware, (req, res) => {
+  res.json(chat.snapshot(req.db, req.user));
+});
+
+app.get('/api/chat/unread', authMiddleware, (req, res) => {
+  res.json(chat.unreadSummary(req.db, req.user, req.query.afterSeq));
+});
+
+app.post('/api/chat', authMiddleware, (req, res) => {
+  // Phase 10: mute qilingan foydalanuvchi yoza olmaydi (admin mute qilinmaydi)
+  if (isMuted(req.user)) {
+    const mv = moderationView(req.user).muted;
+    return res.status(403).json({ ok: false, code: 'muted', error: mv.forever ? 'Siz doimiy mute qilingansiz' : `Siz ${new Date(mv.until).toLocaleString('uz-UZ')} gacha mute qilingansiz`, muted: mv });
+  }
+  const r = chat.postMessage(req.db, req.user, (req.body || {}).text);
+  if (r.ok) writeDB(req.db);
+  res.json(r);
+});
+// Pin / o'chirish: /api/mod/chat/... (admin + moderator) — server/adminTools.js
+
+// ---- Global awards (barcha ligalar) ----
+app.get('/api/awards-global', authMiddleware, (req, res) => {
+  const state = globalAwards.publicState(req.db);
+  res.json({
+    ok: true, ...state,
+    coefficients: { top5: globalAwards.COEF_TOP5, other: globalAwards.COEF_OTHER, top5Leagues: globalAwards.TOP5_LEAGUES },
+    weights: globalAwards.WEIGHTS,
+  });
+});
+
+// Jonli poyga: mavsum tugamagan bo'lsa ham hozirgi holat bo'yicha (saqlanmaydi)
+app.get('/api/awards-global/live', authMiddleware, (req, res) => {
+  res.json({ ok: true, live: globalAwards.computeLive(req.db) });
+});
+
+// Admin: kutayotgan global mavsumni majburan yakunlash (ba'zi liga to'xtab qolsa)
+app.post('/api/admin/awards-global/finalize', authMiddleware, adminMiddleware, (req, res) => {
+  const season = Number((req.body || {}).season);
+  if (!season) return res.json({ ok: false, error: 'season kerak' });
+  const r = globalAwards.tryFinalizeGlobal(req.db, season, { force: true });
+  if (r.finalized) writeDB(req.db);
+  res.json({ ok: r.finalized, ...r });
+});
+
 // MongoDB'ga ulanish app.listen()dan OLDIN tugashi shart — aks holda birinchi
 // so'rov readDB()ni cache hali yo'q paytda chaqirib qolishi mumkin edi.
 // Ulanib bo'lmasa server umuman ishga tushmaydi (process.exit) — noto'g'ri
 // MONGODB_URI bilan "tirik" ko'rinib, aslida hech narsa saqlamaydigan
 // serverdan ko'ra Render logida ochiq xato yaxshiroq.
+// PHASE 10: admin panel endpointlari (rollar, avto-simulyatsiya, fixture, chat, ...)
+const adminTools = registerAdminTools(app, {
+  authMiddleware, adminMiddleware, readDB, writeDB, engine,
+  advanceDays, countPending, ensureWorldForLeague, runLocked, ADMIN_USERNAME,
+});
+
 initDB()
   .then(() => {
     ensureAdminSeeded();

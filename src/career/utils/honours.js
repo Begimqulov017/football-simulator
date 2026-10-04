@@ -12,6 +12,10 @@ const AWARD_META = {
   ballon_dor: { icon: '🥇', title: "Ballon d'Or" },
   golden_boot: { icon: '👟', title: 'Golden Boot' },
   team_of_season: { icon: '🌟', title: 'Team of the Season' },
+  // Phase 9: barcha ligalar bo'yicha global mukofotlar (server/globalAwards.js, league: 'Global')
+  global_ballon_dor: { icon: '🌍', title: "Global Ballon d'Or" },
+  global_golden_boot: { icon: '🌍', title: 'Global Golden Boot' },
+  global_team_of_season: { icon: '🌍', title: 'Global Team of the Season' },
 };
 const INDIVIDUAL_TEXT = /oltin to'p|ballon|oltin batinka|golden boot|mavsumning eng yaxshi tarkibi|team of the season/i;
 

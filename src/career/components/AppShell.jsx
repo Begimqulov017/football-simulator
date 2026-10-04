@@ -1,11 +1,12 @@
 import React, { useMemo } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useGame } from '../context/GameContext';
 import { useExit, useCurrentUser } from '../context/ExitContext';
 import useProceduralMessages from '../utils/useProceduralMessages';
 import { unreadCounts } from '../utils/messageGenerator';
 import Icon from '../../components/Icon';
 import { displayRating } from '../utils/statCalc';
+import useChatUnread from '../hooks/useChatUnread';
 
 const NAV_ITEMS = [
   { to: '/home', icon: 'home', label: 'Home' },
@@ -18,6 +19,7 @@ const NAV_ITEMS = [
   { to: '/transfers', icon: 'transfer', label: 'Transfers' },
   { to: '/national-team', icon: 'trophy', label: 'National Team' },
   { to: '/awards', icon: 'star', label: 'Awards' },
+  { to: '/chat', icon: 'chat', label: 'Global Chat' },
   { to: '/news', icon: 'news', label: 'News' },
   { to: '/users', icon: 'users', label: 'Users' }
 ];
@@ -53,6 +55,9 @@ export default function AppShell({ children }) {
   const { player } = useGame();
   const onExit = useExit();
   const currentUser = useCurrentUser();
+  const { pathname } = useLocation();
+  // Chat sahifasi ochiq bo'lganda badge kerak emas (sahifaning o'zi ko'rsatadi)
+  const chatBadge = useChatUnread(currentUser?.username, pathname === '/chat');
 
   // Generates match reports / coach advice / call-ups etc. into the inbox.
   // Lives here (not on MessagesPage) so the badge updates on every page.
@@ -91,12 +96,24 @@ export default function AppShell({ children }) {
             <span className="icon"><Icon name={item.icon} size={17} /></span>
             <span>{item.label}</span>
             {badgeFor(item.to)}
+            {item.to === '/chat' && (chatBadge.mentions > 0 || chatBadge.unread > 0) && (
+              <span
+                title={chatBadge.mentions > 0 ? `Sizga ${chatBadge.mentions} ta @teg` : `${chatBadge.unread} ta yangi xabar`}
+                style={{
+                  marginLeft: 'auto', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 10,
+                  fontSize: 11, fontWeight: 800, lineHeight: '20px', textAlign: 'center', color: '#fff',
+                  background: chatBadge.mentions > 0 ? '#EF4444' : '#0284C7'
+                }}
+              >
+                {chatBadge.mentions > 0 ? `@${chatBadge.mentions}` : (chatBadge.unread > 99 ? '99+' : chatBadge.unread)}
+              </span>
+            )}
           </NavLink>
         ))}
-        {currentUser?.isAdmin && (
+        {(currentUser?.isAdmin || currentUser?.role === 'moderator') && (
           <NavLink to="/admin" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
             <span className="icon"><Icon name="shield" size={17} /></span>
-            <span>Admin</span>
+            <span>{currentUser?.isAdmin ? 'Admin' : 'Moderatsiya'}</span>
           </NavLink>
         )}
         <button

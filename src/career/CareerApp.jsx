@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { GameProvider, useGame } from './context/GameContext';
 
@@ -25,7 +25,9 @@ import LiveResultPage from './pages/LiveResultPage';
 import NewsPage from './pages/NewsPage';
 import NationalTeamPage from './pages/NationalTeamPage';
 import AwardsPage from './pages/AwardsPage';
+import ChatPage from './pages/ChatPage';
 import RetirementPage from './pages/RetirementPage';
+import { pingSession } from './utils/careerApi';
 import { ExitProvider } from './context/ExitContext';
 
 // Sends the player to /start if no save exists yet, or /home if one does.
@@ -78,10 +80,28 @@ function LoadingGate({ children }) {
   return children;
 }
 
+// PHASE 10: akkaunt to'xtatilsa yoki rol o'zgarib sessiya bekor qilinsa, ochiq turgan
+// ilova buni sezishi kerak (aks holda foydalanuvchi eski huquqlar bilan ishlayveradi).
+// Har 30 soniyada /api/me tekshiriladi; sessiya yo'q bo'lsa sahifa qayta yuklanadi va
+// App login ekranini ko'rsatadi. Tarmoq xatosida hech narsa qilinmaydi.
+function useSessionGuard(currentUser) {
+  useEffect(() => {
+    const t = setInterval(async () => {
+      const r = await pingSession();
+      if (r.networkError) return;
+      const gone = !r.ok;
+      const changed = r.ok && (r.user.role !== (currentUser.role || (currentUser.isAdmin ? 'admin' : 'user')) || !!r.user.isAdmin !== !!currentUser.isAdmin);
+      if (gone || changed) window.location.reload();
+    }, 30000);
+    return () => clearInterval(t);
+  }, [currentUser]);
+}
+
 // currentUser — App.jsx'dan keladi, karyera saqlanmasini shu foydalanuvchi
 // nomiga bog'lab turadi (har bir do'st o'z karyerasini ko'radi) va Users
 // bo'limi qaysi hisob premiumligini bilishi uchun ishlatiladi.
 export default function CareerApp({ currentUser, onExit }) {
+  useSessionGuard(currentUser);
   return (
     <div className="career-app">
       <GameProvider username={currentUser.username}>
@@ -113,7 +133,8 @@ export default function CareerApp({ currentUser, onExit }) {
                 <Route path="/news" element={<RequirePlayer><NewsPage /></RequirePlayer>} />
                 <Route path="/awards" element={<RequirePlayer><AwardsPage currentUser={currentUser} /></RequirePlayer>} />
                 <Route path="/national-team" element={<RequirePlayer><NationalTeamPage /></RequirePlayer>} />
-                {currentUser.isAdmin && (
+                <Route path="/chat" element={<RequirePlayer><ChatPage currentUser={currentUser} /></RequirePlayer>} />
+                {(currentUser.isAdmin || currentUser.role === 'moderator') && (
                   <Route path="/admin" element={<RequirePlayer><AdminPage currentUser={currentUser} /></RequirePlayer>} />
                 )}
                 <Route path="*" element={<RootRedirect />} />

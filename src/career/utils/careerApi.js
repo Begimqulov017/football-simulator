@@ -17,7 +17,7 @@ const TOKEN_KEY = 'ms_token';
 // gains endpoints/fields the frontend depends on (career save/sync, admin
 // passwords, delete-user, etc). Lets us show a precise "backend hali
 // yangilanmagan" message instead of a confusing generic error.
-export const REQUIRED_SERVER_VERSION = 13;
+export const REQUIRED_SERVER_VERSION = 14;
 
 export async function checkBackendVersion() {
   try {
@@ -59,8 +59,10 @@ async function apiFetch(path, options = {}) {
 
 // O'z karyera saqlanmasini serverga yozadi (best-effort — muvaffaqiyatsiz
 // bo'lsa ham UI bloklanmaydi, chunki localStorage baribir asosiy manba).
-export async function saveCareerToServer(player) {
-  return apiFetch('/api/career/save', { method: 'POST', body: JSON.stringify({ player }) });
+// ackRev: mijoz ko'rgan oxirgi admin-tahrir versiyasi. Server eskirgan bo'lsa
+// { ok:false, conflict:true, adminEdit } qaytaradi (GameContext buni hal qiladi).
+export async function saveCareerToServer(player, ackRev = 0) {
+  return apiFetch('/api/career/save', { method: 'POST', body: JSON.stringify({ player, ackRev }) });
 }
 
 // Boshqa qurilmadan kirilganda serverdagi saqlanmani tortib olish uchun.
@@ -72,14 +74,17 @@ export async function loadCareerFromServer() {
     // don't know whether a career exists, so the caller should fall back to
     // whatever it has cached locally rather than treating this as a
     // confirmed "no career".
-    return { player: null, worldDate: null, confirmed: false, pendingWorldMatch: null };
+    return { player: null, worldDate: null, confirmed: false, pendingWorldMatch: null, adminEdit: null, forcedNews: [] };
   }
   // The server answered authoritatively: data.player is exactly what exists
   // for this account right now, including null (no career at all - e.g.
   // right after an admin "Wipe Data"). confirmed: true tells the caller to
   // trust this value even when it's null, instead of resurrecting a stale
   // local save.
-  return { player: data.player, worldDate: data.worldDate, confirmed: true, pendingWorldMatch: data.pendingWorldMatch || null };
+  return {
+    player: data.player, worldDate: data.worldDate, confirmed: true, pendingWorldMatch: data.pendingWorldMatch || null,
+    adminEdit: data.adminEdit || null, forcedNews: data.forcedNews || [],
+  };
 }
 
 // 4-BAND: foydalanuvchining klubi navbatdagi o'yinini KUTMOQDA (hali
@@ -119,6 +124,39 @@ export const adminSetPassword = (username, password) =>
   apiFetch(`/api/admin/users/${encodeURIComponent(username)}/password`, { method: 'POST', body: JSON.stringify({ password }) });
 export const adminWipeUser = (username) =>
   apiFetch(`/api/admin/users/${encodeURIComponent(username)}/wipe`, { method: 'POST' });
+
+// ---- Phase 10: Admin Panel & Unified Engine ----
+// Master Calendar
+export const fetchCalendar = () => apiFetch('/api/admin/calendar');
+export const setAutoSim = (cfg) => apiFetch('/api/admin/auto-sim', { method: 'POST', body: JSON.stringify(cfg) });
+export const runAutoSimNow = () => apiFetch('/api/admin/auto-sim/run-now', { method: 'POST' });
+// Fixture
+export const fetchFixtures = (leagueId) => apiFetch(`/api/admin/fixtures/${encodeURIComponent(leagueId)}`);
+export const createFixture = (body) => apiFetch('/api/admin/fixtures', { method: 'POST', body: JSON.stringify(body) });
+export const deleteFixture = (leagueId, round) => apiFetch(`/api/admin/fixtures/${encodeURIComponent(leagueId)}/${encodeURIComponent(round)}`, { method: 'DELETE' });
+// Tarkib / statistika tahriri
+export const fetchSquad = (leagueId, teamId) => apiFetch(`/api/admin/squad/${encodeURIComponent(leagueId)}/${encodeURIComponent(teamId)}`);
+export const editSquadPlayer = (leagueId, teamId, playerId, body) =>
+  apiFetch(`/api/admin/squad/${encodeURIComponent(leagueId)}/${encodeURIComponent(teamId)}/${encodeURIComponent(playerId)}`, { method: 'POST', body: JSON.stringify(body) });
+export const editUserCareer = (username, body) =>
+  apiFetch(`/api/admin/users/${encodeURIComponent(username)}/career-edit`, { method: 'POST', body: JSON.stringify(body) });
+// Yangilikni majburlash
+export const fetchAdminNews = () => apiFetch('/api/admin/news');
+export const forceNews = (body) => apiFetch('/api/admin/news', { method: 'POST', body: JSON.stringify(body) });
+export const deleteAdminNews = (id) => apiFetch(`/api/admin/news/${encodeURIComponent(id)}`, { method: 'DELETE' });
+// Foydalanuvchilarni boshqarish
+export const fetchUsersTable = () => apiFetch('/api/admin/users-table');
+export const fetchUserStats = (username) => apiFetch(`/api/admin/users/${encodeURIComponent(username)}/stats`);
+export const setUserRole = (username, role) =>
+  apiFetch(`/api/admin/users/${encodeURIComponent(username)}/role`, { method: 'POST', body: JSON.stringify({ role }) });
+export const setUserSuspended = (username, suspended, reason = '') =>
+  apiFetch(`/api/admin/users/${encodeURIComponent(username)}/suspend`, { method: 'POST', body: JSON.stringify({ suspended, reason }) });
+export const muteUser = (username, body) =>
+  apiFetch(`/api/mod/users/${encodeURIComponent(username)}/mute`, { method: 'POST', body: JSON.stringify(body) });
+// Chat + moderatsiya
+export const fetchChatAudit = () => apiFetch('/api/mod/chat-audit');
+// Sessiya tekshiruvi (suspend / rol o'zgarishini ilova ochiq turganda ham sezish uchun)
+export const pingSession = () => apiFetch('/api/me');
 
 // Chempionlar Ligasi / Yevropa Ligasi (umumiy dunyo)
 export async function fetchContinental() {
@@ -210,3 +248,18 @@ export const fetchHubLeague = (leagueId) => apiFetch(`/api/hub/league/${encodeUR
 
 // Barcha ligalarning ichki kuboklari: joriy bosqich, g'olib va g'oliblar tarixi.
 export const fetchHubCups = () => apiFetch('/api/hub/cups');
+// ---- Phase 9: National Team Hub, Global Chat, Global Awards ----
+// Terma jamoa: boshlang'ich 11 + zaxira, fixtures va (o'zim uchun) chaqiruv shartlari
+export const fetchNationHub = (country) => apiFetch(`/api/international/hub/${encodeURIComponent(country)}`);
+
+export const fetchChat = () => apiFetch('/api/chat');
+export const fetchChatUnread = (afterSeq = 0) => apiFetch(`/api/chat/unread?afterSeq=${Number(afterSeq) || 0}`);
+export const sendChatMessage = (text) => apiFetch('/api/chat', { method: 'POST', body: JSON.stringify({ text }) });
+// Moderatsiya (admin + moderator): pin / o'chirish -> /api/mod/chat/...
+export const pinChatMessage = (id) => apiFetch(`/api/mod/chat/${encodeURIComponent(id)}/pin`, { method: 'POST', body: JSON.stringify({}) });
+export const deleteChatMessage = (id) => apiFetch(`/api/mod/chat/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+export const fetchGlobalAwards = () => apiFetch('/api/awards-global');
+export const fetchGlobalAwardsLive = () => apiFetch('/api/awards-global/live');
+export const finalizeGlobalAwards = (season) =>
+  apiFetch('/api/admin/awards-global/finalize', { method: 'POST', body: JSON.stringify({ season }) });

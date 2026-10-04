@@ -6,7 +6,7 @@ import { LEAGUES } from '../../data/leaguesData';
 import { saveCareerToServer, loadCareerFromServer, ackMatchResult } from '../utils/careerApi';
 import { mergeServerHonours } from '../utils/honoursSync';
 import { displayRating } from '../utils/statCalc';
-import { appendNews, buildTransferNews } from '../utils/newsGenerator';
+import { appendNews, buildTransferNews, buildAdminNews } from '../utils/newsGenerator';
 
 const GameContext = createContext(null);
 
@@ -41,6 +41,22 @@ function persistLocalSave(username, player) {
 }
 
 // Transferlar tarixiga yozuv qo'shadi (Admin -> Players Stats'da ko'rinadi)
+// PHASE 10 — state consistency yordamchilari.
+// Admin karyerani tahrirlaganda server { rev, patch } yozadi. Patch'ni lokal
+// holat ustiga qo'llaymiz (mijozning yangi o'yinlari saqlanib qoladi, faqat admin
+// o'zgartirgan maydonlar almashadi).
+function applyAdminPatch(prev, patch) {
+  if (!prev || !patch) return prev;
+  return { ...prev, ...(patch.player || {}), career: { ...prev.career, ...(patch.career || {}) } };
+}
+// Majburiy yangiliklar feed'ga bir marta (id bo'yicha) qo'shiladi
+function mergeForcedNews(prev, forcedNews) {
+  if (!prev?.career || !forcedNews?.length) return prev;
+  const next = appendNews(prev.career.newsFeed, buildAdminNews(forcedNews, prev));
+  if (next === (prev.career.newsFeed || [])) return prev;
+  return { ...prev, career: { ...prev.career, newsFeed: next } };
+}
+
 const withTransferEntry = (career, entry) => ({ ...career, transferHistory: [...(career.transferHistory || []), entry].slice(-30) });
 
 export function GameProvider({ children, username }) {
@@ -50,6 +66,7 @@ export function GameProvider({ children, username }) {
   const [pendingWorldMatch, setPendingWorldMatch] = useState(null);
   const saveTimer = useRef(null);
   const firstLoad = useRef(true);
+  const ackRevRef = useRef(0); // mijoz ko'rgan oxirgi admin-tahrir versiyasi
 
   // Ilova ochilganda avval serverdan (markazlashgan, boshqa qurilmadagi eng
   // so'nggi holat) tortib olishga urinamiz; topilmasa shu qurilmadagi mahalliy
@@ -59,15 +76,18 @@ export function GameProvider({ children, username }) {
     firstLoad.current = true;
     setReady(false);
     (async () => {
-      const { player: serverPlayer, worldDate: wd, confirmed, pendingWorldMatch: pwm } = await loadCareerFromServer();
+      const { player: serverPlayer, worldDate: wd, confirmed, pendingWorldMatch: pwm, adminEdit, forcedNews } = await loadCareerFromServer();
       if (cancelled) return;
       if (confirmed) {
+        // Server o'ylagan karyera allaqachon admin tahririni o'z ichiga oladi —
+        // faqat versiyani eslab qolamiz (patch qayta qo'llanmaydi).
+        ackRevRef.current = adminEdit?.rev || 0;
         // The server gave an authoritative answer - trust it completely,
         // even when it's null. Falling back to a stale local save here is
         // exactly what let a wiped or never-existing career keep showing up
         // (e.g. after an admin "Wipe Data", or on a fresh MongoDB-backed
         // deploy with an old browser cache still lying around).
-        setPlayer(serverPlayer);
+        setPlayer(mergeForcedNews(serverPlayer, forcedNews));
         persistLocalSave(username, serverPlayer);
         setPendingWorldMatch(pwm);
       } else {
@@ -90,9 +110,15 @@ export function GameProvider({ children, username }) {
   useEffect(() => {
     const interval = setInterval(async () => {
       if (firstLoad.current) return;
-      const { player: serverPlayer, worldDate: wd, confirmed, pendingWorldMatch: pwm } = await loadCareerFromServer();
+      const { player: serverPlayer, worldDate: wd, confirmed, pendingWorldMatch: pwm, adminEdit, forcedNews } = await loadCareerFromServer();
       if (wd) setWorldDate(wd);
       setPendingWorldMatch(pwm);
+      // Admin karyerani tahrirlagan bo'lsa — patch'ni qo'llaymiz va versiyani tasdiqlaymiz
+      if (confirmed && adminEdit && adminEdit.rev > ackRevRef.current) {
+        ackRevRef.current = adminEdit.rev;
+        if (adminEdit.patch) setPlayer((prev) => applyAdminPatch(prev, adminEdit.patch));
+      }
+      if (confirmed && forcedNews?.length) setPlayer((prev) => mergeForcedNews(prev, forcedNews));
       if (confirmed && !serverPlayer) {
         // The account no longer has a career on the server (e.g. an admin
         // ran "Wipe Data" while this tab was open) - clear it here too
@@ -135,7 +161,14 @@ export function GameProvider({ children, username }) {
     if (firstLoad.current) return; // serverdan endi kelgan holatni darhol qaytarib yubormaymiz
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      saveCareerToServer(player).catch(() => {});
+      saveCareerToServer(player, ackRevRef.current).then((r) => {
+        // Server rad etdi: admin shu orada tahrirlagan. Patch'ni qo'llaymiz —
+        // o'zgargan `player` yangi saqlashni o'zi ishga tushiradi (yangi ackRev bilan).
+        if (r && r.conflict && r.adminEdit) {
+          ackRevRef.current = r.adminEdit.rev;
+          setPlayer((prev) => applyAdminPatch(prev, r.adminEdit.patch));
+        }
+      }).catch(() => {});
     }, 1200);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps

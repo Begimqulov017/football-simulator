@@ -327,13 +327,13 @@ function HonoursTab({ player, honours, freshKeys }) {
   const country = honours.filter((h) => h.kind === 'country');
   const feed = career.newsFeed || [];
   const mine = (t) => feed.filter((n) => n.type === t && n.involvesPlayer).length;
-  const count = (type) => individual.filter((h) => h.type === type).length;
+  const count = (...types) => individual.filter((h) => types.includes(h.type)).length;
 
   const tiles = [
-    { icon: '🥇', label: "Ballon d'Or", n: count('ballon_dor') },
-    { icon: '👟', label: 'Golden Boot', n: count('golden_boot') },
+    { icon: '🥇', label: "Ballon d'Or", n: count('ballon_dor', 'global_ballon_dor') },
+    { icon: '👟', label: 'Golden Boot', n: count('golden_boot', 'global_golden_boot') },
     { icon: '⭐', label: 'Man of the Match', n: career.mvpCount || 0 },
-    { icon: '🌟', label: 'Team of the Season', n: count('team_of_season') || mine('tos') },
+    { icon: '🌟', label: 'Team of the Season', n: count('team_of_season', 'global_team_of_season') || mine('tos') },
     { icon: '📅', label: 'Team of the Month', n: mine('tom') },
     { icon: '📋', label: 'Team of the Week', n: mine('totw') },
   ];

@@ -47,6 +47,7 @@ export const NEWS_TYPES = {
   blowout: { label: 'Blowout', icon: '💥', accent: 'rose' },
   upset: { label: 'Shock Result', icon: '😱', accent: 'fuchsia' },
   trophy: { label: 'Individual Award', icon: '🥇', accent: 'amber' },
+  admin: { label: 'Official', icon: '📢', accent: 'amber' }, // Phase 10: admin majburlagan yangilik
 };
 
 // ----- Kichik yordamchilar -------------------------------------------------
@@ -95,6 +96,16 @@ export function diffGoals(before, topScorers) {
     if (d > 0) delta[id] = { id, name: s.name, teamId: s.teamId, teamName: s.teamName, goals: d };
   });
   return delta;
+}
+
+// Phase 10: serverdagi majburiy (admin) yangiliklarni career.newsFeed formatiga o'giradi.
+// id barqaror (`admin_<id>`) — appendNews takror qo'shmaydi.
+export function buildAdminNews(list, player) {
+  return (list || []).map((a) => make({
+    id: `admin_${a.id}`, type: 'admin', day: player.career.day, date: player.career.gameDate,
+    priority: a.pinned ? 10 : 8, icon: a.icon, category: a.kind === 'breaking' ? 'Breaking' : 'Official',
+    headline: a.headline, summary: a.summary, body: [a.summary], tags: ['admin'],
+  }));
 }
 
 export function appendNews(feed, items) {

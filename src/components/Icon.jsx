@@ -6,6 +6,8 @@ import React from 'react';
 // without a full color-emoji font installed.
 const PATHS = {
   back: 'M15 18l-6-6 6-6',
+  chat: 'M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12ZM8.5 11h7M8.5 14h4',
+  pin: 'M12 17v5M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6Z',
   logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9',
   login: 'M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3',
   user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z',

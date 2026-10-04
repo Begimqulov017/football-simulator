@@ -99,3 +99,22 @@ Umumiy komponentlar: `StatLeaders.jsx` (Top Scorers / Assists / Cards / Rating),
   (eski saqlanmalar bilan mos: yangi maydonlar ixtiyoriy).
 - Rad etilgan/tashlab ketilgan klub bilan 30 kun cooldown. Kiruvchi taklif (Messages) shu yerda ochiladi.
 - Test: `node tests/test_transfer_negotiation.js` (10 ta tekshiruv).
+
+## Phase 9 — National Team Hub, Global Chat, Global Awards
+- `NationalTeamPage.jsx` + `PitchView.jsx`: boshlang'ich 11 + zaxira, fixtures, chaqiruv shartlari (`/api/international/hub/:country`).
+- `server/chat.js` + `ChatPage.jsx` + `useChatUnread.js`: umumiy chat (@teglar, spam limiti, pin, nav'da o'qilmagan badge).
+- `server/globalAwards.js` + `AwardsPage.jsx`: barcha ligalar bo'yicha Global Ballon d'Or / Golden Boot / Team of the Season.
+  Yutuqlar `career.awards` ga `type: global_*`, `league: 'Global'` bilan yoziladi (Profile > Honours'da ko'rinadi).
+
+## Phase 10 — Admin Panel & Unified Engine
+- `server/adminTools.js` + `server/roles.js`: rollar (user < moderator < admin), mute/suspend, Master Calendar (qo'lda +X kun va
+  avto-simulyatsiya BITTA `advanceDays` orqali), qo'lda fixture, jamoa tarkibi tahriri, majburiy yangilik, foydalanuvchilar jadvali.
+- `src/career/admin/*`: AdminDashboard (admin: hamma tablar; moderator: faqat chat moderatsiyasi).
+- State consistency: admin karyerani tahrirlasa server `adminEdit.rev` yozadi; klient `ackRev` yuboradi, eskirgan bo'lsa
+  `/api/career/save` rad etadi va patch'ni qaytaradi (GameContext qo'llaydi).
+
+## Phase 9 + 10 birlashtirish
+- Ikkala phase ham o'z chatini yozgan edi. Endi BITTA chat: engine = Phase 9 `server/chat.js`; moderatsiya (`/api/mod/chat/:id/pin|DELETE`,
+  `/api/mod/users/:username/mute`, audit) = Phase 10, admin VA moderator uchun. Mute qilingan foydalanuvchi `POST /api/chat` da 403 `code: muted`.
+- `SERVER_VERSION` va `REQUIRED_SERVER_VERSION` = 14.
+- `tests/test_phase9_10_integration.js`: haqiqiy server kodi bilan 37 ta tekshiruv (rollar, chat, mute, admin-edit, auto-sim, hub...).

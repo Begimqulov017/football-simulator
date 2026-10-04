@@ -537,7 +537,174 @@ function advanceInternational(db, date) {
   return events;
 }
 
+
+// ------------------------------------------------------------
+// PHASE 9 — National Team Hub: eligibility, XI + zaxira, fixtures
+// ------------------------------------------------------------
+const FORMATIONS = {
+  '4-3-3': { GK: 1, LB: 1, CB: 2, RB: 1, MID: 3, FW: 3 },
+};
+const SLOT_POS = {
+  GK: ['GK'], LB: ['LB'], RB: ['RB'], CB: ['CB'],
+  MID: ['CDM', 'CM', 'CAM', 'LM', 'RM'], FW: ['ST', 'LW', 'RW', 'CF', 'SS']
+};
+const slotOfPos = (pos) => Object.keys(SLOT_POS).find((k) => SLOT_POS[k].includes(pos)) || 'MID';
+
+// Tarkibdan boshlang'ich 11 + zaxira. Avval o'z pozitsiyasidagi eng kuchlilar,
+// bo'sh joy qolsa (masalan LB yo'q) — yaqin pozitsiyadagi eng kuchli o'yinchi.
+function lineupFor(squad, formation = '4-3-3') {
+  const need = FORMATIONS[formation];
+  const used = new Set();
+  const xi = [];
+  const byOvr = [...squad].sort((a, b) => b.ovr - a.ovr);
+  const fallback = { LB: ['CB', 'RB'], RB: ['CB', 'LB'], CB: ['LB', 'RB', 'CDM'], MID: ['CB', 'LW', 'RW'], FW: ['CAM', 'LM', 'RM'], GK: [] };
+  Object.keys(need).forEach((slot) => {
+    for (let i = 0; i < need[slot]; i += 1) {
+      let pick = byOvr.find((p) => !used.has(p.id) && slotOfPos(p.pos) === slot);
+      if (!pick) pick = byOvr.find((p) => !used.has(p.id) && (fallback[slot] || []).includes(p.pos));
+      if (!pick) continue;
+      used.add(pick.id);
+      xi.push({ ...pick, slot });
+    }
+  });
+  const bench = byOvr.filter((p) => !used.has(p.id)).map((p) => ({ ...p, slot: slotOfPos(p.pos) }));
+  return { formation, xi, bench };
+}
+
+// Foydalanuvchi shu milliy jamoaga chaqirilish uchun nima kerakligi
+function eligibilityFor(db, country, username) {
+  const u = (db.users || []).find((x) => x.username === username);
+  const cs = u && u.careerSave;
+  if (!cs) return { hasPlayer: false };
+  const pool = buildPlayerPool(db)[cs.nationality] || [];
+  const nat = NATIONS.find((n) => n.name === cs.nationality);
+  const checks = [];
+  const injured = !!(cs.career && cs.career.injury && cs.career.injury.daysLeft);
+  const retired = !!(cs.career && cs.career.retired);
+
+  const me = pool.find((p) => p.username === username);
+  const healthy = pool.filter((p) => !p.injured);
+  const myPos = cs.position;
+  const mySlot = slotOfPos(myPos);
+
+  const rankOverall = me ? [...healthy].sort((a, b) => b.ovr - a.ovr).findIndex((p) => p.username === username) + 1 : null;
+  const peers = healthy.filter((p) => slotOfPos(p.pos) === mySlot).sort((a, b) => b.ovr - a.ovr);
+  const rankInPos = me ? peers.findIndex((p) => p.username === username) + 1 : null;
+
+  const squad = pickSquad(pool);
+  const calledUp = squad.some((p) => p.username === username);
+  const cutoff = squad.length ? squad[squad.length - 1].ovr : 0;
+  const lineup = lineupFor(squad);
+  const inXI = lineup.xi.some((p) => p.username === username);
+
+  // Sizning pozitsiyangizdagi chaqiruv chegarasi: o'sha pozitsiyadagi kvotaning oxirgi o'yinchisi
+  const QUOTA = { GK: 3, LB: 7, RB: 7, CB: 7, MID: 6, FW: 5 };
+  const quota = QUOTA[mySlot] || 5;
+  const posCutoff = peers[quota - 1] ? peers[quota - 1].ovr : 0;
+
+  checks.push({ key: 'nationality', label: 'Milliy jamoa mamlakati', ok: !!nat, detail: nat ? `${nat.flag} ${cs.nationality}` : `${cs.nationality || '—'} — jamoa mavjud emas` });
+  checks.push({ key: 'pool', label: `Mamlakatda kamida ${MIN_SQUAD_FOR_ELIGIBILITY} futbolchi bor`, ok: pool.length >= MIN_SQUAD_FOR_ELIGIBILITY, detail: `${pool.length} ta futbolchi` });
+  checks.push({ key: 'retired', label: 'Faol futbolchi (nafaqada emas)', ok: !retired, detail: retired ? 'Nafaqaga chiqqan' : 'Faol' });
+  checks.push({ key: 'fit', label: "Sog'lom (jarohatsiz)", ok: !injured, detail: injured ? `Jarohat: ${cs.career.injury.daysLeft} kun` : "Jarohat yo'q" });
+  checks.push({ key: 'rating', label: `Rating chaqiruv darajasida (≥ ${cutoff})`, ok: (cs.overall || 0) >= cutoff, detail: `Sizning OVR ${cs.overall || 0} · chegara ${cutoff}` });
+  checks.push({ key: 'position', label: `${mySlot} pozitsiyasida raqobatdan o'tish`, ok: rankInPos != null && rankInPos <= quota, detail: rankInPos ? `Pozitsiyada ${rankInPos}-o'rin (kvota ${quota})` : '—' });
+
+  const eligible = checks.slice(0, 4).every((c) => c.ok);
+  return {
+    hasPlayer: true, country: cs.nationality, eligible, calledUp, inStartingXI: inXI,
+    ovr: cs.overall || 0, cutoffOvr: cutoff, positionCutoffOvr: posCutoff, slot: mySlot,
+    gapToCallUp: calledUp ? 0 : Math.max(0, Math.max(cutoff, 0) - (cs.overall || 0)),
+    rankOverall, rankInPosition: rankInPos, poolSize: pool.length, checks
+  };
+}
+
+// Jamoa fixtures: aktiv turnirlar (guruh o'yinlari, pley-off) + kelgusi tanaffus/turnirlar
+function fixturesFor(db, country) {
+  const intl = ensureInternational(db);
+  const out = { upcoming: [], played: [] };
+  const date = db.worldDate || CALENDAR_EPOCH;
+
+  intl.activeTournaments.forEach((t) => {
+    const group = t.groups.find((g) => g.teams.includes(country));
+    if (group) {
+      GROUP_PAIRINGS.forEach((pairs, md) => {
+        pairs.forEach(([i, j]) => {
+          const a = group.teams[i]; const b = group.teams[j];
+          if (a !== country && b !== country) return;
+          const stage = `Group ${group.name}`;
+          const res = t.results.find((r) => r.stage === stage && r.home === a && r.away === b);
+          const row = {
+            date: t.groupDates[md], competition: t.name, stage: `${stage} · ${md + 1}-tur`,
+            home: a, away: b, homeFlag: flagFor(a), awayFlag: flagFor(b)
+          };
+          if (res) out.played.push({ ...row, golA: res.golA, golB: res.golB });
+          else out.upcoming.push(row);
+        });
+      });
+    }
+    // pley-off: o'ynalganlari natija bilan, o'ynalmaganlari "kutilmoqda"
+    (t.knockout || []).forEach((round, ri) => {
+      round.ties.filter((x) => x.home === country || x.away === country).forEach((x) => {
+        out.played.push({
+          date: t.knockoutDates[ri], competition: t.name, stage: round.label,
+          home: x.home, away: x.away, homeFlag: x.homeFlag, awayFlag: x.awayFlag,
+          golA: x.golA, golB: x.golB, penalties: x.penalties || null
+        });
+      });
+    });
+    if (group && !t.finished) {
+      const nextKo = t.knockoutDates.find((d, ri) => !(t.knockout || [])[ri]);
+      const alive = !(t.knockout || []).length || (t.knockout[t.knockout.length - 1].ties.some((x) => x.winner === country));
+      const groupsDone = t.groupDates.every((d) => date > d);
+      if (nextKo && (groupsDone ? alive : true)) {
+        out.upcoming.push({ date: nextKo, competition: t.name, stage: groupsDone ? 'Pley-off (agar o\'tsangiz)' : 'Pley-off (guruhdan o\'tsangiz)', home: country, away: null, homeFlag: flagFor(country), awayFlag: null });
+      }
+    }
+  });
+
+  // Keyingi xalqaro tanaffus (o'rtoqlik o'yini — raqib o'sha kuni qur'a bilan aniqlanadi)
+  if (date) {
+    let d = date;
+    for (let i = 0; i < 400; i += 1) {
+      d = addDays(d, 1);
+      if (isBreakDay(d) && !intl.activeTournaments.some((t) => !t.finished)) {
+        out.upcoming.push({ date: d, competition: 'Xalqaro tanaffus', stage: "O'rtoqlik o'yini", home: country, away: null, homeFlag: flagFor(country), awayFlag: null });
+        break;
+      }
+    }
+    // Keyingi yirik turnir
+    for (let y = yearOf(date); y <= yearOf(date) + 4; y += 1) {
+      const defs = tournamentsForYear(y).filter((def) => !def.confederation || def.confederation === confederationOf(country));
+      const start = `${y}${TOURNAMENT_START_MMDD}`;
+      if (defs.length && start > date) {
+        out.upcoming.push({ date: start, competition: defs.map((x) => x.name).join(' / '), stage: 'Turnir boshlanishi', home: country, away: null, homeFlag: flagFor(country), awayFlag: null });
+        break;
+      }
+    }
+  }
+  out.upcoming.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  out.played.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  out.played = out.played.slice(0, 20);
+  return out;
+}
+
+function nationHub(db, country, username) {
+  const teams = buildNationalTeams(db);
+  const team = teams[country];
+  if (!team) return null;
+  const lineup = lineupFor(team.squad);
+  return {
+    country: team.country, flag: team.flag, confederation: team.confederation,
+    strength: Math.round(team.strength * 10) / 10,
+    formation: lineup.formation,
+    xi: lineup.xi.map((p) => ({ id: p.id, name: p.name, pos: p.pos, ovr: p.ovr, slot: p.slot, clubName: p.clubName, username: p.username, isYou: p.username === username })),
+    bench: lineup.bench.map((p) => ({ id: p.id, name: p.name, pos: p.pos, ovr: p.ovr, slot: p.slot, clubName: p.clubName, username: p.username, isYou: p.username === username })),
+    fixtures: fixturesFor(db, country)
+  };
+}
+
 module.exports = {
   advanceInternational, ensureInternational, buildNationalTeams, buildPlayerPool,
-  tournamentsForYear, isBreakDay, stageDatesFor, SQUAD_SIZE, BREAK_INTERVAL_DAYS
+  tournamentsForYear, isBreakDay, stageDatesFor, SQUAD_SIZE, BREAK_INTERVAL_DAYS,
+  nationHub, eligibilityFor, lineupFor, fixturesFor
 };
