@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { removePlayerFromClubRoster, joinClubRoster, updatePlayerInClubRoster } from '../data/clubRosterStore';
 import { INITIAL_TEAMS } from '../../data/teamsData';
-import { advanceOneDay, prepareNextDay, isMatchdayNext, computeContractOffer, buildSeasonSchedule, initStandings, setupSeasonCups } from '../utils/season';
+import { advanceOneDay, addDays, applyWorldState, computeContractOffer, buildSeasonSchedule, initStandings, setupSeasonCups } from '../utils/season';
 import { LEAGUES } from '../../data/leaguesData';
-import { saveCareerToServer, loadCareerFromServer, ackMatchResult } from '../utils/careerApi';
+import { saveCareerToServer, loadCareerFromServer, ackMatchResult, fetchLeagueState } from '../utils/careerApi';
 import { mergeServerHonours } from '../utils/honoursSync';
 import { displayRating } from '../utils/statCalc';
 import { appendNews, buildTransferNews, buildAdminNews } from '../utils/newsGenerator';
@@ -64,6 +64,8 @@ export function GameProvider({ children, username }) {
   const [ready, setReady] = useState(false);
   const [worldDate, setWorldDate] = useState(null);
   const [pendingWorldMatch, setPendingWorldMatch] = useState(null);
+  const worldDateRef = useRef(null);
+  const pendingRef = useRef(null);
   const saveTimer = useRef(null);
   const firstLoad = useRef(true);
   const ackRevRef = useRef(0); // mijoz ko'rgan oxirgi admin-tahrir versiyasi
@@ -94,6 +96,7 @@ export function GameProvider({ children, username }) {
         setPlayer(mergeForcedNews(serverPlayer, forcedNews));
         persistLocalSave(username, serverPlayer);
         setPendingWorldMatch(pwm);
+        if (serverPlayer) syncWorldState();
       } else {
         // Could not reach the server (offline, cold start, invalid session)
         // - fall back to whatever this device has cached so play can
@@ -117,6 +120,7 @@ export function GameProvider({ children, username }) {
       const { player: serverPlayer, worldDate: wd, confirmed, pendingWorldMatch: pwm, adminEdit, forcedNews } = await loadCareerFromServer();
       if (wd) setWorldDate(wd);
       setPendingWorldMatch(pwm);
+      if (confirmed) syncWorldState();
       // Admin karyerani tahrirlagan bo'lsa — patch'ni qo'llaymiz va versiyani tasdiqlaymiz
       if (confirmed && adminEdit && adminEdit.rev > ackRevRef.current) {
         ackRevRef.current = adminEdit.rev;
@@ -224,39 +228,41 @@ export function GameProvider({ children, username }) {
   // injuries) via the season engine. This is only used for QUIET days now -
   // matchdays go through prepareMatchday/commitMatchday below instead, so
   // the outcome can be played back before it's applied.
+  // PHASE 11 - YAGONA SIMULATSIYA. Liga/kubok natijalari FAQAT serverdagi umumiy dunyoda hisoblanadi
+  // (admin kunni o'tkazadi). Klient lokal o'yin simulyatsiya QILMAYDI: u faqat shaxsiy kunlik ishlarni
+  // (mashg'ulot, maosh, jarohat, xabarlar) bajaradi va o'z o'yinini serverdagi kutilayotgan (pending)
+  // matchdan LiveMatch orqali o'ynaydi.
+  worldDateRef.current = worldDate;
+  pendingRef.current = pendingWorldMatch;
+  const tomorrow = player?.career?.gameDate ? addDays(player.career.gameDate, 1) : null;
+  // Dunyo hali boshlanmagan bo'lsa (admin birinchi kunni o'tkazmagan) - dunyo sanasi = boshlang'ich kundan oldingi kun.
+  const effectiveWorldDate = worldDate || (player?.career?.gameDate || null);
+  // Siz adminga yetib oldingiz: keyingi kun dunyo sanasidan keyin.
+  const waitingForAdmin = !!(tomorrow && effectiveWorldDate && tomorrow > effectiveWorldDate);
+  // Keyingi kunda sizning o'yiningiz bor va u o'ynalishini kutmoqda.
+  const matchdayNext = !!(pendingWorldMatch && tomorrow && pendingWorldMatch.date && pendingWorldMatch.date <= tomorrow);
+
   const nextDay = useCallback(() => {
-    setPlayer((prev) => (prev ? advanceOneDay(prev) : prev));
+    setPlayer((prev) => {
+      if (!prev) return prev;
+      const t = addDays(prev.career.gameDate, 1);
+      const wd = worldDateRef.current || prev.career.gameDate;
+      if (t > wd) return prev; // adminni kutish
+      const pw = pendingRef.current;
+      if (pw && pw.date && pw.date <= t) return prev; // avval o'z o'yiningizni o'ynang
+      return advanceOneDay(prev);
+    });
   }, []);
 
-  const matchdayNext = useMemo(() => isMatchdayNext(player), [player]);
-
-  // Computes (once) the full result of the upcoming matchday - both the
-  // final next-player state AND a compact summary of just the player's own
-  // match (matchInfo) for the live playback screen. Calling this again for
-  // the same in-game date reuses the already-computed result instead of
-  // re-rolling the outcome (the RNG only runs once per matchday).
-  const pendingMatchdayRef = useRef(null);
-  const [pendingMatchday, setPendingMatchdayState] = useState(null);
-
-  const prepareMatchday = useCallback(() => {
-    if (!player) return null;
-    const cached = pendingMatchdayRef.current;
-    if (cached && cached.forDate === player.career.gameDate) return cached;
-    const { nextPlayer, matchInfo } = prepareNextDay(player);
-    const record = { nextPlayer, matchInfo, forDate: player.career.gameDate };
-    pendingMatchdayRef.current = record;
-    setPendingMatchdayState(record);
-    return record;
-  }, [player]);
-
-  const commitMatchday = useCallback(() => {
-    const record = pendingMatchdayRef.current;
-    setPlayer((prev) => {
-      if (!record || !prev || record.forDate !== prev.career.gameDate) return prev;
-      return record.nextPlayer;
-    });
-    pendingMatchdayRef.current = null;
-    setPendingMatchdayState(null);
+  // Serverdagi liga/kubok holatini karyeraga ko'chiradi (yagona haqiqat manbai).
+  const syncWorldState = useCallback(async () => {
+    try {
+      const r = await fetchLeagueState();
+      if (!r || !r.ok) return null;
+      if (r.worldDate) setWorldDate(r.worldDate);
+      if (r.state) setPlayer((prev) => applyWorldState(prev, r.state));
+      return r;
+    } catch (e) { return null; }
   }, []);
 
   const markMessageRead = useCallback((messageId) => {
@@ -557,12 +563,13 @@ export function GameProvider({ children, username }) {
   const refreshPendingWorldMatch = useCallback(async () => {
     const { pendingWorldMatch: pwm } = await loadCareerFromServer();
     setPendingWorldMatch(pwm);
+    await syncWorldState();
     return pwm;
-  }, []);
+  }, [syncWorldState]);
 
   const value = {
     player, ready, createPlayer, updatePlayer, nextDay, resetSave,
-    matchdayNext, pendingMatchday, prepareMatchday, commitMatchday,
+    matchdayNext, waitingForAdmin, syncWorldState,
     worldDate, hasUnwatchedResult, acknowledgeResult,
     pendingWorldMatch, refreshPendingWorldMatch,
     markMessageRead, requestNewContract, acceptContractOffer, acceptTransferOffer, declineOffer,

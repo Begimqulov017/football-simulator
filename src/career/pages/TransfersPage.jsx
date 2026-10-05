@@ -20,12 +20,10 @@ const TABS = [
   { id: 'world', label: 'World Feed' },
 ];
 
+// PHASE 11: hub'da faqat sizga TAKLIF yuborgan (yoki muzokarasi davom etayotgan) klublar turadi.
 const STATUS_FILTERS = [
-  { id: 'all', label: 'All clubs' },
-  { id: 'offers', label: 'Offers & talks' },
-  { id: 'interested', label: 'Interested' },
-  { id: 'monitoring', label: 'Monitoring' },
-  { id: 'unavailable', label: 'Unavailable' },
+  { id: 'all', label: 'All offers' },
+  { id: 'offers', label: 'In talks' },
 ];
 
 const SORTS = [
@@ -128,10 +126,7 @@ function HubTab({ rows, player, career, onOpen }) {
       if (leagueId !== 'all' && r.league.id !== leagueId) return false;
       if (q && !(norm(r.team.name).includes(q) || norm(r.league.name).includes(q) || norm(r.league.country).includes(q))) return false;
       const k = r.status.key;
-      if (statusFilter === 'offers') return ['agreed', 'negotiating', 'offer'].includes(k);
-      if (statusFilter === 'interested') return ['hot', 'open'].includes(k);
-      if (statusFilter === 'monitoring') return k === 'monitoring';
-      if (statusFilter === 'unavailable') return ['closed', 'cooldown'].includes(k);
+      if (statusFilter === 'offers') return ['agreed', 'negotiating'].includes(k) || !!(r.neg && LIVE_STAGES.includes(r.neg.stage));
       return true;
     });
     const by = {
@@ -169,7 +164,7 @@ function HubTab({ rows, player, career, onOpen }) {
 
       <div className="tx-toolbar">
         <input
-          className="tx-input" type="search" placeholder="Search club, league or country…" value={query}
+          className="tx-input" type="search" placeholder="Search offering club, league or country…" value={query}
           onChange={reset(setQuery)} aria-label="Search clubs"
         />
         <select className="tx-select" value={leagueId} onChange={reset(setLeagueId)} aria-label="Filter by league">
@@ -192,10 +187,10 @@ function HubTab({ rows, player, career, onOpen }) {
         ))}
       </div>
 
-      <p className="tx-result-count" aria-live="polite">{filtered.length} {filtered.length === 1 ? 'club' : 'clubs'}</p>
+      <p className="tx-result-count" aria-live="polite">{filtered.length} {filtered.length === 1 ? 'offer' : 'offers'}</p>
 
       {filtered.length === 0 ? (
-        <div className="card tx-empty">No clubs match your filters. Try a different search or status.</div>
+        <div className="card tx-empty">{rows.length === 0 ? "No club has sent you an offer yet. Offers arrive in your Messages as your form and rating grow - only clubs that make you an offer appear here." : 'No offers match your filters. Try a different search.'}</div>
       ) : (
         <div className="tx-grid">
           {filtered.slice(0, shown).map((r) => <ClubCard key={r.team.id} row={r} onOpen={onOpen} />)}
@@ -394,7 +389,7 @@ export default function TransfersPage() {
   const negotiations = career?.negotiations;
   const rows = useMemo(() => {
     if (!player) return [];
-    return INITIAL_TEAMS.filter((t) => getLeagueOfTeam(t.id)).map((team) => {
+    return INITIAL_TEAMS.filter((t) => getLeagueOfTeam(t.id) && t.id !== player.club?.id && (offerByTeam[t.id] || ((negotiations || {})[t.id] && LIVE_STAGES.includes((negotiations || {})[t.id].stage)))).map((team) => {
       const analysis = analyseClub(player, team);
       const offerMsg = offerByTeam[team.id] || null;
       const status = clubStatus({ team, analysis, player, career: player.career, offerMsg });

@@ -566,3 +566,8 @@ export function buildAwardsNews(awardsList, player) {
   });
   return out;
 }
+
+// PHASE 11: server o'yinini LiveMatch'da o'ynagan o'yinchining 9-10 reytingi yangiligi.
+export function buildRatingNews({ player, pStats, opponentName, isHome, golFor, golAgainst, date, day, competition }) {
+  return buildPlayerRatingItem({ player, pStats, opponent: { name: opponentName || 'Opponent' }, isHome, golFor, golAgainst, date, day, competition });
+}

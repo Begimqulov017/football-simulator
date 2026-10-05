@@ -5,6 +5,7 @@ import { useGame } from '../context/GameContext';
 import { fetchPendingMatchDetail, submitMatchResult } from '../utils/careerApi';
 import LiveMatch from '../../components/LiveMatch';
 import { displayRating } from '../utils/statCalc';
+import { recordPlayedMatch } from '../utils/season';
 
 // 4-BAND: bu sahifa umumiy dunyodagi foydalanuvchining O'Z o'yinini
 // avvalgi "server darhol hal qiladi, statistikani taxmin qiladi" usuli
@@ -78,16 +79,17 @@ export default function WorldMatchPage() {
       // BIR XIL o'sish (increment) bilan yangilaymiz, aks holda foydalanuvchi
       // keyingi to'liq yuklashgacha (yoki 20s pollinggacha) eski
       // sonlarni ko'rib turaverardi.
-      updatePlayer((prev) => ({
-        career: {
-          ...prev.career,
-          appearances: (prev.career.appearances || 0) + 1,
-          goals: (prev.career.goals || 0) + myGoals,
-          assists: (prev.career.assists || 0) + myAssists,
-          matchRatings: [...(prev.career.matchRatings || []), typeof myRating === 'number' ? myRating : 6.0].slice(-10),
-          injury: myInjured ? { daysLeft: myInjuryDays, description: 'Match injury' } : prev.career.injury,
-        },
-      }));
+      const isHome = !!detail.isHome;
+      const opp = isHome ? detail.away : detail.home;
+      updatePlayer((prev) => {
+        const next = recordPlayedMatch(prev, {
+          competition: detail.competition, round: detail.round, date: detail.date || prev.career.gameDate,
+          opponentName: opp?.name, opponentLogo: opp?.logo, isHome,
+          golFor: isHome ? result.scoreA : result.scoreB, golAgainst: isHome ? result.scoreB : result.scoreA,
+          rating: typeof myRating === 'number' ? myRating : 6.0, goals: myGoals, assists: myAssists, injured: myInjured, injuryDays: myInjuryDays,
+        });
+        return { career: next.career };
+      });
     } finally {
       // Hisobot saqlangach foydalanuvchi yakuniy statistika va reytinglarni ko'ra oladi;
       // "Chiqish" tugmasi (LiveMatch) uni uy sahifasiga qaytaradi — u yerda "Next Day" chiqadi.

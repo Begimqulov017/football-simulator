@@ -13,13 +13,14 @@ import { getInternationalContext, nextBreakDay, flagOfNation } from '../internat
 // "Play Match" (o'yin tugagach avtomatik "Next Day") va kun o'yinlari ro'yxati.
 export default function CareerDashboard({ extraEvents = {} }) {
   const navigate = useNavigate();
-  const { player, nextDay, matchdayNext, prepareMatchday, hasUnwatchedResult, pendingWorldMatch } = useGame();
+  const { player, nextDay, matchdayNext, waitingForAdmin, hasUnwatchedResult, acknowledgeResult, pendingWorldMatch } = useGame();
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const today = player.career.gameDate;
   const injured = !!player.career.injury;
-  const playable = matchdayNext && !injured;
+  // PHASE 11: o'yin FAQAT serverdagi kutilayotgan (pending) matchdan, o'z kunida, LiveMatch orqali o'ynaladi.
+  const playable = matchdayNext && !!pendingWorldMatch;
   const plan = useMemo(() => getDayPlan(player, matchdayNext), [player, matchdayNext]);
   const days = useMemo(
     () => buildTimeline(player, today, { days: 31, extraEvents, targetIso: matchdayNext ? addDays(today, 1) : null }),
@@ -30,24 +31,14 @@ export default function CareerDashboard({ extraEvents = {} }) {
   const selectedDay = selected ? days.find((d) => d.iso === selected) : null;
 
   const primary = (() => {
-    if (pendingWorldMatch) return { kind: 'play', label: `Play Match (${pendingWorldMatch.competition === 'cup' ? 'Kubok' : 'Liga'})` };
-    if (playable) return { kind: 'play', label: 'Play Match' };
+    if (playable) return { kind: 'play', label: `Play Match (${pendingWorldMatch.competition === 'cup' ? 'Kubok' : 'Liga'})` };
+    if (waitingForAdmin) return { kind: 'wait', label: 'Adminni kuting' };
     return { kind: 'next', label: 'Next Day' };
   })();
 
   const handlePrimary = () => {
-    if (busy) return;
-    if (pendingWorldMatch) { navigate('/world-match'); return; }
-    if (playable) {
-      try {
-        prepareMatchday();
-        navigate('/play-match');
-      } catch (err) {
-        console.error('Failed to prepare matchday', err);
-        alert("O'yinni tayyorlashda xatolik yuz berdi. Iltimos qayta urinib ko'ring.");
-      }
-      return;
-    }
+    if (busy || primary.kind === 'wait') return;
+    if (playable) { navigate('/world-match'); return; }
     // Kun o'tishi: qisqa animatsiya uchun busy bayrog'i
     setBusy(true);
     nextDay();
@@ -116,7 +107,7 @@ export default function CareerDashboard({ extraEvents = {} }) {
       {/* Markaz: asosiy tugma + kun o'yinlari */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,260px)_1fr] gap-5 items-stretch">
         <div className="rounded-card border border-surface-line bg-surface p-5 flex flex-col items-center justify-center gap-3 text-center">
-          {pendingWorldMatch || playable ? (
+          {playable ? (
             <>
               <div className="text-3xl">{nextEvent?.logo || '⚽'}</div>
               <div className="text-sm font-bold text-ink-soft">
@@ -128,19 +119,19 @@ export default function CareerDashboard({ extraEvents = {} }) {
             <>
               <div className="text-3xl">{plan.mode === 'finished' ? '✅' : '🌤️'}</div>
               <div className="text-sm font-bold text-ink-soft">
-                {plan.mode === 'finished' ? "Kun o'yinlari yakunlandi" : injured && matchdayNext ? "Jarohat: o'yin sizsiz o'tadi" : "Bugun dam kuni"}
+                {waitingForAdmin ? "Siz adminga yetib oldingiz — admin keyingi kunni o'tkazishini kuting" : plan.mode === 'finished' ? "Kun o'yinlari yakunlandi" : "Bugun dam kuni"}
               </div>
             </>
           )}
           <Button
             key={primary.kind}
-            variant={primary.kind === 'play' ? 'primary' : 'accent'}
+            variant={primary.kind === 'play' ? 'primary' : primary.kind === 'wait' ? 'secondary' : 'accent'}
             size="lg"
             onClick={handlePrimary}
-            disabled={busy}
+            disabled={busy || primary.kind === 'wait'}
             className="w-full motion-safe:animate-fs-pop-in"
           >
-            <Icon name={primary.kind === 'play' ? 'play' : 'arrow'} size={18} />
+            <Icon name={primary.kind === 'play' ? 'play' : primary.kind === 'wait' ? 'calendar' : 'arrow'} size={18} />
             {primary.label}
           </Button>
           <div className="w-full mt-1">
@@ -155,7 +146,7 @@ export default function CareerDashboard({ extraEvents = {} }) {
           {hasUnwatchedResult && (
             <button
               type="button"
-              onClick={() => navigate('/live-result')}
+              onClick={() => { acknowledgeResult(); navigate('/games'); }}
               className="text-left cursor-pointer font-sans rounded-control border border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between gap-3"
             >
               <span>

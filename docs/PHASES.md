@@ -126,3 +126,19 @@ Umumiy komponentlar: `StatLeaders.jsx` (Top Scorers / Assists / Cards / Rating),
 - `GameContext`: serverga hali saqlanmagan karyerani poll o'chirmaydi; wipe konfliktida eski karyera qaytarib yozilmaydi.
 - `playerGen.js`: boshlang'ich reyting 67–73 (min 67), potential 80–90 (min 80, hech qachon reytingdan past emas).
 
+## Phase 11 — Yagona simulatsiya (server = yagona haqiqat)
+- Muammo: ikkita alohida simulyatsiya bor edi (klient `season.js` + `PlayMatchPage`, va server umumiy dunyosi). Natijalar, jadval,
+  top butsilar, kubok bir-biriga mos kelmasdi; o'yin "Kick-off..." sahifasida emas, asl simulyatorda (`LiveMatch`) o'ynalishi kerak edi.
+- Endi liga/kubok natijalari FAQAT serverda. Klient `GET /api/career/league-state` orqali jadval, natijalar, butsilar va kubok yo'lini
+  oladi (`applyWorldState`); lokal liga/kubok simulyatsiyasi OLIB TASHLANDI, `PlayMatchPage`/`LiveResultPage` o'chirildi
+  (`/play-match` -> `/world-match`, `/live-result` -> `/home`).
+- O'yin o'z kunida: kutilayotgan (pending) o'yin sanasi bilan keladi; o'yinchi shu kunga yetib kelib `LiveMatch`da o'ynaydi
+  (`recordPlayedMatch` shaxsiy statistikani yozadi). Admin kunni o'tkazganda o'yin o'ynalmay kutadi.
+- "Siz adminga yetib oldingiz": o'yinchi dunyo sanasidan keyingi kunga o'ta olmaydi ("Adminni kuting").
+- 15 kunlik avtomatik hal qilish OLIB TASHLANDI. Mavsumning oxirgi turini admin o'tkaza olmaydi, agar o'yinchi o'z o'yinini o'ynamagan
+  bo'lsa; faqat admin panelidagi aniq "Skip" (`POST /api/admin/pending/skip`) o'yinni qo'lda hal qiladi.
+- Mavsum serverda tugagach klient o'z mavsumini yopadi (`closeSeasonFromHistory`): kubok, Oltin batinka, tarix. Server tarixga
+  yakuniy jadval va butsilarni yozadi.
+- Transfer hub: faqat sizga TAKLIF yuborgan (yoki muzokarasi davom etayotgan) klublar ko'rinadi.
+- `SERVER_VERSION`/`REQUIRED_SERVER_VERSION` o'zgarmadi (14).
+

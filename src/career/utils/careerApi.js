@@ -263,3 +263,7 @@ export const fetchGlobalAwards = () => apiFetch('/api/awards-global');
 export const fetchGlobalAwardsLive = () => apiFetch('/api/awards-global/live');
 export const finalizeGlobalAwards = (season) =>
   apiFetch('/api/admin/awards-global/finalize', { method: 'POST', body: JSON.stringify({ season }) });
+
+// PHASE 11
+export const skipPendingMatch = (leagueId, round, competition) => apiFetch('/api/admin/pending/skip', { method: 'POST', body: JSON.stringify({ leagueId, round, competition }) });
+export const fetchLeagueState = () => apiFetch('/api/career/league-state');

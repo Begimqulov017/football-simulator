@@ -12,7 +12,7 @@
 import { INITIAL_TEAMS } from '../../data/teamsData';
 import { LEAGUES } from '../../data/leaguesData';
 import { getMergedSquad } from '../data/clubRosterStore';
-import { snapshotGoals, diffGoals, appendNews, buildRoundNews, buildCupNews, buildSeasonEndNews, buildMonthNews, buildTransferNews } from './newsGenerator';
+import { snapshotGoals, diffGoals, appendNews, buildRoundNews, buildCupNews, buildSeasonEndNews, buildMonthNews, buildTransferNews, buildRatingNews } from './newsGenerator';
 import { isMvpPerformance, resolveVeteranProgression, getRetirementChance, calcMainStats, calcGoalkeeperOVR, calcOVR, clampPrecise } from './statCalc';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -617,6 +617,130 @@ export function getNextFixtureLabel(player) {
   return null;
 }
 
+
+// ---------------------------------------------------------------------------
+// PHASE 11 - YAGONA SIMULATSIYA.
+// Liga/kubok natijalari FAQAT serverdagi umumiy dunyoda hisoblanadi. Mavsum serverda
+// tugagach (rolloverSeason) klient o'yinchining SHAXSIY mavsum yakunini (chempion kubogi,
+// Oltin batinka, mavsum tarixi, xabarlar) shu yerda yopadi. Sana/jadval SURILMAYDI -
+// kalendar admin tomonidan boshqariladi.
+// ---------------------------------------------------------------------------
+export function closeSeasonFromHistory(player, entry) {
+  if (!player || !entry || !entry.finalStandings) return player;
+  const topScorers = {};
+  (entry.finalTopScorers || []).forEach((x) => { topScorers[x.id] = x; });
+  const endDate = entry.endDate || player.career.gameDate;
+  // Kubok kuboklarini server o'zi beradi (take care: ikki marta qo'shilmasin) - shuning uchun
+  // lokal kubok yozuvlarisiz yopamiz.
+  const careerForClose = { ...player.career, gameDate: endDate, domesticCup: null, continentalCup: null };
+  const res = finalizeSeason(player, careerForClose, entry.finalStandings, topScorers, [], [...(player.career.messages || [])]);
+  // eslint-disable-next-line no-unused-vars
+  const { schedule, standings, topScorers: _ts, domesticCup, continentalCup, gameDate, ...keep } = res;
+  let career = { ...player.career, ...keep };
+  try {
+    career.newsFeed = appendNews(career.newsFeed, buildSeasonEndNews({ player, standings: entry.finalStandings, topScorers, date: endDate, day: player.career.day }));
+  } catch (err) { console.error('News (season end) failed', err); }
+  return { ...player, career };
+}
+
+
+// ---------------------------------------------------------------------------
+// PHASE 11: o'yinchi serverdagi (umumiy dunyo) o'z o'yinini LiveMatch'da o'ynab bo'lgach, uning
+// SHAXSIY oqibatlari (mavsum statistikasi, forma, o'yin tarixi, hisobot xabari, Man of the Match,
+// 9-10 reyting yangiligi, charchoq, jarohat) shu yerda karyeraga yoziladi. Liga jadvali/natija
+// serverda; bu yerda lokal simulyatsiya YO'Q.
+// ---------------------------------------------------------------------------
+export function recordPlayedMatch(player, m) {
+  if (!player) return player;
+  const c = player.career;
+  const date = m.date || c.gameDate;
+  const rating = typeof m.rating === 'number' ? m.rating : 6.0;
+  const pStats = { played: true, minutes: m.minutes || 90, rating, goals: m.goals || 0, assists: m.assists || 0, injured: !!m.injured, injuryDays: m.injuryDays || 0 };
+  const ratings = [...(c.matchRatings || []), rating].slice(-10);
+  const form = formFromRatings(ratings);
+  const mvp = isMvpPerformance(pStats);
+  const myClub = player.club.name;
+  const home = m.isHome ? myClub : m.opponentName;
+  const away = m.isHome ? m.opponentName : myClub;
+  const resultLine = `${home} ${m.isHome ? m.golFor : m.golAgainst} - ${m.isHome ? m.golAgainst : m.golFor} ${away}${m.competition === 'cup' ? ' (Cup)' : ''}`;
+  let body = `${resultLine}. You played ${pStats.minutes}' and rated ${rating}/10`;
+  if (pStats.goals) body += ` with ${pStats.goals} goal${pStats.goals > 1 ? 's' : ''}`;
+  if (pStats.assists) body += `${pStats.goals ? ' and' : ' with'} ${pStats.assists} assist${pStats.assists > 1 ? 's' : ''}`;
+  if (mvp) body += ' - Man of the Match!';
+  body += '.';
+  if (pStats.injured) body += ` You picked up a knock and will be out for around ${pStats.injuryDays} days.`;
+  const messages = [...(c.messages || []), {
+    id: newId('msg'), type: 'club', date, from: myClub,
+    subject: pStats.injured ? 'Injury update' : `Match report: ${resultLine}`, body, read: false, resolved: true,
+  }];
+  const league = LEAGUES.find((l) => l.id === player.club.leagueId);
+  if (!pStats.injured && rating >= 7.5 && league) {
+    const offer = maybeGenerateTransferOffer(player, league, date);
+    if (offer) messages.push(offer);
+    else { const scout = maybeGenerateScoutInterest(player, league, date); if (scout) messages.push(scout); }
+  }
+  const histEntry = {
+    id: newId('hist'), date, round: m.round, opponent: m.opponentName, opponentLogo: m.opponentLogo,
+    isHome: !!m.isHome, golFor: m.golFor, golAgainst: m.golAgainst, minutes: pStats.minutes, rating, goals: pStats.goals,
+    assists: pStats.assists, mvp, injured: pStats.injured,
+  };
+  let career = {
+    ...c,
+    appearances: (c.appearances || 0) + 1,
+    goals: (c.goals || 0) + pStats.goals,
+    assists: (c.assists || 0) + pStats.assists,
+    seasonAppearances: (c.seasonAppearances || 0) + 1,
+    seasonGoals: (c.seasonGoals || 0) + pStats.goals,
+    seasonAssists: (c.seasonAssists || 0) + pStats.assists,
+    matchRatings: ratings,
+    matchHistory: [...(c.matchHistory || []), histEntry].slice(-40),
+    mvpCount: (c.mvpCount || 0) + (mvp ? 1 : 0),
+    form,
+    stamina: clamp((c.stamina ?? 100) - randInt(15, 25), 0, 100),
+    injury: pStats.injured ? { daysLeft: pStats.injuryDays, description: 'Match injury' } : c.injury,
+    messages,
+  };
+  try {
+    const item = buildRatingNews({ player, pStats, opponentName: m.opponentName, isHome: !!m.isHome, golFor: m.golFor, golAgainst: m.golAgainst, date, day: c.day, competition: m.competition === 'cup' ? 'Cup' : null });
+    if (item) career.newsFeed = appendNews(career.newsFeed, [item]);
+  } catch (err) { console.error('News (rating) failed', err); }
+  return { ...player, career };
+}
+
+// Server holatini (liga jadvali, natijalar, butsilar, kubok) o'yinchi karyerasiga KO'CHIRADI.
+// Hech narsa o'zgarmagan bo'lsa AYNAN `player` qaytariladi (ortiqcha saqlash bo'lmasin).
+export function applyWorldState(player, state) {
+  if (!player || !state || player.career.freeAgent || player.club.leagueId !== state.leagueId) return player;
+  const played = state.schedule.reduce((n, r) => n + r.matches.filter((m) => m.played || m.pending).length, 0);
+  const goals = Object.values(state.topScorers || {}).reduce((n, x) => n + (x.goals || 0) + (x.assists || 0) + (x.yellow || 0) + (x.red || 0), 0);
+  const cup = state.cupRun;
+  const cupSig = cup ? `${cup.fixtures.length}:${cup.fixtures.filter((f) => f.played).length}:${cup.won ? 1 : 0}:${cup.eliminated ? 1 : 0}` : '-';
+  const sig = `${state.leagueId}|${state.season}|${played}|${goals}|${cupSig}|${state.schedule.length}`;
+  let p = player;
+  const firstSync = player.career.worldLeagueId !== state.leagueId || player.career.worldSeason == null;
+  if (!firstSync && state.season > player.career.worldSeason) {
+    const entries = (state.history || []).filter((h) => h.season >= player.career.worldSeason && h.season < state.season).sort((a, b) => a.season - b.season);
+    entries.forEach((e) => { p = closeSeasonFromHistory(p, e); });
+  } else if (!firstSync && player.career.worldSig === sig) {
+    return player;
+  }
+  return {
+    ...p,
+    career: {
+      ...p.career,
+      schedule: state.schedule,
+      standings: state.standings,
+      topScorers: state.topScorers || {},
+      leaders: state.leaders || null,
+      domesticCup: state.cupRun || null,
+      continentalCup: null, // klub turnirlari FAQAT serverda (Kontinental bo'limi) - lokal nusxa yo'q
+      worldLeagueId: state.leagueId,
+      worldSeason: state.season,
+      worldSig: sig,
+    },
+  };
+}
+
 export function isMatchdayNext(player) {
   if (!player || player.career.freeAgent) return false;
   const newDate = addDays(player.career.gameDate, 1);
@@ -893,66 +1017,22 @@ export function prepareNextDay(player) {
     }
     const effectivePlayer = clubTier === player.club.tier ? player : { ...player, club: { ...player.club, tier: clubTier } };
 
-    const goalsBefore = snapshotGoals(topScorers);
-    const { updatedMatches, messages: roundMessages, playerPatch } = processRound(schedule[roundIdx], effectivePlayer, standings, topScorers);
-    schedule = schedule.map((r, i) => (i === roundIdx ? { ...r, matches: updatedMatches } : r));
-
-    // News: blowout / upset / 9-10 ratings / Team of the Week (newsGenerator.js)
+    // PHASE 11: natijalar serverdan keladi (career.schedule server holati nusxasi) - lokal
+    // simulyatsiya YO'Q. Bu yerda faqat shu tur natijalaridan yangiliklar yaratiladi.
+    const serverRound = schedule[roundIdx];
     try {
-      career.newsFeed = appendNews(career.newsFeed, buildRoundNews({
-        round: schedule[roundIdx].round, date: newDate, day: newDay, matches: updatedMatches,
-        scorerDelta: diffGoals(goalsBefore, topScorers), player: effectivePlayer, playerPatch
-      }));
+      if (serverRound.matches.every((m) => m.played)) {
+        career.newsFeed = appendNews(career.newsFeed, buildRoundNews({
+          round: serverRound.round, date: newDate, day: newDay, matches: serverRound.matches,
+          scorerDelta: null, player: effectivePlayer, playerPatch: null,
+        }));
+      }
     } catch (err) { console.error('News (round) failed', err); }
-    messages = [...messages, ...roundMessages];
-    if (playerPatch?.careerUpdate) career = { ...career, ...playerPatch.careerUpdate };
-    if (playerPatch?.potential !== undefined) potential = playerPatch.potential;
-
-    // Full round results (every match, not just the player's own) - powers
-    // the League page's "browse any round" view and the News feed.
-    career.roundResultsLog = [
-      ...(career.roundResultsLog || []),
-      { round: schedule[roundIdx].round, date: newDate, matches: updatedMatches }
-    ].slice(-20);
-
-    if (playerPatch && playerPatch.opponent) {
-      const { pStats, opponent, isHome, golA, golB } = playerPatch;
-      matchInfo = {
-        opponentName: opponent.name,
-        opponentLogo: opponent.logo,
-        isHome,
-        golFor: isHome ? golA : golB,
-        golAgainst: isHome ? golB : golA,
-        pStats: pStats || { played: false }
-      };
-    }
   } else {
     // No league round today - check for a domestic/continental cup fixture
     // before falling back to a fully quiet day.
-    let cupPlayed = false;
-    for (const cupKey of ['domesticCup', 'continentalCup']) {
-      const cupRun = career[cupKey];
-      if (!cupRun || cupRun.eliminated || cupRun.stage >= cupRun.fixtures.length) continue;
-      const outcome = resolveCupFixture(player, cupRun, career, standings, topScorers, newDate);
-      if (!outcome) continue;
-      cupPlayed = true;
-      career[cupKey] = outcome.nextCupRun;
-      messages = [...messages, outcome.message];
-      const fixture = cupRun.fixtures[cupRun.stage];
-      const opponent = INITIAL_TEAMS.find((t) => t.id === fixture.opponentId);
-      try {
-        career.newsFeed = appendNews(career.newsFeed, buildCupNews({ player, cupRun, outcome, opponent, date: newDate, day: newDay }));
-      } catch (err) { console.error('News (cup) failed', err); }
-      matchInfo = {
-        opponentName: opponent?.name || 'Cup opponent',
-        opponentLogo: opponent?.logo || '⚽',
-        isHome: true,
-        golFor: outcome.nextCupRun.fixtures[cupRun.stage].golFor,
-        golAgainst: outcome.nextCupRun.fixtures[cupRun.stage].golAgainst,
-        pStats: outcome.pStats || { played: false }
-      };
-      break;
-    }
+    // PHASE 11: kubok o'yinlari ham serverda (pending -> LiveMatch). Lokal kubok simulyatsiyasi yo'q.
+    const cupPlayed = false;
 
     if (!cupPlayed) {
       // Fully quiet day: stamina trickles back, injuries heal a little, and
@@ -996,21 +1076,8 @@ export function prepareNextDay(player) {
     } catch (err) { console.error('News (month) failed', err); }
   }
 
-  // Season end: once every fixture in the schedule has been played, crown a
-  // champion, hand out the Golden Boot, record this season in history, and
-  // generate the next one - seasons run indefinitely, one after another.
-  if (schedule.length && schedule.every((r) => r.matches.every((m) => m.played))) {
-    // News: league champions - must be built BEFORE standings are reset.
-    try {
-      career.newsFeed = appendNews(career.newsFeed, buildSeasonEndNews({ player, standings, topScorers, date: newDate, day: newDay }));
-    } catch (err) { console.error('News (season end) failed', err); }
-    const seasonResult = finalizeSeason(player, career, standings, topScorers, schedule, messages);
-    career = { ...career, ...seasonResult };
-    schedule = seasonResult.schedule;
-    standings = seasonResult.standings;
-    topScorers = seasonResult.topScorers;
-    messages = seasonResult.messages;
-  }
+  // PHASE 11: mavsum yakuni serverda (rolloverSeason); klient uni applyWorldState -> closeSeasonFromHistory
+  // orqali yopadi (qarang yuqorida). Bu yerda lokal mavsum yakuni yo'q.
 
   const nextPlayer = {
     ...player,
@@ -1159,7 +1226,7 @@ export function getPlayerFixtures(player) {
       const oppId = isHome ? m.away : m.home;
       const oppTeam = INITIAL_TEAMS.find((t) => t.id === oppId);
       return {
-        round: r.round, date: r.date, played: m.played, isHome,
+        round: r.round, date: r.date, played: m.played, pending: !!m.pending && !m.played, isHome,
         opponent: oppTeam?.name || oppId, opponentLogo: oppTeam?.logo || '⚽',
         golFor: isHome ? m.golA : m.golB, golAgainst: isHome ? m.golB : m.golA
       };
