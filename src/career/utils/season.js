@@ -707,11 +707,41 @@ export function recordPlayedMatch(player, m) {
   return { ...player, career };
 }
 
+
+// ---------------------------------------------------------------------------
+// PHASE 11: YANGI karyera dunyo sanasiga tekislanadi. Admin dunyoni allaqachon oldinga siljitgan bo'lsa,
+// o'yinchi 2026-07-31 dan boshlamasligi kerak: o'sha oraliqdagi o'yinlarni server (o'yinchi yo'q paytda)
+// AI bilan o'tkazib bo'lgan, o'yinchi esa "bo'sh" kunlarni bosib, hech narsa o'ynamay adminga yetib borardi.
+// Faqat hali birorta o'yin o'ynamagan karyera siljiydi; bir marta (worldAligned) bajariladi.
+// ---------------------------------------------------------------------------
+export function alignToWorld(player, worldDate) {
+  if (!player || !worldDate || player.career.worldAligned) return player;
+  const c = player.career;
+  const fresh = !(c.appearances > 0) && !(c.matchHistory || []).length;
+  if (!fresh || worldDate <= c.gameDate) return { ...player, career: { ...c, worldAligned: true } };
+  const diff = Math.round((new Date(worldDate) - new Date(c.gameDate)) / DAY_MS);
+  const day = (c.day || 1) + diff;
+  return {
+    ...player,
+    career: {
+      ...c,
+      gameDate: worldDate,
+      day,
+      worldAligned: true,
+      contract: c.contract ? { ...c.contract, signedDay: day } : c.contract,
+    },
+  };
+}
+
 // Server holatini (liga jadvali, natijalar, butsilar, kubok) o'yinchi karyerasiga KO'CHIRADI.
 // Hech narsa o'zgarmagan bo'lsa AYNAN `player` qaytariladi (ortiqcha saqlash bo'lmasin).
 export function applyWorldState(player, state) {
   if (!player || !state || player.career.freeAgent || player.club.leagueId !== state.leagueId) return player;
-  const played = state.schedule.reduce((n, r) => n + r.matches.filter((m) => m.played || m.pending).length, 0);
+  // Imzo: o'ynalgan va kutilayotgan o'yinlar ALOHIDA sanaladi (kutilayotgan -> o'ynalgan o'tishi ham yangilanish), jadval yig'indisi ham kiradi.
+  const playedN = state.schedule.reduce((n, r) => n + r.matches.filter((m) => m.played).length, 0);
+  const pendingN = state.schedule.reduce((n, r) => n + r.matches.filter((m) => m.pending && !m.played).length, 0);
+  const tableSum = Object.values(state.standings || {}).reduce((n, t) => n + (t.played || 0) * 1000 + (t.pts || 0), 0);
+  const played = `${playedN}.${pendingN}.${tableSum}`;
   const goals = Object.values(state.topScorers || {}).reduce((n, x) => n + (x.goals || 0) + (x.assists || 0) + (x.yellow || 0) + (x.red || 0), 0);
   const cup = state.cupRun;
   const cupSig = cup ? `${cup.fixtures.length}:${cup.fixtures.filter((f) => f.played).length}:${cup.won ? 1 : 0}:${cup.eliminated ? 1 : 0}` : '-';

@@ -142,3 +142,10 @@ Umumiy komponentlar: `StatLeaders.jsx` (Top Scorers / Assists / Cards / Rating),
 - Transfer hub: faqat sizga TAKLIF yuborgan (yoki muzokarasi davom etayotgan) klublar ko'rinadi.
 - `SERVER_VERSION`/`REQUIRED_SERVER_VERSION` o'zgarmadi (14).
 
+## Phase 11 tuzatish — "o'yin umuman o'ynalmadi" (bo'sh kunlar)
+- Sabab: admin dunyoni allaqachon oldinga siljitgan bo'lsa, yangi karyera 2026-07-31 dan boshlanardi. O'sha oraliqdagi o'yinlarni server
+  (o'yinchi yo'q paytda) AI bilan o'tkazib bo'lgan edi, o'yinchi esa "Next Day" bilan bo'sh kunlarni bosib, hech o'yin o'ynamay adminga yetardi.
+- `alignToWorld` (season.js): hali o'yin o'ynamagan karyera dunyo sanasiga tekislanadi (bir marta, `worldAligned`); `GameContext` uni
+  karyera yaratilganda va serverga birinchi saqlashdan keyin chaqiradi. O'yin o'ynagan karyeralar siljimaydi.
+- `applyWorldState` imzosi kutilayotgan -> o'ynalgan o'tishini ham hisobga oladi (jadval darhol yangilanadi).
+

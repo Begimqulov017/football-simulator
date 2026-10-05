@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { removePlayerFromClubRoster, joinClubRoster, updatePlayerInClubRoster } from '../data/clubRosterStore';
 import { INITIAL_TEAMS } from '../../data/teamsData';
-import { advanceOneDay, addDays, applyWorldState, computeContractOffer, buildSeasonSchedule, initStandings, setupSeasonCups } from '../utils/season';
+import { advanceOneDay, addDays, applyWorldState, alignToWorld, computeContractOffer, buildSeasonSchedule, initStandings, setupSeasonCups } from '../utils/season';
 import { LEAGUES } from '../../data/leaguesData';
 import { saveCareerToServer, loadCareerFromServer, ackMatchResult, fetchLeagueState } from '../utils/careerApi';
 import { mergeServerHonours } from '../utils/honoursSync';
@@ -178,6 +178,8 @@ export function GameProvider({ children, username }) {
         if (r && r.ok) {
           savedOnServerRef.current = true;
           if (r.ackRev) ackRevRef.current = r.ackRev; // wipe'dan keyingi yangi karyera qabul qilindi
+          // Karyera serverga endi tushdi: liga jadvali, kubok va dunyo sanasini darhol tekislaymiz.
+          if (!player.career.worldLeagueId || !player.career.worldAligned) syncWorldState();
           return;
         }
         // Server rad etdi: admin shu orada karyerani tahrirlagan yoki wipe qilgan.
@@ -215,7 +217,8 @@ export function GameProvider({ children, username }) {
   }, [displayRating(player?.overall), player?.club?.tier, player?.club?.id, player?.id, player?.name, player?.surname, player?.position]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const createPlayer = useCallback((newPlayer) => {
-    setPlayer(newPlayer);
+    // Yangi karyera dunyo sanasidan boshlanadi (o'yinlar o'z kunida, "bo'sh" kunlar yo'q).
+    setPlayer(alignToWorld(newPlayer, worldDateRef.current));
   }, []);
 
   const updatePlayer = useCallback((updater) => {
@@ -260,7 +263,11 @@ export function GameProvider({ children, username }) {
       const r = await fetchLeagueState();
       if (!r || !r.ok) return null;
       if (r.worldDate) setWorldDate(r.worldDate);
-      if (r.state) setPlayer((prev) => applyWorldState(prev, r.state));
+      setPlayer((prev) => {
+        let next = alignToWorld(prev, r.worldDate);
+        if (r.state) next = applyWorldState(next, r.state);
+        return next;
+      });
       return r;
     } catch (e) { return null; }
   }, []);

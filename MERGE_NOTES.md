@@ -1,11 +1,6 @@
-# Tuzatish paketi — karyera yo'qolishi + boshlang'ich reyting/potential
+# Phase 11 tuzatish — "Next Day bosildi, lekin o'yin umuman o'ynalmadi"
 
-Oldingi `football-simulator-phases-9-10.zip` ustiga ochiladi (loyiha ildizida, "ustidan yozish").
+`football-simulator-phase11.zip` ustiga ochiladi (loyiha ildizida, "ustidan yozish"). Faqat frontend + test + hujjat.
 
-1. `server/index.js` — Wipe Data'dan keyin yaratilgan YANGI karyera qabul qilinadi (eskirgan nusxa hamon rad etiladi).
-2. `src/career/context/GameContext.jsx` — poll hali saqlanmagan karyerani o'chirmaydi; wipe konfliktini to'g'ri hal qiladi.
-3. `src/career/utils/playerGen.js` — reyting min 67 (67–73), potential min 80 (80–90).
-4. `tests/test_phase9_10_integration.js` — wipe/yangi karyera uchun 4 ta yangi tekshiruv (jami 41).
-5. `docs/PHASES.md` — o'zgarishlar yozildi.
-
-Backend'ni ham qayta deploy qiling (server/index.js o'zgargan).
+Sabab: dunyo allaqachon oldinda bo'lganda yangi karyera eski sanadan (2026-07-31) boshlanardi va o'yinchi hech o'yin o'ynamay
+"bo'sh" kunlarni bosib adminga yetardi. Endi o'yin o'ynamagan karyera dunyo sanasiga tekislanadi.
