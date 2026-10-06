@@ -5,6 +5,7 @@ import { useFetch, Panel, Loading, ErrorBox, Empty } from '../admin/adminUi';
 import StatLeaders from './StatLeaders';
 import TrophyCabinet from './TrophyCabinet';
 import { Chips, Tag, clubLogo, counterSeason } from './shared';
+import { TeamBadge } from '../../components/TeamLogo';
 
 // 1-bo'lim: Ligalar. `division` maydoni bo'yicha guruhlanadi (1 = yuqori divizion).
 // Hozir o'yin ma'lumotlarida faqat 1-divizionlar bor; server /api/leagues'ga
@@ -34,9 +35,9 @@ function LeagueCard({ l, selected, onSelect }) {
       </div>
       <div className="mt-2 text-[11px] text-ink-soft min-h-[16px] truncate">
         {l.leader
-          ? <>🥇 {l.leader.logo} <b>{l.leader.name}</b> · {l.leader.pts} och.</>
+          ? <>🥇 <TeamBadge value={l.leader.logo} size={14} /> <b>{l.leader.name}</b> · {l.leader.pts} och.</>
           : l.lastChampion
-            ? <>🏆 {l.lastChampion.logo} {l.lastChampion.name}</>
+            ? <>🏆 <TeamBadge value={l.lastChampion.logo} size={14} /> {l.lastChampion.name}</>
             : <span className="text-ink-subtle">Hali boshlanmagan</span>}
       </div>
       <div className="mt-1 text-[10px] font-bold text-ink-muted">{l.season ? `${counterSeason(l.season)} · ${l.day}-kun` : '—'}</div>

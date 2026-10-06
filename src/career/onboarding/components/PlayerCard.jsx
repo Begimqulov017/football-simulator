@@ -1,4 +1,5 @@
 import React from 'react';
+import { TeamBadge } from '../../../components/TeamLogo';
 
 // Yaratilgan o'yinchi kartasi (FUT'dan ilhomlangan, lekin Clean Light uslubida).
 export default function PlayerCard({ player, club, rating, potential, revealed = true }) {
@@ -14,7 +15,7 @@ export default function PlayerCard({ player, club, rating, potential, revealed =
             <span className="text-4xl font-black text-ink tabular-nums">{shown ? rating : '--'}</span>
             <span className="text-xs font-extrabold text-brand-dark mt-1">{player.position}</span>
           </div>
-          <span className="text-3xl">{club ? club.logo : '❔'}</span>
+          <span className="text-3xl">{club ? <TeamBadge id={club.id} value={club.logo} size={36} /> : '❔'}</span>
         </div>
 
         <div className="relative my-3 w-24 h-24 rounded-full bg-gradient-to-b from-surface-muted to-surface-line border border-surface-line flex items-center justify-center">

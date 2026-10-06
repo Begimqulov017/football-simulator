@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Empty } from '../admin/adminUi';
+import { TeamBadge } from '../../components/TeamLogo';
 
 // Phase 5 — Trophy Cabinet / G'oliblar tarixi.
 // rows: [{ key, label, winner, winnerBadge, runnerUp?, runnerUpBadge?, note? }]
@@ -28,7 +29,7 @@ export default function TrophyCabinet({ title = "Kubok javoni", rows, emptyText 
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
             {table.map((t, i) => (
               <div key={t.name} className={`flex items-center gap-3 rounded-control border px-3 py-2.5 ${i === 0 ? 'bg-amber-50 border-amber-200' : 'bg-surface border-surface-line'}`}>
-                <span className="text-2xl leading-none">{t.badge}</span>
+                <span className="text-2xl leading-none"><TeamBadge value={t.badge} size={28} /></span>
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-sm truncate">{t.name}</div>
                   <div className="text-[11px] text-ink-muted truncate">{t.labels.slice(0, 4).join(' · ')}{t.labels.length > 4 ? ' …' : ''}</div>
@@ -46,9 +47,9 @@ export default function TrophyCabinet({ title = "Kubok javoni", rows, emptyText 
               {done.map((r) => (
                 <div key={r.key} className="flex items-center gap-3 px-3 py-2 text-sm bg-surface-card">
                   <span className="w-20 shrink-0 text-xs font-extrabold text-ink-muted tabular-nums">{r.label}</span>
-                  <span className="flex-1 min-w-0 font-bold truncate">🏆 {r.winnerBadge} {r.winner}</span>
+                  <span className="flex-1 min-w-0 font-bold truncate">🏆 <TeamBadge value={r.winnerBadge} size={16} /> {r.winner}</span>
                   <span className="hidden sm:block text-xs text-ink-muted truncate max-w-[45%] text-right">
-                    {r.runnerUp ? `Finalchi: ${r.runnerUpBadge || ''} ${r.runnerUp}` : ''}{r.note ? `${r.runnerUp ? ' · ' : ''}${r.note}` : ''}
+                    {r.runnerUp ? <>Finalchi: <TeamBadge value={r.runnerUpBadge || ''} size={14} /> {r.runnerUp}</> : ''}{r.note ? `${r.runnerUp ? ' · ' : ''}${r.note}` : ''}
                   </span>
                 </div>
               ))}

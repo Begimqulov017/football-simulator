@@ -4,6 +4,7 @@ import { fetchHubCups } from '../utils/careerApi';
 import { useFetch, Panel, Loading, ErrorBox, Empty } from '../admin/adminUi';
 import TrophyCabinet from './TrophyCabinet';
 import { Chips, Tag, counterSeason } from './shared';
+import { TeamBadge } from '../../components/TeamLogo';
 
 // 2-bo'lim: Ichki kuboklar (har bir liga o'z davlat kubogi).
 const REGIONS = [
@@ -30,7 +31,7 @@ function CupCard({ c, selected, onSelect }) {
       </div>
       <div className="mt-2 min-h-[18px] text-[11px] text-ink-soft truncate">
         {!c.started ? <span className="text-ink-subtle">Hali boshlanmagan</span>
-          : c.champion ? <>🏆 {c.champion.logo} <b>{c.champion.name}</b></>
+          : c.champion ? <>🏆 <TeamBadge value={c.champion.logo} size={14} /> <b>{c.champion.name}</b></>
             : c.current ? <><Tag tone="accent">{c.current.label}</Tag> <span className="ml-1">{c.current.played}/{c.current.total} o'ynaldi</span></>
               : '—'}
       </div>
@@ -90,7 +91,7 @@ export default function CupsView() {
           <div className="flex flex-col gap-5">
             <div className="rounded-control border border-surface-line bg-surface px-3 py-2.5 text-sm">
               {!selected.started && 'Kubok liga birinchi o\'yin kunidan keyin yaratiladi.'}
-              {selected.started && selected.champion && <>🏆 {counterSeason(selected.season)} chempioni: <b>{selected.champion.logo} {selected.champion.name}</b></>}
+              {selected.started && selected.champion && <>🏆 {counterSeason(selected.season)} chempioni: <b><TeamBadge value={selected.champion.logo} size={16} /> {selected.champion.name}</b></>}
               {selected.started && !selected.champion && selected.current && (
                 <>Joriy bosqich: <b>{selected.current.label}</b> · {selected.current.date} · {selected.current.played}/{selected.current.total} o'yin o'ynaldi</>
               )}

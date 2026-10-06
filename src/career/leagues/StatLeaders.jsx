@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import SegmentedTabs from '../../components/match/SegmentedTabs';
 import { Empty } from '../admin/adminUi';
 import { useGame } from '../context/GameContext';
+import { TeamBadge } from '../../components/TeamLogo';
 
 // Phase 5 — Statistik peshqadamlar: Top Scorers / Assists / Cards / Rating.
 // `leaders` — server (engine.buildLeaders) qaytargan obyekt.
@@ -72,7 +73,7 @@ export default function StatLeaders({ leaders, badgeOf = () => '', title = 'Stat
                     {s.name}{me ? ' (Siz)' : ''}
                     {s.pos && <span className="ml-1.5 text-[10px] font-extrabold text-ink-muted">{s.pos}</span>}
                   </div>
-                  <div className="text-[11px] text-ink-muted truncate">{badgeOf(s.teamId)} {s.teamName} · {subline(view, s)}</div>
+                  <div className="text-[11px] text-ink-muted truncate"><TeamBadge value={badgeOf(s.teamId)} size={14} /> {s.teamName} · {subline(view, s)}</div>
                 </div>
                 <Value view={view} s={s} />
               </div>

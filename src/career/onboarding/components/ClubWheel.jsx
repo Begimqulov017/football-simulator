@@ -1,4 +1,5 @@
 import React from 'react';
+import { TeamBadge } from '../../../components/TeamLogo';
 
 // Klub g'ildiragi (roulette): SVG bo'laklar + CSS transform bilan aylanadi.
 // `rotation` — kumulyativ gradus; to'xtaganda `onSpinEnd` chaqiriladi.
@@ -58,7 +59,7 @@ export default function ClubWheel({ segments, rotation, spinning, durationMs, hi
                   fontSize="24"
                   transform={`rotate(${mid} ${tx} ${ty})`}
                 >
-                  {t.logo}
+                  <TeamBadge id={t.id} value={t.logo} size={22} />
                 </text>
               </g>
             );

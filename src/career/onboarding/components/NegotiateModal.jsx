@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '../../../components/ui';
 import Icon from '../../../components/Icon';
+import { TeamBadge } from '../../../components/TeamLogo';
 import {
   ROLES, CONTRACT_YEARS, clubBaseWage, wageBounds, roundTo,
   evaluateProposal, buildCounterOffer, buildFinalOffer,
@@ -104,7 +105,7 @@ export default function NegotiateModal({ ctx, onClose, onSigned }) {
             </svg>
             <div className="relative">
               <div className="text-2xl font-black">Shartnoma imzolandi!</div>
-              <p className="mt-1 text-sm text-ink-muted">{clubResult.team.logo} {clubResult.team.name} bilan yangi bosqich boshlanadi.</p>
+              <p className="mt-1 text-sm text-ink-muted"><TeamBadge id={clubResult.team.id} value={clubResult.team.logo} size={18} /> {clubResult.team.name} bilan yangi bosqich boshlanadi.</p>
             </div>
             <div className="relative w-full grid grid-cols-3 gap-2 text-center">
               <div className="rounded-control bg-brand-tint border border-brand-soft py-3">
@@ -128,7 +129,7 @@ export default function NegotiateModal({ ctx, onClose, onSigned }) {
           <div className="p-5 sm:p-7 flex flex-col gap-5">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
-                <span className="w-12 h-12 rounded-full bg-surface-muted border border-surface-line flex items-center justify-center text-2xl">{clubResult.team.logo}</span>
+                <span className="w-12 h-12 rounded-full bg-surface-muted border border-surface-line flex items-center justify-center text-2xl"><TeamBadge id={clubResult.team.id} value={clubResult.team.logo} size={32} /></span>
                 <div>
                   <div className="text-lg font-black leading-tight">Shartnoma muzokarasi</div>
                   <div className="text-xs text-ink-muted">{clubResult.team.name} · urinish {Math.min(attempts + 1, MAX_ATTEMPTS)}/{MAX_ATTEMPTS}</div>

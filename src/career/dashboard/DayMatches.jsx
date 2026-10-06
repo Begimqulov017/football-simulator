@@ -1,13 +1,13 @@
 import React from 'react';
 import { COMPETITION_STYLE, formatLongDate } from './timelineUtils';
-import TeamLogo from '../../components/TeamLogo';
+import TeamLogo, { TeamBadge } from '../../components/TeamLogo';
 
 function Row({ ev }) {
   const st = COMPETITION_STYLE[ev.kind];
   return (
     <div className={`flex items-center gap-3 rounded-control border border-surface-line px-3 py-2.5 ${st.tint}`}>
       <span className={`w-1.5 self-stretch rounded-full ${st.dot}`} />
-      <span className="text-2xl">{ev.logo}</span>
+      <span className="text-2xl"><TeamBadge id={ev.teamId} value={ev.logo} size={28} /></span>
       <div className="min-w-0 flex-1">
         <div className="text-sm font-extrabold text-ink truncate">{ev.isHome ? 'vs' : '@'} {ev.opponent}</div>
         <div className={`text-[11px] font-semibold ${st.text}`}>{ev.competition}{ev.round ? ` · ${typeof ev.round === 'number' ? `${ev.round}-tur` : ev.round}` : ''}</div>

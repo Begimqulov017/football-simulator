@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Badge } from '../../components/ui';
+import { TeamBadge } from '../../components/TeamLogo';
 
 const CONFETTI = ['#10B981', '#0284C7', '#F59E0B', '#EF4444', '#8B5CF6'];
 function Confetti() {
@@ -45,7 +46,7 @@ function Pitch({ players, myId }) {
           >
             <div className={`w-9 h-9 rounded-full bg-white border-2 flex items-center justify-center text-[10px] font-extrabold shadow-soft ${p.id === myId ? 'border-amber-400 text-amber-700' : 'border-accent text-accent-dark'}`}>{p.pos}</div>
             <span className="text-[10px] font-bold text-white drop-shadow text-center leading-tight max-w-[64px] truncate">{p.name.split(' ').slice(-1)[0]}</span>
-            <span className="text-[9px] text-white/80">{p.logo}</span>
+            <span className="text-[9px] text-white/80"><TeamBadge value={p.logo} size={12} /></span>
           </div>
         );
       })}
@@ -97,7 +98,7 @@ export default function AwardsCeremony({ awards, myId }) {
                 return (
                   <div key={p.id} className={`rounded-card border text-center px-2 py-4 ${first ? 'bg-amber-50 border-amber-300 pb-8 shadow-glow-brand' : 'bg-surface border-surface-line'} ${meWon(p.id) ? 'ring-2 ring-amber-400' : ''}`}>
                     <div className="text-2xl">{first ? '🥇' : p === gb[1] ? '🥈' : '🥉'}</div>
-                    <div className="text-xl mt-1">{p.logo}</div>
+                    <div className="text-xl mt-1"><TeamBadge value={p.logo} size={24} /></div>
                     <div className="text-sm font-extrabold leading-tight mt-1">{p.name}</div>
                     <div className="text-[11px] text-ink-muted truncate">{p.clubName}</div>
                     <div className="text-2xl font-black tabular-nums mt-1">{p.goals}<span className="text-xs text-ink-muted font-bold"> gol</span></div>
@@ -123,7 +124,7 @@ export default function AwardsCeremony({ awards, myId }) {
             <div className="text-5xl">{STEPS[2].icon}</div>
             <div className="text-sm font-extrabold uppercase tracking-wide text-ink-muted">{STEPS[2].title}</div>
             <div className={`rounded-card border-2 px-8 py-6 bg-gradient-to-br from-amber-50 to-white ${meWon(bd.winner.id) ? 'border-amber-400' : 'border-amber-200'} shadow-lift`}>
-              <div className="text-4xl">{bd.winner.logo}</div>
+              <div className="text-4xl"><TeamBadge value={bd.winner.logo} size={44} /></div>
               <div className="text-2xl sm:text-3xl font-black mt-1">{bd.winner.name}</div>
               <div className="text-sm text-ink-muted">{bd.winner.clubName} · {bd.winner.pos} · OVR {bd.winner.ovr}</div>
               <div className="mt-2 text-xs font-bold text-ink-soft">{bd.winner.goals} gol · ball: {bd.winner.score}</div>
@@ -134,7 +135,7 @@ export default function AwardsCeremony({ awards, myId }) {
                 <div className="text-[11px] font-extrabold uppercase tracking-wide text-ink-muted mb-1.5">Boshqa nomzodlar</div>
                 {bd.nominees.map((n, i) => (
                   <div key={n.id} className="flex items-center gap-3 text-sm bg-surface rounded-control border border-surface-line px-3 py-2 mb-1.5">
-                    <span className="w-5 font-bold text-ink-muted">{i + 2}</span><span>{n.logo}</span>
+                    <span className="w-5 font-bold text-ink-muted">{i + 2}</span><span><TeamBadge value={n.logo} size={16} /></span>
                     <span className="flex-1 text-left font-semibold truncate">{n.name}</span><span className="text-xs text-ink-muted tabular-nums">{n.score}</span>
                   </div>
                 ))}

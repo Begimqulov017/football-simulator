@@ -5,6 +5,7 @@ import PlayerCard from '../components/PlayerCard';
 import useCountUp from '../useCountUp';
 import { rollFirstRating, rollPotential } from '../../utils/playerGen';
 import { previewClubTier } from '../../data/clubRosterStore';
+import { TeamBadge } from '../../../components/TeamLogo';
 import {
   MAX_DECLINES, rollUniqueClub, buildWheel, computeSpinRotation,
 } from '../onboardingUtils';
@@ -114,7 +115,7 @@ export default function WheelStep({ form, onBack, onAccepted }) {
 
         {phase === 'offer' && offer && (
           <div className="motion-safe:animate-fs-pop-in rounded-card border border-brand-soft bg-brand-tint p-5 flex flex-col items-center gap-3 text-center">
-            <div className="text-5xl">{offer.team.logo}</div>
+            <div className="text-5xl"><TeamBadge id={offer.team.id} value={offer.team.logo} size={56} /></div>
             <div>
               <div className="text-xl font-black text-ink">{offer.team.name}</div>
               <div className="text-sm text-ink-muted">{offer.league.flag} {offer.league.name} · {offer.league.country}</div>
@@ -135,7 +136,7 @@ export default function WheelStep({ form, onBack, onAccepted }) {
           <div className="motion-safe:animate-fs-pop-in flex flex-col gap-4">
             <div className="grid grid-cols-3 gap-3 text-center">
               <div className="rounded-control border border-surface-line bg-surface p-3">
-                <div className="text-3xl">{offer.team.logo}</div>
+                <div className="text-3xl"><TeamBadge id={offer.team.id} value={offer.team.logo} size={36} /></div>
                 <div className="text-[11px] font-bold text-ink-muted mt-1 truncate">{offer.team.name}</div>
               </div>
               <div className="rounded-control border border-brand-soft bg-brand-tint p-3">

@@ -8,6 +8,7 @@ import Timeline from './Timeline';
 import DayMatches from './DayMatches';
 import { buildTimeline, getDayPlan, formatLongDate, COMPETITION_STYLE } from './timelineUtils';
 import { getInternationalContext, nextBreakDay, flagOfNation } from '../international/calendar';
+import { TeamBadge } from '../../components/TeamLogo';
 
 // Phase 4 — Career Dashboard: yuqorida sana + 31 kunlik Timeline, markazda
 // "Play Match" (o'yin tugagach avtomatik "Next Day") va kun o'yinlari ro'yxati.
@@ -109,7 +110,7 @@ export default function CareerDashboard({ extraEvents = {} }) {
         <div className="rounded-card border border-surface-line bg-surface p-5 flex flex-col items-center justify-center gap-3 text-center">
           {playable ? (
             <>
-              <div className="text-3xl">{nextEvent?.logo || '⚽'}</div>
+              <div className="text-3xl"><TeamBadge id={nextEvent?.teamId} value={nextEvent?.logo || '⚽'} size={36} /></div>
               <div className="text-sm font-bold text-ink-soft">
                 {nextEvent ? `${nextEvent.isHome ? 'vs' : '@'} ${nextEvent.opponent}` : "O'yin kutmoqda"}
               </div>

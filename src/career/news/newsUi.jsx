@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { formatLongDate } from '../dashboard/timelineUtils';
+import { TeamBadge } from '../../components/TeamLogo';
 
 // Dark neon aksent palitrasi. Tailwind class'lari to'liq yozilgan (dynamic
 // string yig'ilmaydi) - aks holda build paytida o'chib ketadi.
@@ -40,7 +41,7 @@ function Lineup({ lineup, accent }) {
               <div className="flex flex-wrap gap-1.5">
                 {row.map((l, i) => (
                   <span key={`${l.name}_${i}`} className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs ${l.human ? `${accent.chip} font-extrabold` : 'border-white/10 bg-white/5 text-slate-200'}`}>
-                    <span>{l.logo}</span>
+                    <span><TeamBadge value={l.logo} size={16} /></span>
                     <span className="font-semibold">{l.name}</span>
                     <span className="text-[10px] text-slate-400">{l.pos}</span>
                     {l.goals > 0 && <span className="text-[10px] text-amber-300">⚽{l.goals}</span>}
