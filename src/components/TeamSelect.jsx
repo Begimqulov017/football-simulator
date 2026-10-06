@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { calculateDisplayTeamOvr } from '../utils/engine';
+import { TeamBadge } from './TeamLogo';
 
 // Jamoalarni alifbo harfi bo'yicha guruhlaydi — A, B, C... sarlavhalari bilan
 function groupByLetter(list) {
@@ -42,7 +43,7 @@ function TeamPicker({ label, labelClass, teams, selected, otherSelected, onSelec
 
       {selected && !isOpen ? (
         <div className={`selected-team-card ${btnClass}`}>
-          <span>{selected.logo} {selected.name}</span>
+          <span><TeamBadge id={selected.id} value={selected.logo} size={20} /> {selected.name}</span>
           <span className="rating-badge">OVR {calculateDisplayTeamOvr(selected.squad)}</span>
           <button className="change-team-btn" onClick={() => setIsOpen(true)}>O'zgartirish</button>
         </div>
@@ -71,7 +72,7 @@ function TeamPicker({ label, labelClass, teams, selected, otherSelected, onSelec
                       onClick={() => handlePick(t)}
                       className="autocomplete-item"
                     >
-                      <span>{t.logo} {t.name}</span>
+                      <span><TeamBadge id={t.id} value={t.logo} size={20} /> {t.name}</span>
                       <span className="rating-badge">OVR {calculateDisplayTeamOvr(t.squad)}</span>
                     </button>
                   ))}

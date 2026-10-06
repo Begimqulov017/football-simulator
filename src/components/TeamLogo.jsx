@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { API_BASE } from '../career/utils/careerApi';
+import { INITIAL_TEAMS } from '../data/teamsData';
 
 // Klub logotipi: serverda server/gamedata/logoData/<id>.png bo'lsa - haqiqiy rasm, bo'lmasa avvalgi emoji.
 // Mavjud logotiplar ro'yxati bir marta yuklanadi va hamma komponentlar orasida bo'lishiladi.
@@ -11,9 +12,14 @@ function loadLogoList() {
   if (logoFiles || loading) return;
   loading = true;
   fetch(`${API_BASE}/api/logos`)
-    .then((r) => r.json())
+    .then((r) => { if (!r.ok) throw new Error('logos http ' + r.status); return r.json(); })
     .then((d) => { logoFiles = (d && d.files) || {}; })
-    .catch(() => { logoFiles = {}; })
+    .catch(() => {
+      // Server uxlab yotgan / hali yangilanmagan bo'lishi mumkin: natijani SAQLAB QO'YMAYMIZ,
+      // 8 soniyadan keyin qayta uriniladi (avval {} saqlanib, sahifa yangilanmaguncha emoji qolardi).
+      logoFiles = null;
+      setTimeout(() => { loadLogoList(); }, 8000);
+    })
     .finally(() => { loading = false; subscribers.forEach((f) => f()); });
 }
 
@@ -48,4 +54,25 @@ export default function TeamLogo({ id, logo, size = 24, className = '', style, t
     );
   }
   return <span className={className} style={style} title={title}>{logo || '\u26BD'}</span>;
+}
+
+// Emoji -> klub id (faqat bir klubga tegishli emojilar; takrorlanganlari noaniq, shuning uchun o'tkazib yuboriladi).
+const EMOJI_TO_ID = (() => {
+  const count = new Map();
+  INITIAL_TEAMS.forEach((t) => count.set(t.logo, (count.get(t.logo) || 0) + 1));
+  const m = new Map();
+  INITIAL_TEAMS.forEach((t) => { if (count.get(t.logo) === 1) m.set(t.logo, t.id); });
+  return m;
+})();
+
+// Hamma joyda ishlatish uchun: `value` klub id'si yoki emoji-logo satri bo'lishi mumkin.
+// Serverda haqiqiy logotip bo'lsa - rasm, bo'lmasa - o'sha emoji.
+export function TeamBadge({ value, id, size = 20, className = '', style }) {
+  const team = INITIAL_TEAMS.find((t) => t.id === id)
+    || INITIAL_TEAMS.find((t) => t.id === value)
+    || INITIAL_TEAMS.find((t) => t.id === EMOJI_TO_ID.get(value));
+  // Klub emas (masalan davlat bayrog'i yoki noma'lum belgi) - berilgan qiymatni o'zini ko'rsatamiz.
+  // Klub id berilgan, lekin `value` boshqa belgi (bayroq) bo'lsa ham bayroq saqlanadi.
+  if (!team || (value && value !== team.logo && value !== team.id)) return <span className={className} style={style}>{value}</span>;
+  return <TeamLogo id={team.id} logo={team.logo} size={size} className={className} style={style} />;
 }
