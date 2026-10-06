@@ -7,6 +7,7 @@ import { unreadCounts } from '../utils/messageGenerator';
 import Icon from '../../components/Icon';
 import { displayRating } from '../utils/statCalc';
 import useChatUnread from '../hooks/useChatUnread';
+import TeamLogo from '../../components/TeamLogo';
 
 const NAV_ITEMS = [
   { to: '/home', icon: 'home', label: 'Home' },
@@ -52,7 +53,7 @@ function NavBadge({ count, label }) {
 }
 
 export default function AppShell({ children }) {
-  const { player } = useGame();
+  const { player, saveError } = useGame();
   const onExit = useExit();
   const currentUser = useCurrentUser();
   const { pathname } = useLocation();
@@ -81,7 +82,7 @@ export default function AppShell({ children }) {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-header">
-          <div className="club-badge">{player?.club?.logo || '⚽'}</div>
+          <div className="club-badge"><TeamLogo id={player?.club?.id} logo={player?.club?.logo || '⚽'} size={28} /></div>
           <div>
             <div className="name">{player ? `${player.name} ${player.surname}` : 'Player'}</div>
             <div className="rating">OVR {displayRating(player?.overall) ?? '--'}</div>
@@ -126,7 +127,14 @@ export default function AppShell({ children }) {
           <span>Menyuga qaytish</span>
         </button>
       </aside>
-      <main className="main-area">{children}</main>
+      <main className="main-area">
+        {saveError && (
+          <div role="alert" style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#B91C1C', borderRadius: 12, padding: '10px 14px', marginBottom: 14, fontSize: 13, fontWeight: 600 }}>
+            ⚠️ Karyera serverga SAQLANMAYAPTI: {saveError}. Server sizni ko'rmaydi, shuning uchun o'yinlaringiz kutilmaydi va sahifa yangilansa karyera yo'qolishi mumkin.
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   );
 }

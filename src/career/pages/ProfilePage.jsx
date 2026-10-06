@@ -6,6 +6,7 @@ import { MAIN_STAT_LABELS, displayRating } from '../utils/statCalc';
 import { fetchNationSquad } from '../utils/careerApi';
 import { flagOfNation } from '../international/calendar';
 import { buildHonours, yearOf } from '../utils/honours';
+import TeamLogo from '../../components/TeamLogo';
 
 // ---------------------------------------------------------------------------
 // PHASE 3 - PROFILE PAGE
@@ -555,7 +556,7 @@ export default function ProfilePage() {
             </div>
             <div className="text-right">
               <div className="text-3xl">{flagOfNation(player.nationality)}</div>
-              <div className="mt-1 text-3xl">{player.club?.logo}</div>
+              <div className="mt-1 text-3xl"><TeamLogo id={player.club?.id} logo={player.club?.logo} size={40} /></div>
             </div>
           </div>
           <div className="mt-4 text-center text-6xl">⚽</div>
@@ -580,7 +581,7 @@ export default function ProfilePage() {
               <div>
                 <div className="text-2xl font-black text-ink sm:text-3xl" style={{ fontFamily: 'var(--font-display)' }}>{player.name} {player.surname}</div>
                 <div className="mt-1 text-sm text-ink-muted">
-                  {player.club?.logo} {player.club?.name} · {player.club?.flag} {player.club?.leagueName}
+                  <TeamLogo id={player.club?.id} logo={player.club?.logo} size={20} /> {player.club?.name} · {player.club?.flag} {player.club?.leagueName}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">

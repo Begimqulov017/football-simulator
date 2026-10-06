@@ -4,6 +4,7 @@ import AppShell from '../components/AppShell';
 import { useGame } from '../context/GameContext';
 import { getPlayerFixtures } from '../utils/season';
 import { INITIAL_TEAMS } from '../../data/teamsData';
+import TeamLogo from '../../components/TeamLogo';
 
 export default function GamesPage() {
   const { player, pendingWorldMatch, waitingForAdmin } = useGame();
@@ -17,7 +18,7 @@ export default function GamesPage() {
 
   // PHASE 11: o'yin FAQAT serverdagi kutilayotgan (pending) match orqali, o'z kunida, LiveMatch'da o'ynaladi.
   const tomorrow = (() => { const d = new Date(player.career.gameDate); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })();
-  const dueNow = !!(pendingWorldMatch && pendingWorldMatch.date && pendingWorldMatch.date <= tomorrow);
+  const dueNow = !!(pendingWorldMatch && (!pendingWorldMatch.date || pendingWorldMatch.date <= tomorrow));
   const isDueLeague = (f) => dueNow && pendingWorldMatch.competition === 'league' && pendingWorldMatch.round === f.round;
   const isDueCup = (cup, i) => dueNow && pendingWorldMatch.competition === 'cup' && cup === player.career.domesticCup && cup.fixtures[i]?.round === pendingWorldMatch.round && !cup.fixtures[i]?.played;
   const handlePlay = () => navigate('/world-match');
@@ -50,7 +51,7 @@ export default function GamesPage() {
               const isNextPlayable = isDueCup(cup, i);
               return (
                 <div key={i} className="list-row" style={{ paddingLeft: 8 }}>
-                  <span>{cup.roundNames[i] || `Round ${i + 1}`}: {opp?.logo} {opp?.name || '?'}</span>
+                  <span>{cup.roundNames[i] || `Round ${i + 1}`}: <TeamLogo id={opp?.id} logo={opp?.logo} size={18} /> {opp?.name || '?'}</span>
                   {f.played ? (
                     <span className={`badge ${f.golFor > f.golAgainst ? 'badge-green' : f.golFor < f.golAgainst ? 'badge-red' : ''}`}>{f.golFor}-{f.golAgainst}</span>
                   ) : isNextPlayable ? (

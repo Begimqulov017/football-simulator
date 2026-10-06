@@ -4,6 +4,7 @@ import AppShell from '../components/AppShell';
 import { fetchWorld } from '../utils/careerApi';
 import { computeStandingsTable } from '../utils/season';
 import { INITIAL_TEAMS } from '../../data/teamsData';
+import TeamLogo from '../../components/TeamLogo';
 
 const teamName = (id) => INITIAL_TEAMS.find((t) => t.id === id)?.name || id;
 const teamLogo = (id) => INITIAL_TEAMS.find((t) => t.id === id)?.logo || '⚽';
@@ -98,7 +99,7 @@ export default function LeagueBrowsePage() {
               {table.map((row, i) => (
                 <tr key={row.teamId}>
                   <td style={{ padding: '6px 8px' }}>{i + 1}</td>
-                  <td style={{ padding: '6px 8px' }}>{row.logo} {row.name}</td>
+                  <td style={{ padding: '6px 8px' }}><TeamLogo id={row.teamId} logo={row.logo} size={18} /> {row.name}</td>
                   <td style={{ padding: '6px 8px' }}>{row.played}</td>
                   <td style={{ padding: '6px 8px' }}>{row.win}</td>
                   <td style={{ padding: '6px 8px' }}>{row.draw}</td>

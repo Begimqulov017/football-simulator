@@ -1,5 +1,6 @@
 import React from 'react';
 import { COMPETITION_STYLE, formatLongDate } from './timelineUtils';
+import TeamLogo from '../../components/TeamLogo';
 
 function Row({ ev }) {
   const st = COMPETITION_STYLE[ev.kind];
@@ -46,9 +47,9 @@ export default function DayMatches({ plan }) {
           <div className="px-3 pb-3 flex flex-col gap-1.5">
             {others.map((m, i) => (
               <div key={i} className="flex items-center justify-between gap-2 text-xs text-ink-soft">
-                <span className="truncate flex-1 text-right">{m.home.name} {m.home.logo}</span>
+                <span className="truncate flex-1 text-right">{m.home.name} <TeamLogo id={m.home.id} logo={m.home.logo} size={20} /></span>
                 <span className="font-black tabular-nums text-ink w-12 text-center">{m.played ? `${m.golA}-${m.golB}` : 'vs'}</span>
-                <span className="truncate flex-1">{m.away.logo} {m.away.name}</span>
+                <span className="truncate flex-1"><TeamLogo id={m.away.id} logo={m.away.logo} size={20} /> {m.away.name}</span>
               </div>
             ))}
           </div>

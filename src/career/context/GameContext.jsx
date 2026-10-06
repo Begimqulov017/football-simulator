@@ -65,6 +65,9 @@ export function GameProvider({ children, username }) {
   const [worldDate, setWorldDate] = useState(null);
   const [pendingWorldMatch, setPendingWorldMatch] = useState(null);
   const worldDateRef = useRef(null);
+  // Karyera serverga saqlanyaptimi? Saqlanmasa server o'yinchini KO'RMAYDI (o'yinlar kutilmaydi, AI o'ynab yuboradi),
+  // shuning uchun xatoni foydalanuvchiga ko'rsatamiz (saveError).
+  const [saveError, setSaveError] = useState(null);
   const pendingRef = useRef(null);
   const saveTimer = useRef(null);
   const firstLoad = useRef(true);
@@ -176,6 +179,7 @@ export function GameProvider({ children, username }) {
     saveTimer.current = setTimeout(() => {
       saveCareerToServer(player, ackRevRef.current).then((r) => {
         if (r && r.ok) {
+          setSaveError(null);
           savedOnServerRef.current = true;
           if (r.ackRev) ackRevRef.current = r.ackRev; // wipe'dan keyingi yangi karyera qabul qilindi
           // Karyera serverga endi tushdi: liga jadvali, kubok va dunyo sanasini darhol tekislaymiz.
@@ -183,6 +187,10 @@ export function GameProvider({ children, username }) {
           return;
         }
         // Server rad etdi: admin shu orada karyerani tahrirlagan yoki wipe qilgan.
+        if (!r || (!r.conflict && !r.ok)) {
+          setSaveError((r && r.error) || "Karyera serverga saqlanmadi");
+          return;
+        }
         if (r && r.conflict && r.adminEdit) {
           ackRevRef.current = r.adminEdit.rev;
           if (r.adminEdit.patch) {
@@ -196,7 +204,7 @@ export function GameProvider({ children, username }) {
             persistLocalSave(username, null);
           }
         }
-      }).catch(() => {});
+      }).catch(() => { setSaveError("Server bilan aloqa yo'q - karyera saqlanmayapti"); });
     }, 1200);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -243,7 +251,8 @@ export function GameProvider({ children, username }) {
   // Siz adminga yetib oldingiz: keyingi kun dunyo sanasidan keyin.
   const waitingForAdmin = !!(tomorrow && effectiveWorldDate && tomorrow > effectiveWorldDate);
   // Keyingi kunda sizning o'yiningiz bor va u o'ynalishini kutmoqda.
-  const matchdayNext = !!(pendingWorldMatch && tomorrow && pendingWorldMatch.date && pendingWorldMatch.date <= tomorrow);
+  // Eski backend `date` bermasa ham o'yin ko'rinadi (jimgina yo'qolmasin): sana yo'q = hozir o'ynaladi.
+  const matchdayNext = !!(pendingWorldMatch && tomorrow && (!pendingWorldMatch.date || pendingWorldMatch.date <= tomorrow));
 
   const nextDay = useCallback(() => {
     setPlayer((prev) => {
@@ -252,7 +261,7 @@ export function GameProvider({ children, username }) {
       const wd = worldDateRef.current || prev.career.gameDate;
       if (t > wd) return prev; // adminni kutish
       const pw = pendingRef.current;
-      if (pw && pw.date && pw.date <= t) return prev; // avval o'z o'yiningizni o'ynang
+      if (pw && (!pw.date || pw.date <= t)) return prev; // avval o'z o'yiningizni o'ynang
       return advanceOneDay(prev);
     });
   }, []);
@@ -576,7 +585,7 @@ export function GameProvider({ children, username }) {
 
   const value = {
     player, ready, createPlayer, updatePlayer, nextDay, resetSave,
-    matchdayNext, waitingForAdmin, syncWorldState,
+    matchdayNext, waitingForAdmin, syncWorldState, saveError,
     worldDate, hasUnwatchedResult, acknowledgeResult,
     pendingWorldMatch, refreshPendingWorldMatch,
     markMessageRead, requestNewContract, acceptContractOffer, acceptTransferOffer, declineOffer,

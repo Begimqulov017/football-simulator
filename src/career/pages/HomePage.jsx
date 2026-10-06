@@ -8,6 +8,7 @@ import { getLeagueTable, getTopScorers } from '../utils/season';
 import { useNewsFeed } from '../utils/useNewsFeed';
 import NewsBanner from '../news/NewsBanner';
 import { NewsModal } from '../news/newsUi';
+import TeamLogo from '../../components/TeamLogo';
 
 // Dark neon panel - barcha Home bloklari uchun umumiy ko'rinish
 function Panel({ title, accent = 'cyan', onClick, right, children }) {
@@ -79,7 +80,7 @@ export default function HomePage() {
         <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
           <div>
             <div className="text-2xl font-black text-white sm:text-3xl" style={{ fontFamily: 'var(--font-display)' }}>Welcome back, {player.name}</div>
-            <div className="mt-1 text-sm text-slate-400">{player.club.logo} {player.club.name} · {player.club.leagueName}</div>
+            <div className="mt-1 text-sm text-slate-400"><TeamLogo id={player.club.id} logo={player.club.logo} size={18} /> {player.club.name} · {player.club.leagueName}</div>
           </div>
           <span className="rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-emerald-300 shadow-[0_0_18px_rgba(52,211,153,0.25)]">Day {player.career.day}</span>
         </div>
@@ -119,7 +120,7 @@ export default function HomePage() {
           <Panel title="League Top 5" accent="cyan" onClick={() => navigate('/league')} right={<span className="text-[10px] font-semibold text-slate-500">View all →</span>}>
             {table.length === 0 && <div className="py-2 text-sm text-slate-500">No table yet.</div>}
             {table.map((row, i) => (
-              <Row key={row.teamId} hot={row.teamId === player.club.id} left={`${i + 1}. ${row.logo} ${row.name}`} right={<Pill tone={row.teamId === player.club.id ? 'gold' : 'slate'}>{row.pts} pts</Pill>} />
+              <Row key={row.teamId} hot={row.teamId === player.club.id} left={<>{i + 1}. <TeamLogo id={row.teamId} logo={row.logo} size={18} /> {row.name}</>} right={<Pill tone={row.teamId === player.club.id ? 'gold' : 'slate'}>{row.pts} pts</Pill>} />
             ))}
           </Panel>
 

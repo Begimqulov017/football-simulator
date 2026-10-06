@@ -20,6 +20,7 @@ import {
   DEFAULT_TACTICS, loadTactics, saveTactics, formationByName, suggestFormation,
   buildLineup, computeChemistry, cleanName, catOf, CAT_COLOR, CAT_SHORT,
 } from '../club/squadUtils';
+import TeamLogo from '../../components/TeamLogo';
 
 function NameModeToggle({ value, onChange }) {
   const opt = (id, label) => (
@@ -122,7 +123,7 @@ export default function ClubPage() {
     <AppShell>
       <div className="page-header">
         <div className="flex items-center gap-3">
-          <span className="flex items-center justify-center w-14 h-14 rounded-full bg-white border border-surface-line shadow-soft text-3xl" aria-hidden="true">{player.club.logo}</span>
+          <span className="flex items-center justify-center w-14 h-14 rounded-full bg-white border border-surface-line shadow-soft text-3xl" aria-hidden="true"><TeamLogo id={player.club.id} logo={player.club.logo} size={44} /></span>
           <div>
             <h1>{player.club.name}</h1>
             <div className="sub">{player.club.flag} {player.club.leagueName}</div>

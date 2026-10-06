@@ -2,13 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Button } from './ui';
 import Icon from './Icon';
 import StatusPill from './match/StatusPill';
+import TeamLogo from './TeamLogo';
 
 // Hisob paneli (Sofascore uslubidagi karta): jamoalar, hisob, daqiqa, holat va boshqaruv.
 function TeamSide({ team, reds }) {
   return (
     <div className="flex-1 min-w-0 flex flex-col items-center gap-2 text-center">
       <span className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-surface-muted border border-surface-line flex items-center justify-center text-3xl sm:text-4xl">
-        {team.logo}
+        <TeamLogo id={team.id} logo={team.logo} size={44} />
       </span>
       <span className="text-sm sm:text-base font-extrabold text-ink leading-tight break-words max-w-full">{team.name}</span>
       {reds > 0 && <span className="text-[11px] font-bold text-red-600">🟥 {reds}</span>}

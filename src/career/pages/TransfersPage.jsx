@@ -9,6 +9,7 @@ import {
   MAX_TURNS, ROLES, analyseClub, buildContext, clubStatus, getLeagueOfTeam, ALL_LEAGUES,
   marketValue, remainingContractYears, startNegotiation, transferFee, turnOf, formatTerms,
 } from '../transfers/transferUtils';
+import TeamLogo from '../../components/TeamLogo';
 
 const LIVE_STAGES = ['offer', 'counter', 'final', 'accepted'];
 const PAGE_SIZE = 24;
@@ -79,7 +80,7 @@ function ClubCard({ row, onOpen }) {
   return (
     <div className={cls.join(' ')}>
       <div className="tx-club-head">
-        <span className="tx-logo" aria-hidden="true">{team.logo}</span>
+        <span className="tx-logo" aria-hidden="true"><TeamLogo id={team.id} logo={team.logo} size={34} /></span>
         <div style={{ minWidth: 0 }}>
           <div className="tx-club-name" title={team.name}>{team.name}</div>
           <div className="tx-club-league">{league.flag} {league.name}</div>
@@ -223,7 +224,7 @@ function TalksTab({ career, currentClubId, onOpenTeam }) {
     return (
       <div className="list-row" style={{ gap: 12, flexWrap: 'wrap' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <span className="tx-logo" aria-hidden="true">{team.logo}</span>
+          <span className="tx-logo" aria-hidden="true"><TeamLogo id={team.id} logo={team.logo} size={34} /></span>
           <span>
             <b>{team.name}</b>
             <br />

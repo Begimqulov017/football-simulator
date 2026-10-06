@@ -89,7 +89,7 @@ export function buildTimeline(player, startIso, { days = 31, extraEvents = {}, t
     let events = [...getPlayerEventsOn(player, iso), ...(extraEvents[iso] || [])];
     if (intl) {
       // Xalqaro hafta: klub logotiplari o'rniga davlat bayroqlari chiqadi
-      events = events.map((e) => ({ ...e, logo: e.teamId ? clubFlag(e.teamId) : (e.flag || e.logo) }));
+      events = events.map((e) => ({ ...e, isFlag: true, logo: e.teamId ? clubFlag(e.teamId) : (e.flag || e.logo) }));
       if (intl.matchDay && player?.nationality) {
         events.unshift({
           kind: 'international', competition: intl.label, round: intl.kind === 'break' ? 'Terma jamoa o\'yini' : 'Turnir kuni',

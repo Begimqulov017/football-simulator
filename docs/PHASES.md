@@ -149,3 +149,15 @@ Umumiy komponentlar: `StatLeaders.jsx` (Top Scorers / Assists / Cards / Rating),
   karyera yaratilganda va serverga birinchi saqlashdan keyin chaqiradi. O'yin o'ynagan karyeralar siljimaydi.
 - `applyWorldState` imzosi kutilayotgan -> o'ynalgan o'tishini ham hisobga oladi (jadval darhol yangilanadi).
 
+## Phase 12 — Karyera yo'qolishi, haqiqiy klub logotiplari, saqlash xatosi ko'rsatkichi
+- Karyera yangilanganda yo'qolardi: wipe'dan keyingi yangi karyerani server SOATGA qarab (`createdAt` > `adminEdit.at`) ajratardi;
+  mijoz va server soati farq qilsa yangi karyera rad etilib, forma qaytib chiqardi. Endi wipe o'chirilgan karyera id'sini eslab qoladi
+  (`adminEdit.wipedPlayerId`): boshqa id = yangi karyera (soatga bog'liq emas). Eski yozuvlarda: o'yin o'ynamagan karyera = yangi.
+- `express.json({ limit: '10mb' })`: standart 100 KB limit katta karyerani jimgina rad etishi mumkin edi.
+- Klub logotiplari: `server/gamedata/logoData/<teamId>.png` (yoki .webp/.svg) tashlansa, shu klub logotipi avtomatik ko'rinadi
+  (masalan `real_madrid.png`). Ochiq route'lar: `GET /api/logos`, `GET /api/logo/:file`. Klientda `src/components/TeamLogo.jsx`
+  (fayl bo'lmasa emoji qoladi). O'yin tablosi (MatchTablo), yon panel, Profil, Home, jadvallar, Club, o'yinlar ro'yxati, transferlar.
+- Karyera serverga saqlanmasa, sahifa tepasida qizil ogohlantirish chiqadi (`saveError`).
+- `SERVER_VERSION`/`REQUIRED_SERVER_VERSION` = 15 (frontend yangi backend'siz ishlamaydi: league-state, pending sanasi).
+- Pending o'yin `date` bermasa ham (eski backend) o'ynalishi mumkin.
+

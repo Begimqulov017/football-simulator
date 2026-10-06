@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { COMPETITION_STYLE } from './timelineUtils';
+import TeamLogo from '../../components/TeamLogo';
 
 const INTL_TINT = 'bg-violet-50 border-violet-200';
 
@@ -45,7 +46,7 @@ export default function Timeline({ days, selectedIso, onSelect }) {
             <span className={`text-[10px] font-semibold ${d.isToday ? 'text-white/70' : 'text-ink-subtle'}`}>{d.isFirstOfMonth ? d.monthLabel : '\u00A0'}</span>
             {ev ? (
               <span className="flex flex-col items-center gap-0.5">
-                <span className="text-xl leading-none" title={ev.opponent}>{ev.logo}</span>
+                <span className="text-xl leading-none" title={ev.opponent}>{ev.teamId && !ev.isFlag ? <TeamLogo id={ev.teamId} logo={ev.logo} size={26} /> : ev.logo}</span>
                 {ev.played ? (
                   <span className={`text-[10px] font-extrabold tabular-nums ${d.isToday ? 'text-white' : 'text-ink-soft'}`}>{ev.score || '✓'}</span>
                 ) : (

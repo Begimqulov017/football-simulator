@@ -19,6 +19,8 @@
 // Pro Simulator (premium) ruxsatini berishi/olib qo'yishi mumkin.
 // ============================================================
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
@@ -27,7 +29,7 @@ const engine = require('./engine');
 const international = require('./international');
 const continental = require('./continental');
 const awards = require('./awards');
-// const { mergeServerOwnedFields } = require('./careerMerge');
+const { mergeServerOwnedFields } = require('./careerMerge');
 const globalAwards = require('./globalAwards');
 const chat = require('./chat');
 const registerAdminTools = require('./adminTools');
@@ -41,7 +43,7 @@ const PORT = process.env.PORT || 4000;
 // Bumped every time server/index.js gets new endpoints/fields the frontend
 // depends on, so the frontend can detect "siz eski backend'ni ishlatyapsiz,
 // qayta deploy qiling" instead of showing a confusing generic network error.
-const SERVER_VERSION = 14; // 14: Phase 9 (terma jamoa hub, global chat/awards) + Phase 10 (rollar, mute/suspend, avto-sim, fixture, news forcing, admin-edit conflict)
+const SERVER_VERSION = 15; // 15: Phase 11 (yagona simulatsiya: league-state, pending sanasi, avto-hal yo'q) + Phase 12 (klub logotiplari)
 const MAX_USERS = 10; // admin ham shu songa kiradi
 
 // Retiring at or above this rating gets its own headline in the season
@@ -53,7 +55,8 @@ const ADMIN_PASSWORD = 'beg1mqulov.011';
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// Karyera obyekti (jadval, yangiliklar, tarix) 100 KB dan oshishi mumkin - standart limit saqlashni jimgina rad etardi.
+app.use(express.json({ limit: '10mb' }));
 
 // ------------------------------------------------------------
 // Admin akkauntni birinchi ishga tushirishda (yoki agar negadir
@@ -354,11 +357,15 @@ app.post('/api/career/save', authMiddleware, (req, res) => {
   // hali buni ko'rmagan bo'lsa (ackRev eskirgan) - saqlashni RAD etamiz, aks holda
   // mijozning eski nusxasi adminning o'zgarishini ustidan yozib yuborardi.
   if (target.adminEdit && (target.adminEdit.rev || 0) > (Number(ackRev) || 0)) {
-    // Wipe Data (patch: null) dan KEYIN o'yinchi yangi karyera boshlagan bo'lsa (karyera
-    // wipe vaqtidan keyin yaratilgan) - bu eskirgan nusxa emas, yangi karyera: qabul qilamiz
-    // va mijozga yangi versiyani qaytaramiz. Aks holda yangi karyera hech qachon saqlanmasdi.
-    const wipedThenCreated = !target.adminEdit.patch && player && player.createdAt
-      && Date.parse(player.createdAt) > Date.parse(target.adminEdit.at || 0);
+    // Wipe'dan KEYIN o'yinchi YANGI karyera yaratgan bo'lsa - bu eskirgan nusxa emas, qabul qilamiz.
+    // Yangi/eski karyerani SOATGA tayanmasdan ajratamiz (mijoz va server soati farq qilishi mumkin):
+    // wipe paytida o'chirilgan karyera id'si saqlangan (wipedPlayerId) - boshqa id = yangi karyera.
+    // Eski yozuvlarda (wipedPlayerId yo'q): hali birorta o'yin o'ynamagan karyera yangi hisoblanadi.
+    let wipedThenCreated = false;
+    if (!target.adminEdit.patch && player) {
+      if (target.adminEdit.wipedPlayerId) wipedThenCreated = player.id !== target.adminEdit.wipedPlayerId;
+      else wipedThenCreated = !(player.career && player.career.appearances > 0);
+    }
     if (!wipedThenCreated) {
       return res.json({ ok: false, conflict: true, adminEdit: target.adminEdit });
     }
@@ -1569,6 +1576,38 @@ app.get('/api/career/league-state', authMiddleware, (req, res) => {
   });
 });
 
+
+// ============================================================
+// PHASE 12 - HAQIQIY KLUB LOGOTIPLARI
+// server/gamedata/logoData/<teamId>.png (yoki .webp/.svg) papkasiga fayl tashlansa, shu klub logotipi
+// butun o'yinda avtomatik ko'rinadi (masalan real_madrid.png). Fayl bo'lmasa avvalgi emoji logotip qoladi.
+// <img> teglari Authorization sarlavhasini yubora olmaydi, shuning uchun bu ikkita route ochiq (faqat rasm).
+// ============================================================
+const LOGO_DIR = path.join(__dirname, 'gamedata', 'logoData');
+const LOGO_FILE_RE = /^([a-z0-9_-]+)\.(png|webp|svg)$/i;
+const LOGO_MIME = { png: 'image/png', webp: 'image/webp', svg: 'image/svg+xml' };
+function listLogos() {
+  const files = {};
+  try {
+    fs.readdirSync(LOGO_DIR).forEach((f) => { const m = f.match(LOGO_FILE_RE); if (m) files[m[1].toLowerCase()] = m[2].toLowerCase(); });
+  } catch (e) { /* papka yo'q - hech qaysi klubda haqiqiy logotip yo'q */ }
+  return files;
+}
+app.get('/api/logos', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=60');
+  res.json({ ok: true, files: listLogos() });
+});
+app.get('/api/logo/:file', (req, res) => {
+  const m = String(req.params.file || '').match(LOGO_FILE_RE);
+  if (!m) return res.status(400).json({ ok: false, error: "Noto'g'ri fayl nomi" });
+  const full = path.join(LOGO_DIR, `${m[1]}.${m[2].toLowerCase()}`);
+  // Papkadan tashqariga chiqib ketmasin (path traversal) - regex allaqachon / va . ni taqiqlaydi, lekin ikki marta tekshiramiz.
+  if (!full.startsWith(LOGO_DIR) || !fs.existsSync(full)) return res.status(404).json({ ok: false, error: 'Logotip topilmadi' });
+  res.set('Content-Type', LOGO_MIME[m[2].toLowerCase()]);
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.sendFile(full);
+});
+
 // ============================================================
 // PHASE 4 — ADMIN DASHBOARD ENDPOINTLARI
 // ============================================================
@@ -1728,10 +1767,11 @@ app.post('/api/admin/users/:username/wipe', authMiddleware, adminMiddleware, (re
   const db = req.db;
   const target = db.users.find((u) => u.username === req.params.username);
   if (!target) return res.status(404).json({ ok: false, error: 'Foydalanuvchi topilmadi' });
+  const wipedId = (target.careerSave && target.careerSave.id) || null; // o'chirilayotgan karyera id'si (yangi karyerani ajratish uchun)
   target.careerSave = null;
   target.careerSavedAt = null;
   // rev monoton o'sadi (eski patch yangi karyeraga qo'llanib ketmasin)
-  target.adminEdit = { rev: ((target.adminEdit && target.adminEdit.rev) || 0) + 1, patch: null, at: new Date().toISOString(), by: req.user.username };
+  target.adminEdit = { rev: ((target.adminEdit && target.adminEdit.rev) || 0) + 1, patch: null, at: new Date().toISOString(), by: req.user.username, wipedPlayerId: wipedId };
   writeDB(db);
   res.json({ ok: true });
 });

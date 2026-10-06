@@ -10,14 +10,14 @@
 // statistikasini ko'ra oladi.
 // ============================================================
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:4000';
+export const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:4000';
 const TOKEN_KEY = 'ms_token';
 
 // Bump this alongside server/index.js's SERVER_VERSION whenever the backend
 // gains endpoints/fields the frontend depends on (career save/sync, admin
 // passwords, delete-user, etc). Lets us show a precise "backend hali
 // yangilanmagan" message instead of a confusing generic error.
-export const REQUIRED_SERVER_VERSION = 14;
+export const REQUIRED_SERVER_VERSION = 15;
 
 export async function checkBackendVersion() {
   try {

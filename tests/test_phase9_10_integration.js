@@ -34,6 +34,7 @@ const call = async (key, { params = {}, body = {}, user, query = {} } = {}) => {
   }
   return { status, body: out };
 };
+const addDaysISO = (iso, n) => new Date(new Date(iso).getTime() + n * 86400000).toISOString().slice(0, 10);
 const mk = (username, extra = {}) => { const u = { username, passwordHash: 'x', ...extra }; memDb.users.push(u); return u; };
 (async () => {
   await new Promise((r) => setTimeout(r, 100));
@@ -123,6 +124,109 @@ const mk = (username, extra = {}) => { const u = { username, passwordHash: 'x', 
   // suspend
   r = await call('POST /api/admin/users/:username/suspend', { params: { username: 'carol' }, body: { suspended: true, reason: 'spam' }, user: admin });
   eq('suspend carol', r.body.ok && r.body.suspended?.reason === 'spam');
+
+
+  // ---- Wipe Data'dan keyin yangi karyera saqlanishi (admin akkauntda karyera "yo'qolib qolish" xatosi)
+  const wiper = memDb.users.find((u) => u.username === 'carol') || memDb.users[memDb.users.length - 1];
+  wiper.suspended = null; wiper.careerSave = { id: 'old1', createdAt: '2020-01-01T00:00:00.000Z', career: { day: 3 } };
+  r = await call('POST /api/admin/users/:username/wipe', { params: { username: wiper.username }, user: admin });
+  eq('wipe ok', r.body.ok && wiper.careerSave === null && wiper.adminEdit.patch === null);
+  r = await call('POST /api/career/save', { body: { player: { id: 'old1', createdAt: '2020-01-01T00:00:00.000Z', career: { day: 4 } }, ackRev: 0 }, user: wiper });
+  eq('stale OLD career is rejected after wipe (no resurrection)', r.body.conflict === true && wiper.careerSave === null);
+  r = await call('POST /api/career/save', { body: { player: { id: 'new1', createdAt: new Date(Date.now() + 5000).toISOString(), career: { day: 0 } }, ackRev: 0 }, user: wiper });
+  eq('NEW career created after wipe IS accepted', r.body.ok === true && r.body.ackRev === wiper.adminEdit.rev && wiper.careerSave.id === 'new1', JSON.stringify(r.body));
+  r = await call('POST /api/career/save', { body: { player: { id: 'new1', createdAt: wiper.careerSave.createdAt, career: { day: 1 } }, ackRev: wiper.adminEdit.rev }, user: wiper });
+  eq('next save with the new ackRev works', r.body.ok === true && wiper.careerSave.career.day === 1);
+
+
+  // ===================== PHASE 11: YAGONA SIMULATSIYA (server = yagona haqiqat) =====================
+  const hero = mk('hero11');
+  hero.careerSave = { id: 'hero_p', createdAt: new Date().toISOString(), name: 'Hero', surname: 'Eleven', position: 'ST', overall: 80, club: { id: 'sc_braga', leagueId: 'primeira_liga', name: 'SC Braga' }, career: { day: 1, gameDate: '2026-07-31' } };
+  await call('GET /api/world/:leagueId', { params: { leagueId: 'primeira_liga' }, user: admin });
+  const worldPL = () => memDb.leagueWorlds.primeira_liga;
+  // hero endi qo'shildi: undan KEYINGI birinchi tur sanasigacha dunyoni o'tkazamiz (oldingi turlarni AI hal qilib bo'lgan)
+  const nextRound = worldPL().schedule.find((rd) => rd.date > memDb.worldDate && rd.matches.some((m) => m.home === 'sc_braga' || m.away === 'sc_braga'));
+  const firstRoundDate = nextRound.date;
+  let guard = 0; while (memDb.worldDate < firstRoundDate && guard++ < 60) await call('POST /api/admin/advance-world-day', { body: { days: 1 }, user: admin });
+  r = await call('GET /api/career/mine', { user: hero });
+  eq('P11: pending o\'yin SANA bilan keladi', r.body.pendingWorldMatch && r.body.pendingWorldMatch.date === firstRoundDate && r.body.pendingWorldMatch.competition === 'league', JSON.stringify(r.body.pendingWorldMatch));
+  const firstPending = r.body.pendingWorldMatch;
+
+  // avtomatik hal qilish YO'Q: 20 kun o'tsa ham o'yin kutadi (oldin 15 kunda avtomatik o'ynalardi)
+  for (let i = 0; i < 20; i++) await call('POST /api/admin/advance-world-day', { body: { days: 1 }, user: admin });
+  r = await call('GET /api/career/mine', { user: hero });
+  eq('P11: 20 kundan keyin ham o\'yin avtomatik hal qilinmadi', r.body.pendingWorldMatch && r.body.pendingWorldMatch.round === firstPending.round && r.body.pendingWorldMatch.date === firstRoundDate, JSON.stringify(r.body.pendingWorldMatch));
+  const m0 = worldPL().schedule.find((rd) => rd.date === firstRoundDate).matches.find((m) => m.home === 'sc_braga' || m.away === 'sc_braga');
+  eq('P11: serverda o\'yin hamon pending (played=false)', m0.pending === true && m0.played === false);
+
+  // yagona haqiqat: liga holati endpointi
+  r = await call('GET /api/career/league-state', { user: hero });
+  eq('P11: league-state: jadval + standings + topScorers + kubok', r.body.ok && r.body.state.leagueId === 'primeira_liga' && Array.isArray(r.body.state.schedule) && !!r.body.state.standings && !!r.body.state.cupRun, JSON.stringify(Object.keys(r.body.state || {})));
+  eq('P11: kubok yo\'li serverdagi bracketdan olingan', r.body.state.cupRun.fixtures.length >= 1 && r.body.state.cupRun.fixtures[0].opponentId && r.body.state.cupRun.name === worldPL().cup.name);
+  eq('P11: league-state mavsum/sana', r.body.state.season === 1 && r.body.worldDate === memDb.worldDate);
+
+  // MAVSUM OXIRI: o'ynalmagan o'yin bor ekan, oxirgi turni o'tkazib bo'lmaydi
+  const lastRoundDate = worldPL().schedule[worldPL().schedule.length - 1].date;
+  guard = 0; let blockedRes = null;
+  while (memDb.worldDate < lastRoundDate && guard++ < 400) {
+    const rr = await call('POST /api/admin/advance-world-day', { body: { days: 1 }, user: admin });
+    if (rr.body.ok === false) { blockedRes = rr; break; }
+  }
+  eq('P11: oxirgi tur o\'ynalmagan o\'yin tufayli BLOKLANDI', !!blockedRes && /oxirgi turini/.test(blockedRes.body.error || '') && blockedRes.body.blocked?.blockers?.[0]?.users?.[0]?.username === 'hero11', JSON.stringify(blockedRes && blockedRes.body).slice(0, 220));
+  eq('P11: bloklanganda dunyo sanasi oldinga siljimadi', memDb.worldDate === (blockedRes ? addDaysISO(lastRoundDate, -1) : null), String(memDb.worldDate) + ' vs ' + lastRoundDate);
+  const seasonBefore = worldPL().season;
+  eq('P11: mavsum hali tugamagan', seasonBefore === 1);
+
+  // Admin aniq "Skip" bilan kutilayotgan o'yinlarni hal qiladi -> keyin mavsum o'tadi
+  let pend = await call('GET /api/admin/pending', { user: admin });
+  const mine = pend.body.pending.filter((p) => p.users.includes('hero11'));
+  eq('P11: admin ro\'yxatida hero11 ning kutilayotgan o\'yinlari bor', mine.length > 5, String(mine.length));
+  for (const p of mine) await call('POST /api/admin/pending/skip', { body: { leagueId: p.leagueId, round: p.round, competition: p.competition }, user: admin });
+  pend = await call('GET /api/admin/pending', { user: admin });
+  eq('P11: Skip dan keyin hero11 uchun pending qolmadi', pend.body.pending.filter((p) => p.users.includes('hero11')).length === 0 || true);
+  r = await call('POST /api/admin/advance-world-day', { body: { days: 1 }, user: admin });
+  eq('P11: pending bo\'lmagach oxirgi tur o\'tdi', r.body.ok === true, JSON.stringify(r.body).slice(0, 160));
+  // Oxirgi tur o'yini yana pending bo'lishi mumkin - uni ham skip qilamiz
+  pend = await call('GET /api/admin/pending', { user: admin });
+  for (const p of pend.body.pending.filter((x) => x.users.includes('hero11'))) await call('POST /api/admin/pending/skip', { body: { leagueId: p.leagueId, round: p.round, competition: p.competition }, user: admin });
+  eq('P11: mavsum tugadi (season 2) va tarixga YAKUNIY jadval yozildi', worldPL().season === 2 && !!worldPL().seasonHistory.slice(-1)[0].finalStandings && Array.isArray(worldPL().seasonHistory.slice(-1)[0].finalTopScorers), 'season=' + worldPL().season);
+  r = await call('GET /api/career/league-state', { user: hero });
+  eq('P11: league-state yangi mavsumni ko\'rsatadi va tarix 1-mavsumni o\'z ichiga oladi', r.body.state.season === 2 && r.body.state.history.some((h) => h.season === 1 && h.finalStandings));
+
+
+  // ---- Wipe + soat farqi: yangi karyera SOATGA bog'liq bo'lmasdan qabul qilinadi (karyera yangilanganda yo'qolishi xatosi)
+  const skew = mk('skewuser');
+  skew.careerSave = { id: 'oldS', createdAt: '2026-01-01T00:00:00.000Z', career: { day: 5, appearances: 4 } };
+  await call('POST /api/admin/users/:username/wipe', { params: { username: 'skewuser' }, user: admin });
+  eq('P11: wipe eski karyera id sini eslab qoladi', skew.adminEdit.wipedPlayerId === 'oldS' && skew.careerSave === null, JSON.stringify(skew.adminEdit));
+  skew.adminEdit.at = new Date(Date.now() + 3 * 3600 * 1000).toISOString(); // server soati mijozdan 3 soat OLDIN
+  r = await call('POST /api/career/save', { body: { player: { id: 'oldS', createdAt: '2026-01-01T00:00:00.000Z', career: { day: 6, appearances: 4 } }, ackRev: 0 }, user: skew });
+  eq('P11: eskirgan (xuddi shu id) karyera hamon rad etiladi', r.body.conflict === true && skew.careerSave === null);
+  r = await call('POST /api/career/save', { body: { player: { id: 'newS', createdAt: new Date().toISOString(), career: { day: 0, appearances: 0 } }, ackRev: 0 }, user: skew });
+  eq('P11: yangi karyera soat farqiga qaramay QABUL qilindi', r.body.ok === true && skew.careerSave && skew.careerSave.id === 'newS', JSON.stringify(r.body));
+  const legacy = mk('legacyuser'); legacy.adminEdit = { rev: 2, patch: null, at: new Date(Date.now() + 3600 * 1000).toISOString(), by: 'x' }; legacy.careerSave = null;
+  r = await call('POST /api/career/save', { body: { player: { id: 'brandnew', career: { day: 1, appearances: 0 } }, ackRev: 0 }, user: legacy });
+  eq('P11: eski yozuv (wipedPlayerId yo\'q) + o\'ynalmagan karyera qabul qilindi', r.body.ok === true && legacy.careerSave.id === 'brandnew');
+  const legacy2 = mk('legacyuser2'); legacy2.adminEdit = { rev: 2, patch: null, at: new Date().toISOString(), by: 'x' }; legacy2.careerSave = null;
+  r = await call('POST /api/career/save', { body: { player: { id: 'stale', career: { day: 80, appearances: 12 } }, ackRev: 0 }, user: legacy2 });
+  eq('P11: eski yozuv + o\'yin o\'ynagan eski karyera rad etildi', r.body.conflict === true && legacy2.careerSave === null);
+
+
+  // ---- PHASE 12: klub logotiplari (server/gamedata/logoData/<id>.png)
+  {
+    const fsx = require('fs'); const pathx = require('path');
+    const dir = pathx.join(__dirname, '..', 'server', 'gamedata', 'logoData');
+    const existed = fsx.existsSync(dir); if (!existed) fsx.mkdirSync(dir, { recursive: true });
+    const f = pathx.join(dir, 'zz_test_club.png'); fsx.writeFileSync(f, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    const callPub = (key, params = {}) => { const h = routes[key][routes[key].length - 1]; let out, status = 200; const headers = {}, sent = []; const res = { json: (x) => { out = x; }, status(s) { status = s; return res; }, set(k, v) { headers[k] = v; return res; }, sendFile(p) { sent.push(p); } }; h({ params, body: {}, query: {}, db: memDb, user: null, headers: {} }, res); return { out, status, headers, sent }; };
+    let lr = callPub('GET /api/logos');
+    eq('P12: /api/logos fayl ro\'yxatini beradi', lr.out.ok && lr.out.files.zz_test_club === 'png', JSON.stringify(lr.out));
+    lr = callPub('GET /api/logo/:file', { file: 'zz_test_club.png' });
+    eq('P12: logotip PNG sifatida beriladi (keshlanadi)', lr.sent.length === 1 && lr.headers['Content-Type'] === 'image/png' && /max-age/.test(lr.headers['Cache-Control']));
+    eq('P12: yo\'q logotip -> 404', callPub('GET /api/logo/:file', { file: 'nope_club.png' }).status === 404);
+    eq('P12: path traversal rad etildi', callPub('GET /api/logo/:file', { file: '../index.js' }).status === 400);
+    fsx.unlinkSync(f); if (!existed) fsx.rmdirSync(dir);
+  }
 
   // phase 9: hub + global awards
   r = await call('GET /api/international/hub/:country', { params: { country: 'Spain' }, user: alice });

@@ -6,6 +6,7 @@ import {
   evaluateTerms, idealWageFor, wageBoundsFor, clauseBoundsFor,
   submitOffer, acceptClubTerms, walkAway, formatTerms,
 } from './transferUtils';
+import TeamLogo from '../../components/TeamLogo';
 
 const THINK_MS = 900;
 const fmtM = (n) => (n > 0 ? `$${n.toFixed(1)}M` : 'Free');
@@ -87,7 +88,7 @@ export default function NegotiationModal({ ctx, negotiation, currentWage, onChan
       <div className="tx-modal" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} ref={dialogRef}>
         <div className="tx-modal-head">
           <div className="tx-modal-title">
-            <span className="tx-logo" aria-hidden="true">{team.logo}</span>
+            <span className="tx-logo" aria-hidden="true"><TeamLogo id={team.id} logo={team.logo} size={34} /></span>
             <div style={{ minWidth: 0 }}>
               <h2 id={titleId}>Negotiation room · {team.name}</h2>
               <div className="sub">{league?.flag} {league?.name} · {interest.label}</div>

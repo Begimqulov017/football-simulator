@@ -3,6 +3,7 @@ import AppShell from '../components/AppShell';
 import { useGame } from '../context/GameContext';
 import { getLeagueTable } from '../utils/season';
 import { INITIAL_TEAMS } from '../../data/teamsData';
+import TeamLogo from '../../components/TeamLogo';
 
 export default function LeaguePage() {
   const { player } = useGame();
@@ -47,7 +48,7 @@ export default function LeaguePage() {
                   style={row.teamId === player.club.id ? { background: 'rgba(255,215,0,0.08)', fontWeight: 600 } : undefined}
                 >
                   <td style={{ padding: '6px 8px' }}>{i + 1}</td>
-                  <td style={{ padding: '6px 8px' }}>{row.logo} {row.name}</td>
+                  <td style={{ padding: '6px 8px' }}><TeamLogo id={row.teamId} logo={row.logo} size={18} /> {row.name}</td>
                   <td style={{ padding: '6px 8px' }}>{row.played}</td>
                   <td style={{ padding: '6px 8px' }}>{row.win}</td>
                   <td style={{ padding: '6px 8px' }}>{row.draw}</td>
