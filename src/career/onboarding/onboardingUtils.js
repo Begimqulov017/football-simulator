@@ -3,6 +3,7 @@
 // (UI'dan ajratilgan toza funksiyalar: test qilish va qayta ishlatish oson.)
 // ---------------------------------------------------------------------------
 import { INITIAL_TEAMS } from '../../data/teamsData';
+import { LEAGUES, HOME_COUNTRY_CLUB_BOOST } from '../../data/leaguesData';
 import { rollClub, buildStartingStats } from '../utils/playerGen';
 import { joinClubRoster, updatePlayerInClubRoster } from '../data/clubRosterStore';
 import {
@@ -15,7 +16,9 @@ export const MONTHS = [
   'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr',
 ];
 export const POSITIONS = ['GK', 'CB', 'LB', 'RB', 'CDM', 'CM', 'CAM', 'LM', 'RM', 'LW', 'RW', 'ST'];
-export const MAX_DECLINES = 4;
+export const MAX_LEAGUE_DECLINES = 2; // ligani 2 marta rad etish mumkin
+export const MAX_CLUB_DECLINES = 3; // klubni 3 marta rad etish mumkin
+export const MAX_DECLINES = MAX_CLUB_DECLINES; // eski nom (moslik uchun)
 export const WHEEL_SEGMENTS = 12;
 export const CONTRACT_YEARS = [2, 3, 4, 5, 6];
 export const START_DATE = '2026-07-31'; // 1-avgustdagi 1-turdan bir kun oldin (season.js talabi)
@@ -66,6 +69,47 @@ export function buildWheel(result, count = WHEEL_SEGMENTS) {
   segments.splice(targetIndex, 0, result.team);
   return { segments, targetIndex };
 }
+
+// ---- Yangi oqim: 1) liga g'ildiragi  2) tanlangan liganing klublari g'ildiragi ----
+const pickRandom = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+// Liga tanlash: o'yinchining davlati ligasi ko'proq chiqadi, avval rad etilgan liga qayta chiqmaydi.
+export function rollLeague(nationality, excludeIds = []) {
+  const pool = LEAGUES.filter((l) => !excludeIds.includes(l.id));
+  const list = pool.length ? pool : LEAGUES;
+  const weighted = [];
+  list.forEach((l) => {
+    const w = nationality && l.country === nationality ? HOME_COUNTRY_CLUB_BOOST : 1;
+    for (let i = 0; i < w; i += 1) weighted.push(l);
+  });
+  return pickRandom(weighted);
+}
+
+// Ligadagi klublar (teamsData'da topilganlari).
+export const leagueTeams = (league) => league.teamIds
+  .map((id) => INITIAL_TEAMS.find((t) => t.id === id)).filter(Boolean);
+
+// Tanlangan ligadan klub: avval rad etilgan klub qayta chiqmaydi.
+export function rollClubInLeague(league, excludeIds = []) {
+  const all = leagueTeams(league);
+  const pool = all.filter((t) => !excludeIds.includes(t.id));
+  return { league, team: pickRandom(pool.length ? pool : all) };
+}
+
+// Klub rad etishlar soni ligadagi klublar sonidan oshib ketmasligi kerak (kamida bittasi qoladi).
+export const maxClubDeclinesFor = (league) => Math.max(0, Math.min(MAX_CLUB_DECLINES, leagueTeams(league).length - 1));
+
+// Umumiy g'ildirak: `result` — natija element, `pool` — chalg'ituvchilar manbai. Bo'laklar soni <= count.
+export function buildItemsWheel(result, pool, count = WHEEL_SEGMENTS) {
+  const others = shuffle(pool.filter((x) => x.id !== result.id)).slice(0, Math.max(0, count - 1));
+  const targetIndex = Math.floor(Math.random() * (others.length + 1));
+  const segments = [...others];
+  segments.splice(targetIndex, 0, result);
+  return { segments, targetIndex };
+}
+
+export const leagueSeg = (l) => ({ id: l.id, icon: l.flag, name: l.name });
+export const teamSeg = (t) => ({ id: t.id, icon: t.logo, name: t.name });
 
 // Ko'rsatkich bo'lakning markazi tepada to'xtashi uchun yangi burilish burchagi (gradus).
 export function computeSpinRotation(currentRotation, targetIndex, count = WHEEL_SEGMENTS, turns = 5) {

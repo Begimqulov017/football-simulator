@@ -76,3 +76,22 @@ export function TeamBadge({ value, id, size = 20, className = '', style }) {
   if (!team || (value && value !== team.logo && value !== team.id)) return <span className={className} style={style}>{value}</span>;
   return <TeamLogo id={team.id} logo={team.logo} size={size} className={className} style={style} />;
 }
+
+// Hook: serverdagi haqiqiy logotip manzili (yo'q bo'lsa null). SVG ichida <img> ishlamaydi,
+// shuning uchun g'ildirak bo'laklari <image href=...> uchun shu manzildan foydalanadi.
+export function useLogoUrl(id) {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const f = () => force((x) => x + 1);
+    subscribers.add(f);
+    loadLogoList();
+    return () => { subscribers.delete(f); };
+  }, []);
+  return logoUrlFor(id);
+}
+
+// Liga logotipi: server/gamedata/logoData/<liga_id>.png bo'lsa - rasm, bo'lmasa davlat bayrog'i.
+export function LeagueBadge({ league, size = 24, className = '', style }) {
+  if (!league) return null;
+  return <TeamLogo id={league.id} logo={league.flag} size={size} className={className} style={style} title={league.name} />;
+}

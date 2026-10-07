@@ -1,8 +1,9 @@
-import React from 'react';
-import { TeamBadge } from '../../../components/TeamLogo';
+import React, { useState } from 'react';
+import { useLogoUrl } from '../../../components/TeamLogo';
 
-// Klub g'ildiragi (roulette): SVG bo'laklar + CSS transform bilan aylanadi.
-// `rotation` — kumulyativ gradus; to'xtaganda `onSpinEnd` chaqiriladi.
+// G'ildirak (roulette): SVG bo'laklar + CSS transform bilan aylanadi.
+// `segments` — [{ id, icon, name }]: liga yoki klub (icon — emoji/bayroq; haqiqiy logotip bo'lsa rasm chiqadi).
+// `rotation` — kumulyativ gradus.
 const SIZE = 320;
 const R = 150;
 const C = SIZE / 2;
@@ -14,6 +15,7 @@ const polar = (angleDeg, radius) => {
 };
 
 function slicePath(i, n) {
+  if (n === 1) return `M ${C} ${C - R} A ${R} ${R} 0 1 1 ${C - 0.01} ${C - R} Z`;
   const a0 = (360 / n) * i;
   const a1 = (360 / n) * (i + 1);
   const [x0, y0] = polar(a0, R);
@@ -21,8 +23,36 @@ function slicePath(i, n) {
   return `M ${C} ${C} L ${x0} ${y0} A ${R} ${R} 0 0 1 ${x1} ${y1} Z`;
 }
 
+// SVG ichida HTML (<img>/<span>) chizilmaydi - shuning uchun <image> yoki <text> ishlatamiz.
+function SvgIcon({ seg, x, y, size, rot }) {
+  const url = useLogoUrl(seg.id);
+  const [broken, setBroken] = useState(false);
+  if (url && !broken) {
+    return (
+      <image
+        href={url}
+        x={x - size / 2}
+        y={y - size / 2}
+        width={size}
+        height={size}
+        preserveAspectRatio="xMidYMid meet"
+        transform={`rotate(${rot} ${x} ${y})`}
+        onError={() => setBroken(true)}
+      />
+    );
+  }
+  return (
+    <text x={x} y={y} textAnchor="middle" dominantBaseline="central" fontSize={size * 0.85} transform={`rotate(${rot} ${x} ${y})`}>
+      {seg.icon || '\u26BD'}
+    </text>
+  );
+}
+
+const shortName = (name = '') => (name.length > 11 ? `${name.slice(0, 10)}…` : name);
+
 export default function ClubWheel({ segments, rotation, spinning, durationMs, highlightIndex }) {
   const n = segments.length;
+  const iconSize = n <= 6 ? 40 : n <= 9 ? 34 : 28;
   return (
     <div className="relative mx-auto w-full max-w-[320px] aspect-square select-none">
       {/* Ko'rsatkich (tepada) */}
@@ -45,21 +75,25 @@ export default function ClubWheel({ segments, rotation, spinning, durationMs, hi
         >
           <circle cx={C} cy={C} r={R + 6} fill="#E2E8F0" />
           {segments.map((t, i) => {
-            const mid = (360 / n) * (i + 0.5);
-            const [tx, ty] = polar(mid, R * 0.7);
+            const mid = n === 1 ? 0 : (360 / n) * (i + 0.5);
+            const [ix, iy] = polar(mid, R * 0.72);
+            const [lx, ly] = polar(mid, R * 0.46);
             const hit = highlightIndex === i;
             return (
               <g key={`${t.id}-${i}`}>
                 <path d={slicePath(i, n)} fill={hit ? '#D1FAE5' : FILLS[i % FILLS.length]} stroke="#CBD5E1" strokeWidth="1" />
+                <SvgIcon seg={t} x={ix} y={iy} size={iconSize} rot={mid} />
                 <text
-                  x={tx}
-                  y={ty}
+                  x={lx}
+                  y={ly}
                   textAnchor="middle"
-                  dominantBaseline="middle"
-                  fontSize="24"
-                  transform={`rotate(${mid} ${tx} ${ty})`}
+                  dominantBaseline="central"
+                  fontSize="8.5"
+                  fontWeight="700"
+                  fill="#475569"
+                  transform={`rotate(${mid} ${lx} ${ly})`}
                 >
-                  <TeamBadge id={t.id} value={t.logo} size={22} />
+                  {shortName(t.name)}
                 </text>
               </g>
             );

@@ -5,20 +5,28 @@ import PlayerCard from '../components/PlayerCard';
 import useCountUp from '../useCountUp';
 import { rollFirstRating, rollPotential } from '../../utils/playerGen';
 import { previewClubTier } from '../../data/clubRosterStore';
-import { TeamBadge } from '../../../components/TeamLogo';
+import { TeamBadge, LeagueBadge } from '../../../components/TeamLogo';
+import { LEAGUES } from '../../../data/leaguesData';
 import {
-  MAX_DECLINES, rollUniqueClub, buildWheel, computeSpinRotation,
+  MAX_LEAGUE_DECLINES, rollLeague, rollClubInLeague, leagueTeams, maxClubDeclinesFor,
+  buildItemsWheel, leagueSeg, teamSeg, computeSpinRotation, WHEEL_SEGMENTS,
 } from '../onboardingUtils';
 
 const SPIN_MS = 4200;
 
 export default function WheelStep({ form, onBack, onAccepted }) {
+  // Oqim: 1) liga g'ildiragi (2 marta rad etish)  2) tanlangan liganing klublari g'ildiragi (3 marta rad etish)
+  const [stage, setStage] = useState('league'); // league | club
   const [phase, setPhase] = useState('idle'); // idle | spinning | offer | accepted
   const [wheel, setWheel] = useState(null);
   const [rotation, setRotation] = useState(0);
+  const [league, setLeague] = useState(null); // qabul qilingan liga
+  const [offerLeague, setOfferLeague] = useState(null);
   const [offer, setOffer] = useState(null); // { team, league }
-  const [declines, setDeclines] = useState(0);
-  const [seen, setSeen] = useState([]);
+  const [leagueDeclines, setLeagueDeclines] = useState(0);
+  const [clubDeclines, setClubDeclines] = useState(0);
+  const [seenLeagues, setSeenLeagues] = useState([]);
+  const [seenClubs, setSeenClubs] = useState([]);
   const [rating, setRating] = useState(null);
   const [potential, setPotential] = useState(null);
   const pending = useRef(null);
@@ -29,34 +37,64 @@ export default function WheelStep({ form, onBack, onAccepted }) {
     [],
   );
 
-  const spin = () => {
-    if (phase === 'spinning') return;
-    const result = rollUniqueClub(form.nationality, seen);
-    const w = buildWheel(result);
+  const maxClubDeclines = league ? maxClubDeclinesFor(league) : 0;
+
+  const startSpin = (result, w) => {
     pending.current = result;
     setWheel(w);
     setPhase('spinning');
     // bir frame kutamiz: yangi bo'laklar chizilgach aylanish boshlansin
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      setRotation((r) => computeSpinRotation(r, w.targetIndex));
+      setRotation((r) => computeSpinRotation(r, w.targetIndex, w.segments.length));
     }));
     // transitionend SVG'da ishonchsiz — aniq taymer bilan tugatamiz
     clearTimeout(timer.current);
     timer.current = setTimeout(finishSpin, reduceMotion ? 60 : SPIN_MS + 250);
   };
 
-  const finishSpin = () => {
-    const result = pending.current;
-    if (!result) return;
-    pending.current = null;
-    setOffer(result);
-    setSeen((s) => [...s, result.team.id]);
-    setPhase('offer');
+  const spin = () => {
+    if (phase === 'spinning') return;
+    if (stage === 'league') {
+      const l = rollLeague(form.nationality, seenLeagues);
+      startSpin({ kind: 'league', league: l }, buildItemsWheel(leagueSeg(l), LEAGUES.map(leagueSeg), WHEEL_SEGMENTS));
+    } else {
+      const r = rollClubInLeague(league, seenClubs);
+      startSpin({ kind: 'club', result: r }, buildItemsWheel(teamSeg(r.team), leagueTeams(league).map(teamSeg), WHEEL_SEGMENTS));
+    }
   };
 
-  const decline = () => {
-    if (declines >= MAX_DECLINES) return;
-    setDeclines((d) => d + 1);
+  function finishSpin() {
+    const res = pending.current;
+    if (!res) return;
+    pending.current = null;
+    if (res.kind === 'league') {
+      setOfferLeague(res.league);
+      setSeenLeagues((s) => [...s, res.league.id]);
+    } else {
+      setOffer(res.result);
+      setSeenClubs((s) => [...s, res.result.team.id]);
+    }
+    setPhase('offer');
+  }
+
+  const declineLeague = () => {
+    if (leagueDeclines >= MAX_LEAGUE_DECLINES) return;
+    setLeagueDeclines((d) => d + 1);
+    setOfferLeague(null);
+    setPhase('idle');
+  };
+
+  const acceptLeague = () => {
+    setLeague(offerLeague);
+    setStage('club');
+    setWheel(null);
+    setOffer(null);
+    setPhase('idle');
+  };
+
+  const declineClub = () => {
+    if (clubDeclines >= maxClubDeclines) return;
+    setClubDeclines((d) => d + 1);
     setOffer(null);
     setPhase('idle');
   };
@@ -75,28 +113,47 @@ export default function WheelStep({ form, onBack, onAccepted }) {
     () => (offer && rating != null ? previewClubTier(offer.team, rating) : null),
     [offer, rating],
   );
-  const lastChance = declines >= MAX_DECLINES;
   const spinning = phase === 'spinning';
+  const isLeague = stage === 'league';
+  const lastLeagueChance = leagueDeclines >= MAX_LEAGUE_DECLINES;
+  const lastClubChance = clubDeclines >= maxClubDeclines;
+  const lastChance = isLeague ? lastLeagueChance : lastClubChance;
+  const declinesLeft = isLeague ? MAX_LEAGUE_DECLINES - leagueDeclines : maxClubDeclines - clubDeclines;
 
-  // Boshlang'ich holatda g'ildirak uchun bo'sh bo'laklar
-  const idleWheel = useMemo(() => {
-    const r = rollUniqueClub(form.nationality, []);
-    return buildWheel(r);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  const shown = wheel || idleWheel;
+  // Boshlang'ich (aylanmagan) g'ildirak: liga bosqichida ligalar, klub bosqichida tanlangan liga klublari
+  const idleLeagueWheel = useMemo(
+    () => buildItemsWheel(leagueSeg(LEAGUES[0]), LEAGUES.map(leagueSeg), WHEEL_SEGMENTS),
+    [],
+  );
+  const idleClubWheel = useMemo(() => {
+    if (!league) return null;
+    const teams = leagueTeams(league);
+    return buildItemsWheel(teamSeg(teams[0]), teams.map(teamSeg), WHEEL_SEGMENTS);
+  }, [league]);
+  const shown = wheel || (isLeague ? idleLeagueWheel : idleClubWheel) || idleLeagueWheel;
+
+  // Rad etilgan klublar (hozirgi taklif ro'yxatga kirmaydi)
+  const declinedClubIds = seenClubs.filter((id) => id !== offer?.team.id);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6 items-start">
       <div className="bg-surface-card border border-surface-line rounded-card shadow-soft p-5 sm:p-7 flex flex-col gap-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-2xl font-black tracking-tight text-ink">Klub tanlash</div>
+            <div className="text-2xl font-black tracking-tight text-ink flex items-center gap-2">
+              {isLeague ? 'Liga tanlash' : (<><LeagueBadge league={league} size={28} /> {league.name}: klub tanlash</>)}
+            </div>
             <p className="mt-1 text-sm text-ink-muted">
-              G'ildirakni aylantiring — {form.nationality} klublari ko'proq chiqadi. {MAX_DECLINES} martagacha rad etishingiz mumkin.
+              {isLeague
+                ? `G'ildirakni aylantiring — ${form.nationality} ligasi ko'proq chiqadi. Ligani ${MAX_LEAGUE_DECLINES} martagacha rad etishingiz mumkin.`
+                : `Tanlangan liga klublari orasidan g'ildirak bitta klubni tanlaydi. Klubni ${maxClubDeclines} martagacha rad etishingiz mumkin.`}
             </p>
           </div>
-          <Badge tone={lastChance ? 'accent' : 'brand'}>{MAX_DECLINES - declines} ta rad etish qoldi</Badge>
+          {phase !== 'accepted' && (
+            <Badge tone={lastChance ? 'accent' : 'brand'}>
+              {declinesLeft} ta rad etish qoldi
+            </Badge>
+          )}
         </div>
 
         <ClubWheel
@@ -107,13 +164,59 @@ export default function WheelStep({ form, onBack, onAccepted }) {
           highlightIndex={phase === 'offer' || phase === 'accepted' ? wheel?.targetIndex : -1}
         />
 
+        {/* ---- Klub bosqichi: liganing barcha klublari ---- */}
+        {!isLeague && (
+          <div>
+            <div className="text-[11px] font-extrabold uppercase tracking-wide text-ink-muted mb-2">{league.name} klublari</div>
+            <div className="flex flex-wrap gap-1.5">
+              {leagueTeams(league).map((t) => {
+                const out = declinedClubIds.includes(t.id);
+                const cur = offer?.team.id === t.id;
+                return (
+                  <span
+                    key={t.id}
+                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold ${cur ? 'border-brand bg-brand-tint text-ink' : 'border-surface-line bg-surface text-ink-soft'} ${out ? 'opacity-40 line-through' : ''}`}
+                  >
+                    <TeamBadge id={t.id} value={t.logo} size={14} /> {t.name}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {(phase === 'idle' || phase === 'spinning') && (
           <Button variant="primary" size="lg" disabled={spinning} onClick={spin} className="w-full">
-            {spinning ? 'Aylanmoqda…' : declines > 0 ? 'Keyingi klub (Next) →' : 'Next — g\'ildirakni aylantirish →'}
+            {spinning
+              ? 'Aylanmoqda…'
+              : isLeague
+                ? (leagueDeclines > 0 ? 'Keyingi liga (Next) →' : "Next — ligani aylantirish →")
+                : (clubDeclines > 0 ? 'Keyingi klub (Next) →' : "Next — klubni aylantirish →")}
           </Button>
         )}
 
-        {phase === 'offer' && offer && (
+        {/* ---- Liga taklifi ---- */}
+        {phase === 'offer' && isLeague && offerLeague && (
+          <div className="motion-safe:animate-fs-pop-in rounded-card border border-brand-soft bg-brand-tint p-5 flex flex-col items-center gap-3 text-center">
+            <div className="text-5xl"><LeagueBadge league={offerLeague} size={64} /></div>
+            <div>
+              <div className="text-xl font-black text-ink">{offerLeague.name}</div>
+              <div className="text-sm text-ink-muted">{offerLeague.flag} {offerLeague.country} · {offerLeague.teamIds.length} ta klub</div>
+            </div>
+            <div className="text-sm font-semibold text-ink-soft">
+              {lastLeagueChance ? "Bu oxirgi liga — uni tanlashingiz kerak." : "Shu ligada o'ynashni xohlaysizmi?"}
+            </div>
+            <div className="flex gap-3 w-full">
+              <Button variant="secondary" className="flex-1" disabled={lastLeagueChance} onClick={declineLeague}>
+                Rad etish ({leagueDeclines}/{MAX_LEAGUE_DECLINES})
+              </Button>
+              <Button variant="primary" className="flex-1" onClick={acceptLeague}>Ligani tanlash ✓</Button>
+            </div>
+          </div>
+        )}
+
+        {/* ---- Klub taklifi ---- */}
+        {phase === 'offer' && !isLeague && offer && (
           <div className="motion-safe:animate-fs-pop-in rounded-card border border-brand-soft bg-brand-tint p-5 flex flex-col items-center gap-3 text-center">
             <div className="text-5xl"><TeamBadge id={offer.team.id} value={offer.team.logo} size={56} /></div>
             <div>
@@ -121,11 +224,11 @@ export default function WheelStep({ form, onBack, onAccepted }) {
               <div className="text-sm text-ink-muted">{offer.league.flag} {offer.league.name} · {offer.league.country}</div>
             </div>
             <div className="text-sm font-semibold text-ink-soft">
-              {lastChance ? "Bu oxirgi taklif — uni qabul qilishingiz kerak." : "Klub sizni jamoasiga taklif qilmoqda."}
+              {lastClubChance ? "Bu oxirgi taklif — uni qabul qilishingiz kerak." : "Klub sizni jamoasiga taklif qilmoqda."}
             </div>
             <div className="flex gap-3 w-full">
-              <Button variant="secondary" className="flex-1" disabled={lastChance} onClick={decline}>
-                Decline ({declines}/{MAX_DECLINES})
+              <Button variant="secondary" className="flex-1" disabled={lastClubChance} onClick={declineClub}>
+                Decline ({clubDeclines}/{maxClubDeclines})
               </Button>
               <Button variant="primary" className="flex-1" onClick={accept}>Accept ✓</Button>
             </div>
