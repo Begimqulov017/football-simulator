@@ -420,7 +420,7 @@ function initWorldSquad(team, homeCountry) {
       retireAge: randomRetireAge(age),
       // Deterministic, so a player keeps the same nationality whether they
       // are read from this evolving world or from the static shipped data.
-      nationality: p.nationality || nationalityFor(p.id, homeCountry)
+      nationality: p.nationality || p.nat || nationalityFor(p.id, homeCountry) // p.nat = haqiqiy millat (teamsData.js)
     };
   });
   // A couple of shipped squads (valencia, malaga) only list one keeper.
@@ -603,7 +603,13 @@ function buildNextCupRound(prevRound) {
   return buildCupRound(winners, prevRound.round + 1, nextDate);
 }
 
+// Jamoa/futbolchi ma'lumotlari (gamedata/teamsData.js, leaguesData.js) strukturasi o'zgarganda oshiriladi.
+// 2: top-5 liga haqiqiy FC reytinglari + `nat` (terma jamoa), jamoa id'lari o'zgargan (inter, milan, como, elche, hamburger_sv).
+// Eski ma'lumotdan yaratilgan world'lar bilan yangi ma'lumot aralashib ketmasligi uchun server shuni tekshiradi.
+const DATA_VERSION = 2;
+
 module.exports = {
+  DATA_VERSION,
   addDays, generateRoundRobinRounds, buildSeasonSchedule, initStandings,
   teamStrength, simulateTeamMatch, simulateHumanPlayerMatch, distributeGoals, distributeMatch, ensureStat, buildLeaders,
   applyResultToStandings, resolveMatch, generateMatchSeed,

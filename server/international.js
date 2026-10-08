@@ -71,7 +71,7 @@ function buildPlayerPool(db) {
         pos: p.pos,
         ovr: p.ovr || 68,
         age: p.age || null,
-        nationality: p.nationality || nationalityFor(p.id, league.country),
+        nationality: p.nationality || p.nat || nationalityFor(p.id, league.country),
         clubId,
         clubName: team.name,
         username: null

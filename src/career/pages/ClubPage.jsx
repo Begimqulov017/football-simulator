@@ -92,7 +92,7 @@ export default function ClubPage() {
     return [
       ...(team ? getMergedSquad(team) : []).map((p) =>
         p.id === player.id
-          ? { ...p, name: `${player.name} ${player.surname}`, pos: player.position, ovr: displayRating(player.overall) }
+          ? { ...p, name: `${player.name} ${player.surname}`, pos: player.position, ovr: displayRating(player.overall), nat: player.nationality || p.nat }
           : p
       ),
       ...remoteTeammates,

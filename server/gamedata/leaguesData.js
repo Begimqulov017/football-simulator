@@ -13,7 +13,7 @@ const LEAGUES = [
       'real_madrid', 'barcelona', 'atletico_madrid', 'athletic_bilbao', 'villarreal',
       'real_sociedad', 'real_betis', 'sevilla', 'valencia', 'celta_vigo',
       'rayo_vallecano', 'osasuna', 'getafe', 'alaves', 'espanyol',
-      'las_palmas', 'levante', 'racing_santander', 'deportivo_coruna', 'malaga'
+      'elche', 'levante', 'racing_santander', 'deportivo_coruna', 'malaga'
     ]
   },
   {
@@ -36,7 +36,7 @@ const LEAGUES = [
     teamIds: [
       'bayern-munchen', 'dortmund', 'rb_leipzig', 'leverkusen', 'eintracht_frankfurt',
       'stuttgart', 'gladbach', 'freiburg', 'werder_bremen', 'mainz',
-      'union_berlin', 'hoffenheim', 'augsburg', 'holstein_kiel', 'fc_koln',
+      'union_berlin', 'hoffenheim', 'augsburg', 'hamburger_sv', 'fc_koln',
       'schalke', 'elversberg', 'paderborn'
     ]
   },
@@ -46,9 +46,10 @@ const LEAGUES = [
     country: 'France',
     flag: '🇫🇷',
     teamIds: [
-      'psg', 'marseille', 'monaco', 'lille', 'lyon', 'lens', 'nice', 'rennes',
-      'strasbourg', 'toulouse', 'brest', 'le_havre', 'auxerre', 'angers',
-      'lorient', 'paris_fc', 'troyes', 'le_mans'
+      'psg', 'marseille', 'monaco', 'lille', 'lyon',
+      'lens', 'nice', 'strasbourg', 'brest', 'toulouse',
+      'angers', 'auxerre', 'troyes', 'le_havre', 'le_mans',
+      'lorient', 'paris_fc', 'rennes'
     ]
   },
   {
@@ -57,9 +58,10 @@ const LEAGUES = [
     country: 'Italy',
     flag: '🇮🇹',
     teamIds: [
-      'inter_milan', 'juventus', 'ac_milan', 'napoli', 'roma', 'atalanta',
-      'bologna', 'fiorentina', 'lazio', 'torino', 'udinese', 'genoa',
-      'cagliari', 'parma', 'lecce', 'sassuolo', 'venezia', 'frosinone', 'monza'
+      'inter', 'milan', 'juventus', 'napoli', 'roma',
+      'atalanta', 'lazio', 'fiorentina', 'bologna', 'torino',
+      'udinese', 'genoa', 'cagliari', 'como', 'parma',
+      'lecce', 'sassuolo', 'monza', 'frosinone', 'venezia'
     ]
   },
   {

@@ -14,7 +14,7 @@
 // needed when a league gets its first human player.
 // ============================================================
 
-const NATIONS = [
+const CORE_NATIONS = [
   // --- UEFA ---
   { name: 'Spain', flag: '🇪🇸', confederation: 'UEFA' },
   { name: 'England', flag: '🏴', confederation: 'UEFA' },
@@ -103,6 +103,58 @@ const NATIONS = [
   { name: 'Honduras', flag: '🇭🇳', confederation: 'CONCACAF' }
 ];
 
+
+// ---- Qo'shimcha milliy jamoalar: top-5 liga futbolchilarining haqiqiy `nat` qiymatlari (teamsData.js) ----
+// Bular tasodifiy NPC generatsiya "pool"iga (WEIGHTED_POOL) KIRMAYDI - faqat haqiqiy futbolchilari bor jamoalar sifatida
+// qatnashadi (kamida 11 futbolchi bo'lsa, qarang server/international.js).
+const EXTRA_NATIONS = [
+  { name: 'Bosnia and Herzegovina', flag: '🇧🇦', confederation: 'UEFA' },
+  { name: 'Georgia', flag: '🇬🇪', confederation: 'UEFA' },
+  { name: 'Albania', flag: '🇦🇱', confederation: 'UEFA' },
+  { name: 'Kosovo', flag: '🇽🇰', confederation: 'UEFA' },
+  { name: 'Iceland', flag: '🇮🇸', confederation: 'UEFA' },
+  { name: 'Northern Ireland', flag: '🇬🇧', confederation: 'UEFA' },
+  { name: 'Bulgaria', flag: '🇧🇬', confederation: 'UEFA' },
+  { name: 'Finland', flag: '🇫🇮', confederation: 'UEFA' },
+  { name: 'Montenegro', flag: '🇲🇪', confederation: 'UEFA' },
+  { name: 'Israel', flag: '🇮🇱', confederation: 'UEFA' },
+  { name: 'Russia', flag: '🇷🇺', confederation: 'UEFA' },
+  { name: 'Luxembourg', flag: '🇱🇺', confederation: 'UEFA' },
+  { name: 'North Macedonia', flag: '🇲🇰', confederation: 'UEFA' },
+  { name: 'Lithuania', flag: '🇱🇹', confederation: 'UEFA' },
+  { name: 'Estonia', flag: '🇪🇪', confederation: 'UEFA' },
+  { name: 'Armenia', flag: '🇦🇲', confederation: 'UEFA' },
+  { name: 'Guinea', flag: '🇬🇳', confederation: 'CAF' },
+  { name: 'Burkina Faso', flag: '🇧🇫', confederation: 'CAF' },
+  { name: 'Angola', flag: '🇦🇴', confederation: 'CAF' },
+  { name: 'Gabon', flag: '🇬🇦', confederation: 'CAF' },
+  { name: 'Guinea-Bissau', flag: '🇬🇼', confederation: 'CAF' },
+  { name: 'Zambia', flag: '🇿🇲', confederation: 'CAF' },
+  { name: 'Togo', flag: '🇹🇬', confederation: 'CAF' },
+  { name: 'Gambia', flag: '🇬🇲', confederation: 'CAF' },
+  { name: 'Comoros', flag: '🇰🇲', confederation: 'CAF' },
+  { name: 'Mauritania', flag: '🇲🇷', confederation: 'CAF' },
+  { name: 'Central African Republic', flag: '🇨🇫', confederation: 'CAF' },
+  { name: 'Benin', flag: '🇧🇯', confederation: 'CAF' },
+  { name: 'Equatorial Guinea', flag: '🇬🇶', confederation: 'CAF' },
+  { name: 'Congo', flag: '🇨🇬', confederation: 'CAF' },
+  { name: 'Sierra Leone', flag: '🇸🇱', confederation: 'CAF' },
+  { name: 'Mozambique', flag: '🇲🇿', confederation: 'CAF' },
+  { name: 'Libya', flag: '🇱🇾', confederation: 'CAF' },
+  { name: 'Cape Verde', flag: '🇨🇻', confederation: 'CAF' },
+  { name: 'Kenya', flag: '🇰🇪', confederation: 'CAF' },
+  { name: 'Burundi', flag: '🇧🇮', confederation: 'CAF' },
+  { name: 'Tanzania', flag: '🇹🇿', confederation: 'CAF' },
+  { name: 'Indonesia', flag: '🇮🇩', confederation: 'AFC' },
+  { name: 'Philippines', flag: '🇵🇭', confederation: 'AFC' },
+  { name: 'Haiti', flag: '🇭🇹', confederation: 'CONCACAF' },
+  { name: 'Suriname', flag: '🇸🇷', confederation: 'CONCACAF' },
+  { name: 'Dominican Republic', flag: '🇩🇴', confederation: 'CONCACAF' },
+  { name: 'New Zealand', flag: '🇳🇿', confederation: 'OFC' }
+];
+
+const NATIONS = [...CORE_NATIONS, ...EXTRA_NATIONS];
+
 // How many players the world assigns to each nation, relative to each other.
 // Without this every nation gets an equal slice of the ~2600 NPCs, which made
 // national-team strength pure noise - a 4-year test run put Bolivia in a World
@@ -128,7 +180,7 @@ const NATION_WEIGHT = {
 
 // Flattened weighted pool, so a hash can index straight into it.
 const WEIGHTED_POOL = [];
-NATIONS.forEach((n) => {
+CORE_NATIONS.forEach((n) => { // faqat asosiy mamlakatlar: tasodifiy NPC millati extra mamlakatlarga tushmasin
   const w = NATION_WEIGHT[n.name] || 2;
   for (let i = 0; i < w; i += 1) WEIGHTED_POOL.push(n.name);
 });

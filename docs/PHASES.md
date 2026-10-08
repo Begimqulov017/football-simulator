@@ -161,3 +161,19 @@ Umumiy komponentlar: `StatLeaders.jsx` (Top Scorers / Assists / Cards / Rating),
 - `SERVER_VERSION`/`REQUIRED_SERVER_VERSION` = 15 (frontend yangi backend'siz ishlamaydi: league-state, pending sanasi).
 - Pending o'yin `date` bermasa ham (eski backend) o'ynalishi mumkin.
 
+## Phase 13 — Top-5 liga haqiqiy ma'lumotlari + terma jamoa (`nat`)
+- `teamsData.js` (client `src/data` va server `server/gamedata`, bir xil): top-5 liga (La Liga, Premier League, Bundesliga, Serie A, Ligue 1) -
+  96 jamoa, 2786 futbolchi: haqiqiy FC reytinglari, pozitsiyalar (`pos`, `altPos`), logolar, tarkib (22-38 kishi) va har bir futbolchida `nat`.
+  Qolgan 15 liga (76 jamoa) o'zgarishsiz; ularning `nat` qiymati avvalgi deterministik qoida bilan (`nationalityFor`) ma'lumotga yozildi.
+- `leaguesData.js`: top-5 ligalarning `teamIds` yangilandi (La Liga: +elche -las_palmas; Bundesliga: +hamburger_sv -holstein_kiel;
+  Serie A 19 -> 20: +inter +milan +como -inter_milan -ac_milan). Qolgan maydonlar o'zgarmadi.
+- `nationsData.js`: 43 ta yangi mamlakat (`EXTRA_NATIONS`, masalan Bosniya, Gruziya, Kosovo, Islandiya, Yangi Zelandiya...) - ular
+  tasodifiy NPC millati "pool"iga KIRMAYDI (avvalgi nationalityFor natijalari o'zgarmaydi), faqat haqiqiy futbolchilari bor jamoa sifatida qatnashadi.
+- `engine.js` / `international.js`: millat `p.nationality || p.nat || nationalityFor(...)` - terma jamoalar endi haqiqiy `nat` dan tuziladi
+  (Fransiya: Mbappé, Olise, Dembélé; Norvegiya: Haaland, Ødegaard; Ozbekiston: Xusanov). Kamida 11 futbolchisi bor mamlakat jamoa tuzadi.
+- Klub sahifasi: tarkib jadvalida futbolchi millati bayrog'i (`SquadTable.jsx`).
+- `engine.DATA_VERSION = 2`: eski ma'lumotdan yaratilgan world'lar siljimaydi; admin aniq xabar oladi ("Wipe Data qiling").
+- Server: `mergeServerOwnedFields` endi `index.js` ichida (alohida `server/careerMerge.js` fayli kerak emas - deploy'da "module topilmadi" bo'lmasin);
+  kutilmagan xatoda server JSON `{ ok:false, error }` qaytaradi (HTML 500 sahifa o'rniga).
+- `tests/test_phase12_data.js`: ma'lumot butunligi, `nat`, terma jamoalar, eski world himoyasi (19 ta tekshiruv).
+

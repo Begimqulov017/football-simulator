@@ -29,7 +29,34 @@ const engine = require('./engine');
 const international = require('./international');
 const continental = require('./continental');
 const awards = require('./awards');
-const { mergeServerOwnedFields } = require('./careerMerge');
+// ============================================================
+// Server-owned career fields (INLINE: alohida fayl kerak emas — Render/Vercel'da "./careerMerge topilmadi" xatosi bo'lmasin)
+// ------------------------------------------------------------
+// Ba'zi maydonlarni FAQAT server yozadi (mavsum mukofotlari, terma jamoa caps/kubogi). Klient /api/career/save orqali
+// butun o'yinchi obyektini yuboradi (u eskirgan nusxa bo'lishi mumkin), shuning uchun oddiy "ustidan yozish" server bergan
+// mukofotlarni yo'qotib yuborardi. Saqlashdan oldin mavjud (server) ma'lumot kiruvchi (klient) nusxa bilan BIRLASHTIRILADI.
+// Hech narsa o'chirilmaydi; faqat BIR XIL o'yinchi (id) uchun ishlaydi.
+// ============================================================
+const _awardKey = (a) => `${a.type}|${a.season}|${a.league}`;
+const _trophyKey = (t) => (typeof t === 'string' ? t : `${t?.name}|${t?.year}`);
+const _unionBy = (primary, secondary, keyFn) => {
+  const seen = new Set((primary || []).map(keyFn));
+  return [...(primary || []), ...(secondary || []).filter((x) => !seen.has(keyFn(x)))];
+};
+function mergeServerOwnedFields(existing, incoming) {
+  if (!existing || !incoming || !incoming.career) return incoming;
+  if (existing.id !== incoming.id) return incoming;
+  const ec = existing.career || {};
+  const ic = incoming.career;
+  const awards = _unionBy(ic.awards, ec.awards, _awardKey);
+  const trophies = _unionBy(ic.trophies, ec.trophies, _trophyKey);
+  const international = ec.international || ic.international; // klient terma jamoa statistikasini o'zgartirmaydi
+  const career = { ...ic };
+  if (awards.length) career.awards = awards;
+  if (trophies.length) career.trophies = trophies;
+  if (international) career.international = international;
+  return { ...incoming, career };
+}
 const globalAwards = require('./globalAwards');
 const chat = require('./chat');
 const registerAdminTools = require('./adminTools');
@@ -697,7 +724,8 @@ function ensureWorldForLeague(db, leagueId) {
     roundResultsLog: [],
     newsLog: [],
     seasonHistory: [],
-    cup: engine.initDomesticCup(league, FIRST_SEASON_START)
+    cup: engine.initDomesticCup(league, FIRST_SEASON_START),
+    dataVersion: engine.DATA_VERSION
   };
   return db.leagueWorlds[leagueId];
 }
@@ -1295,6 +1323,14 @@ function advanceWorldOnce(db) {
   // (barcha 21 liga uchun jami ~0.7MB, standalone test bilan o'lchandi)
   // 16MB Mongo hujjat limitidan juda uzoq, xavfsiz.
   engine.LEAGUES.forEach((l) => ensureWorldForLeague(db, l.id));
+
+  // Jamoa ma'lumotlari yangilangan bo'lsa, ESKI ma'lumotdan yaratilgan world'larni siljitib bo'lmaydi
+  // (jamoa id'lari/futbolchilar mos kelmaydi) - admin "Wipe Data" qilishi kerak.
+  const staleWorlds = Object.entries(db.leagueWorlds || {}).filter(([, w]) => w.dataVersion !== engine.DATA_VERSION).map(([id]) => id);
+  if (staleWorlds.length) {
+    return { blocked: true, blockers: [], worldDate: db.worldDate, matches: [], resolvedMatches: 0, seasonRollovers: [], internationalEvents: [], continentalEvents: [], autoResolvedPending: [],
+      reason: `Jamoa va futbolchi ma'lumotlari yangilangan (${staleWorlds.length} ta liga eski ma'lumotda: ${staleWorlds.slice(0, 4).join(', ')}). Admin panelidan "Wipe Data" qiling - dunyo yangi ma'lumot bilan qayta yaratiladi.` };
+  }
 
   // Mavsum oxiriga yetganda o'ynalmagan o'yinlar bo'lsa - dunyo siljimaydi.
   const nextDateProbe = engine.addDays(db.worldDate || FIRST_SEASON_START, 1);
@@ -1895,6 +1931,15 @@ const adminTools = registerAdminTools(app, {
 initDB()
   .then(() => {
     ensureAdminSeeded();
+
+// Phase 12b: JSON xato javobi - kutilmagan xatoda Express HTML sahifa o'rniga sababni JSON qilib qaytaradi,
+// klient esa "Server bu so'rovni tanimadi" o'rniga aniq xatoni ko'rsatadi.
+app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+  console.error('[server error]', req.method, req.path, err && err.stack ? err.stack : err);
+  if (res.headersSent) return;
+  res.status(500).json({ ok: false, error: `Serverda ichki xato: ${err && err.message ? err.message : err}` });
+});
+
     app.listen(PORT, () => {
       console.log(`🚀 Match Simulator auth server: http://localhost:${PORT}`);
     });

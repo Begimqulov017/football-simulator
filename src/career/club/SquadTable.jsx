@@ -2,6 +2,10 @@ import React, { useMemo, useState } from 'react';
 import Panel, { OvrChip } from './Panel';
 import { cleanName, catOf, CAT_COLOR, CAT_SHORT } from './squadUtils';
 import { getRatingTier } from '../../utils/ratingTier';
+import { NATION_BY_NAME, flagFor } from '../../data/nationsData';
+
+// Futbolchi millati (terma jamoasi): teamsData.js dagi `nat` yoki o'yinchi karyerasidagi `nationality`.
+const natOf = (p) => { const n = p.nat || p.nationality; return n && NATION_BY_NAME[n] ? n : null; };
 
 const FILTERS = [
   { id: 'ALL', label: 'All' },
@@ -77,6 +81,7 @@ export default function SquadTable({ squad, starterIds, myId, selectedId, onSele
                   className={`cursor-pointer ${p.id === selectedId ? 'bg-amber-50' : isMe ? 'bg-brand-tint' : 'hover:bg-surface'}`}
                 >
                   <td className="px-3 py-2 border-b border-surface-line">
+                    {natOf(p) && <span className="mr-1.5" title={natOf(p)} aria-label={natOf(p)}>{flagFor(natOf(p))}</span>}
                     <span className="font-bold text-ink">{cleanName(p.name)}</span>
                     {isMe && <span className="ml-1.5 text-[11px] font-bold text-brand-dark">You</span>}
                     {!isMe && p.isUser && <span className="ml-1.5 text-[11px] font-bold text-accent-dark">Player-created</span>}
