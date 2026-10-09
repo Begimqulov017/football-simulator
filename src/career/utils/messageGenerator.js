@@ -18,12 +18,12 @@ import { flagOfNation } from '../international/calendar';
 // Categories (inbox tabs)
 // ---------------------------------------------------------------------------
 export const INBOX_TABS = [
-  { key: 'all', label: 'All' },
-  { key: 'coach', label: 'Coach' },
-  { key: 'club', label: 'Club' },
-  { key: 'national', label: 'National' },
-  { key: 'system', label: 'System' },
-  { key: 'starred', label: 'Starred' }
+  { key: 'all', label: 'Hammasi' },
+  { key: 'coach', label: 'Murabbiy' },
+  { key: 'club', label: 'Klub' },
+  { key: 'national', label: 'Terma jamoa' },
+  { key: 'system', label: 'Tizim' },
+  { key: 'starred', label: 'Belgilangan' }
 ];
 
 // Old messages (made by season.js / server) have no `category`, so it is
@@ -32,7 +32,7 @@ export function categoryOf(m) {
   if (m.category) return m.category;
   if (m.type === 'coach') return 'coach';
   if (m.type === 'national') return 'national';
-  if (m.type === 'system' || m.from === 'League Awards') return 'system';
+  if (m.type === 'system' || m.from === 'League Awards' || m.from === 'Liga mukofotlari') return 'system';
   return 'club'; // club, transfer, contract, scout, teammate, milestone
 }
 
@@ -61,7 +61,8 @@ function hash(str) {
 const pickBy = (arr, seed) => arr[hash(String(seed)) % arr.length];
 const fill = (tpl, vars) => tpl.replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? ''));
 const highestReached = (value, steps) => steps.filter((s) => value >= s).pop();
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const FORM_UZ = { Poor: 'yomon', Average: "o'rtacha", Good: 'yaxshi', Excellent: "a'lo" };
+const formUz = (f) => FORM_UZ[f] || f;
 const fmtRating = (r) => (Number.isFinite(Number(r)) ? Number(r).toFixed(1) : '-');
 
 const make = (id, fields) => ({
@@ -73,44 +74,44 @@ const make = (id, fields) => ({
 // ---------------------------------------------------------------------------
 const VERDICTS = {
   elite: [
-    'That was a complete performance - exactly the standard we expect from you.',
-    'World-class from first minute to last. Opponents will be studying that tape.',
-    'You were the difference-maker today. Keep this level and the bigger clubs will notice.'
+    "Bu mukammal o'yin edi — aynan biz sizdan kutgan daraja.",
+    "Birinchi daqiqadan oxirgisigacha jahon darajasida. Raqiblar bu o'yinni o'rganib chiqadi.",
+    "Bugun o'yin taqdirini siz hal qildingiz. Shu darajani saqlasangiz, katta klublar e'tibor beradi."
   ],
   good: [
-    'A solid, reliable display. You did your job and then some.',
-    'Good intensity and good decisions today - that is what wins league titles.',
-    'Positive game. A little sharper in the final third and it is perfect.'
+    "Ishonchli, barqaror o'yin. O'z ishingizni a'lo bajardingiz.",
+    "Bugun shiddat ham, qarorlar ham yaxshi edi — chempionlik shunday qozoniladi.",
+    "Ijobiy o'yin. Hujumda sal aniqroq bo'lsangiz, mukammal bo'lardi."
   ],
   average: [
-    'Okay, but not your best. There was more in the tank - I want to see it next time.',
-    'You were involved, though a few touches let us down. Work on it in training.',
-    'A quiet afternoon. Nothing to worry about, but nothing to celebrate either.'
+    "Yomon emas, lekin eng yaxshi o'yiningiz emas. Kuchingiz bundan ko'p — keyingi safar ko'rsating.",
+    "O'yinda qatnashdingiz, ammo ba'zi to'plarni yo'qotdingiz. Mashg'ulotda ustida ishlang.",
+    "Sokin kun bo'ldi. Xavotirga hojat yo'q, lekin quvonadigan joyi ham yo'q."
   ],
   poor: [
-    'Below your standard today. Shake it off, review the clips and reset.',
-    'Tough day at the office. Everyone has them - what matters is the reaction.',
-    'You looked a step off the pace. Rest up, and we will get you back on track.'
+    "Bugun o'z darajangizdan past o'ynadingiz. Esdan chiqaring, lavhalarni ko'rib chiqing va qayta boshlang.",
+    "Og'ir kun bo'ldi. Bunday kunlar hammada bo'ladi — muhimi, keyingi munosabat.",
+    "Sur'atdan bir qadam orqada ko'rindingiz. Dam oling, sizni yana izga tushiramiz."
   ]
 };
 
 function matchReport(player, last) {
   const diff = last.golFor - last.golAgainst;
-  const resultWord = diff > 0 ? 'win' : diff < 0 ? 'defeat' : 'draw';
+  const resultWord = diff > 0 ? "G'alaba" : diff < 0 ? "Mag'lubiyat" : 'Durang';
   const tier = last.rating >= 8.5 ? 'elite' : last.rating >= 7 ? 'good' : last.rating >= 6 ? 'average' : 'poor';
 
-  let body = `${resultWord[0].toUpperCase()}${resultWord.slice(1)} ${last.golFor}-${last.golAgainst} ${last.isHome ? 'vs' : 'at'} ${last.opponent}. `;
-  body += `You played ${last.minutes}' and were rated ${fmtRating(last.rating)}/10`;
-  if (last.goals) body += `, scoring ${plural(last.goals, 'goal')}`;
-  if (last.assists) body += `${last.goals ? ' and' : ','} providing ${plural(last.assists, 'assist')}`;
+  let body = `${resultWord} ${last.golFor}-${last.golAgainst} (${last.opponent} ${last.isHome ? 'bilan uyda' : 'safarida'}). `;
+  body += `Siz ${last.minutes} daqiqa o'ynadingiz, bahoyingiz ${fmtRating(last.rating)}/10`;
+  if (last.goals) body += `, ${last.goals} ta gol urdingiz`;
+  if (last.assists) body += `${last.goals ? ' va' : ','} ${last.assists} ta assist berdingiz`;
   body += '. ';
-  if (last.mvp) body += 'You were our Man of the Match. ';
+  if (last.mvp) body += "Siz o'yinning eng yaxshi futbolchisi bo'ldingiz. ";
   body += pickBy(VERDICTS[tier], `${last.id}_v`);
-  if (player.career.form) body += ` Your recent form reads: ${player.career.form}.`;
+  if (player.career.form) body += ` So'nggi formangiz: ${formUz(player.career.form)}.`;
 
   return make(`gen_report_${last.id}`, {
-    type: 'coach', date: last.date, from: `Head Coach · ${player.club.name}`,
-    subject: `Performance report: ${last.opponent}`, body
+    type: 'coach', date: last.date, from: `Bosh murabbiy · ${player.club.name}`,
+    subject: `O'yin hisoboti: ${last.opponent}`, body
   });
 }
 
@@ -120,36 +121,36 @@ function matchReport(player, last) {
 function coachAdvice(player, last) {
   const { career, club } = player;
   const stamina = Number.isFinite(career.stamina) ? career.stamina : 100;
-  const base = { type: 'coach', date: last.date, from: `Head Coach · ${club.name}` };
+  const base = { type: 'coach', date: last.date, from: `Bosh murabbiy · ${club.name}` };
   const id = `gen_advice_${last.id}`;
 
   if (career.injury) {
     return make(id, {
-      ...base, subject: 'Recovery first',
-      body: `Do not rush back from the knock. The medical team says about ${plural(career.injury.daysLeft || 0, 'day')} more. Your place in the squad is safe - get fit, then we talk about the starting XI.`
+      ...base, subject: "Avval sog'ayib oling",
+      body: `Jarohatdan shoshilib qaytmang. Shifokorlar yana taxminan ${career.injury.daysLeft || 0} kun kerak deyapti. Tarkibdagi o'rningiz saqlanadi — avval tuzaling, keyin asosiy 11lik haqida gaplashamiz.`
     });
   }
   if (stamina < 35) {
     return make(id, {
-      ...base, subject: 'Rotation plan: you will be rested',
-      body: `Your stamina is down to ${stamina}%. To avoid injury I am planning to rotate you - expect a place on the bench or a reduced role next game. Skip heavy training and let the body recover.`
+      ...base, subject: "Rotatsiya rejasi: sizga dam beramiz",
+      body: `Chidamliligingiz ${stamina}% ga tushdi. Jarohat olmasligingiz uchun sizni almashtirib o'ynatmoqchiman — keyingi o'yinda zaxirada yoki kamroq rolda bo'lishingiz mumkin. Og'ir mashg'ulotni qoldiring, tanangiz tiklansin.`
     });
   }
   if (stamina < 65) {
     return make(id, {
-      ...base, subject: 'Stamina management',
-      body: `You are at ${stamina}% stamina. Fine for a game, but a tired player makes mistakes and gets hurt more often. Keep training light this week and let the quiet days refill the tank.`
+      ...base, subject: 'Chidamlilikni boshqarish',
+      body: `Chidamliligingiz ${stamina}%. O'yin uchun yetarli, lekin charchagan futbolchi xato qiladi va ko'proq jarohat oladi. Bu hafta mashg'ulotni yengil qiling, bo'sh kunlar kuchingizni tiklasin.`
     });
   }
-  // Fresh enough - only send a readiness note on some games, so the inbox does not spam.
+  // Yetarlicha tetik — pochta to'lib ketmasligi uchun faqat ba'zi o'yinlardan keyin yuboriladi.
   if (hash(`${last.id}_xi`) % 2 !== 0) return null;
   const inForm = career.form === 'Good' || career.form === 'Excellent';
   return make(id, {
     ...base,
-    subject: inForm ? 'Starting XI: you are in the plan' : 'Starting XI: nothing is guaranteed',
+    subject: inForm ? "Asosiy 11lik: siz rejadasiz" : "Asosiy 11lik: hech narsa kafolatlanmagan",
     body: inForm
-      ? `Stamina ${stamina}% and form is ${career.form}. You are fit and sharp - expect to be named in the starting XI for the next fixture.`
-      : `Stamina ${stamina}% - physically you are ready, but form is ${career.form || 'Average'}. The starting XI spot is yours to lose, so show me something in training.`
+      ? `Chidamlilik ${stamina}%, forma ${formUz(career.form)}. Siz tetik va o'tkirsiz — keyingi o'yinda asosiy 11likka chaqirilishingiz kutiladi.`
+      : `Chidamlilik ${stamina}% — jismonan tayyorsiz, lekin forma ${formUz(career.form || 'Average')}. Asosiy 11likdagi o'rin sizniki, faqat uni yo'qotmang: mashg'ulotda nimadir ko'rsating.`
   });
 }
 
@@ -158,39 +159,39 @@ function coachAdvice(player, last) {
 // ---------------------------------------------------------------------------
 const MATE_LINES = {
   scorer: [
-    'What a finish against {opponent}! Drinks are on you tonight.',
-    '{goals_word} today - are you trying to take my spot in the dressing room playlist too?',
-    'That goal was unreal. I am still replaying it in my head.',
-    'Keep scoring like that and the whole stadium will be singing your name.',
-    'Honestly, I just made the run - you did the magic. Great goal!'
+    "{opponent}ga qarshi qanday gol edi! Bugun kechqurun ichimliklar sizdan.",
+    "{goals_word} urdingiz — kiyinish xonasidagi musiqa ro'yxatida ham mening o'rnimni olmoqchimisiz?",
+    "Bu gol ishonib bo'lmas edi. Hali ham xayolimda qayta ko'ryapman.",
+    "Shunday gol urishda davom etsangiz, butun stadion nomingizni kuylaydi.",
+    "Rostini aytsam, men shunchaki yugurdim — sehrni siz qildingiz. Ajoyib gol!"
   ],
   great: [
-    'You were everywhere today. Great game, mate!',
-    'Coach was buzzing about your display in the dressing room.',
-    'Playing next to you makes my job easy. Let us keep this run going.',
-    'That performance against {opponent} deserved the three points.',
-    'If you play like that every week we are winning the league.'
+    "Bugun hamma joyda siz edingiz. Ajoyib o'yin, do'stim!",
+    "Murabbiy kiyinish xonasida o'yiningizdan juda xursand edi.",
+    "Siz bilan yonma-yon o'ynash mening ishimni yengillashtiradi. Shu seriyani davom ettiramiz.",
+    "{opponent}ga qarshi bu o'yin uch ochkoga munosib edi.",
+    "Har hafta shunday o'ynasangiz, ligani yutamiz."
   ],
   average: [
-    'Not our best, but we got through it. Onto the next one.',
-    'Tough game against {opponent}. Fancy some extra passing work tomorrow?',
-    'We will click soon, I can feel it. Keep your head up.',
-    'Small margins today. Let us fix them in training.',
-    'Grab a coffee later? We can go through the game together.'
+    "Eng yaxshi o'yinimiz emas, lekin o'tib oldik. Keyingisiga.",
+    "{opponent}ga qarshi qiyin o'yin bo'ldi. Ertaga qo'shimcha pas mashqi qilamizmi?",
+    "Tez orada tushunishamiz, his qilyapman. Boshingizni tik tuting.",
+    "Bugun farq mayda narsalarda edi. Mashg'ulotda to'g'rilaymiz.",
+    "Keyinroq qahva ichamizmi? O'yinni birga ko'rib chiqamiz."
   ],
   bad: [
-    'Do not stress over today. One bad game means nothing over a season.',
-    'Rough one, but we are all in this together. We will bounce back.',
-    'I have had worse days than that, trust me. Chin up.',
-    'Fancy an extra shooting session tomorrow? Could help both of us.',
-    'The fans know what you are capable of. So do I.'
+    "Bugungi o'yin uchun xavotir olmang. Butun mavsumda bitta yomon o'yin hech narsa emas.",
+    "Og'ir o'yin bo'ldi, lekin hammamiz birgamiz. Qaytamiz.",
+    "Men bundan yomonroq kunlarni ham ko'rganman, ishoning. Bosh ko'tarib turing.",
+    "Ertaga qo'shimcha zarba mashqi qilamizmi? Ikkimizga ham foydasi bo'ladi.",
+    "Muxlislar nimaga qodir ekaningizni biladi. Men ham bilaman."
   ],
   injured: [
-    'Sorry to see you go off. Take your time - we will hold the fort.',
-    'Get well soon! The dressing room is not the same without you.',
-    'Do the rehab properly, do not rush it. We need you back at 100%.',
-    'Heard about the knock. Anything you need, just shout.',
-    'Rest up. I will keep your peg warm until you are back.'
+    "Maydonni tark etganingizga afsusdaman. Shoshilmang — biz o'rningizni saqlaymiz.",
+    "Tezroq tuzaling! Kiyinish xonasi sizsiz avvalgidek emas.",
+    "Reabilitatsiyani to'g'ri o'ting, shoshilmang. Bizga 100% holatda kerak bo'lasiz.",
+    "Jarohat haqida eshitdim. Biror narsa kerak bo'lsa, ayting.",
+    "Dam oling. Qaytguningizcha shkafingizni saqlab turaman."
   ]
 };
 
@@ -202,7 +203,7 @@ function teammateChat(player, last) {
     : last.rating >= 7.5 ? 'great'
     : last.rating >= 6 ? 'average' : 'bad';
 
-  let mate = { name: 'Teammate' };
+  let mate = { name: 'Jamoadosh' };
   try {
     const team = INITIAL_TEAMS.find((t) => t.id === player.club.id);
     const squad = team ? getMergedSquad(team).filter((p) => p.id !== player.id) : [];
@@ -211,11 +212,11 @@ function teammateChat(player, last) {
 
   const body = fill(pickBy(MATE_LINES[mood], `${last.id}_line`), {
     opponent: last.opponent,
-    goals_word: last.goals > 1 ? `${last.goals} goals` : 'A goal'
+    goals_word: last.goals > 1 ? `${last.goals} ta gol` : 'Bitta gol'
   });
   return make(`gen_mate_${last.id}`, {
-    type: 'teammate', date: last.date, from: mate.name || 'Teammate',
-    subject: `Message from ${mate.name || 'a teammate'}`, body
+    type: 'teammate', date: last.date, from: mate.name || 'Jamoadosh',
+    subject: `${mate.name || 'Jamoadosh'}dan xabar`, body
   });
 }
 
@@ -228,19 +229,19 @@ function nationalMessages(player) {
   const intl = player.career.international;
   if (!intl) return [];
   const out = [];
-  const country = intl.country || player.nationality || 'Your country';
+  const country = intl.country || player.nationality || 'Vataningiz';
   const flag = flagOfNation(country);
-  const from = `${flag} ${country} Football Association`;
+  const from = `${flag} ${country} Futbol assotsiatsiyasi`;
 
   const cu = intl.lastCallUp;
   if (cu && cu.date) {
-    let body = `Congratulations! You have been called up to represent ${country} in ${cu.competition || 'an international fixture'} against ${cu.opponent || 'our opponents'}.`;
+    let body = `Tabriklaymiz! Siz ${country} terma jamoasiga chaqirildingiz: ${cu.competition || 'xalqaro o\u02bbyin'}, raqib — ${cu.opponent || 'raqiblarimiz'}.`;
     if (cu.rating) {
-      body += ` You came away with a ${fmtRating(cu.rating)} rating`;
-      body += cu.goals ? ` and ${plural(cu.goals, 'goal')}.` : '.';
+      body += ` O'yin bahoyingiz: ${fmtRating(cu.rating)}`;
+      body += cu.goals ? `, ${cu.goals} ta gol urdingiz.` : '.';
     }
     out.push(make(`gen_callup_${cu.date}_${cu.competition || ''}_${cu.opponent || ''}`, {
-      type: 'national', date: cu.date, from, subject: `National team call-up: ${country}`, body
+      type: 'national', date: cu.date, from, subject: `Terma jamoaga chaqiruv: ${country}`, body
     }));
   }
 
@@ -248,10 +249,10 @@ function nationalMessages(player) {
   if (capStep) {
     out.push(make(`gen_caps_${capStep}`, {
       type: 'national', date: player.career.gameDate, from,
-      subject: capStep === 1 ? 'Your first senior cap!' : `Milestone: ${capStep} caps for ${country}`,
+      subject: capStep === 1 ? "Terma jamoadagi birinchi o'yiningiz!" : `Marra: ${country} uchun ${capStep} ta o'yin`,
       body: capStep === 1
-        ? `You have made your senior debut for ${country}. A moment you will remember forever - well done!`
-        : `Congratulations on reaching ${capStep} international caps for ${country}. You are becoming a true national team leader.`
+        ? `Siz ${country} terma jamoasida debyut qildingiz. Bu lahzani umr bo'yi eslaysiz — barakalla!`
+        : `${country} terma jamoasida ${capStep} ta o'yinga yetganingiz bilan tabriklaymiz. Siz terma jamoaning haqiqiy yetakchisiga aylanyapsiz.`
     }));
   }
 
@@ -259,8 +260,8 @@ function nationalMessages(player) {
   if (trophy) {
     out.push(make(`gen_intl_trophy_${trophy.name}_${trophy.year}`, {
       type: 'national', date: player.career.gameDate, from,
-      subject: `Champions: ${trophy.name} ${trophy.year}`,
-      body: `${country} have won the ${trophy.name} ${trophy.year} and you were part of it. Congratulations - this is history!`
+      subject: `Chempionlar: ${trophy.name} ${trophy.year}`,
+      body: `${country} ${trophy.name} ${trophy.year} turnirini yutdi va siz ham shu g'alabaning bir qismisiz. Tabriklaymiz — bu tarix!`
     }));
   }
   return out;
@@ -270,9 +271,9 @@ function nationalMessages(player) {
 // 5) Career milestones (Club)
 // ---------------------------------------------------------------------------
 const MILESTONES = [
-  { key: 'goals', field: 'goals', steps: [10, 25, 50, 100, 150, 200, 300], text: (n) => `${n} career goals` },
-  { key: 'apps', field: 'appearances', steps: [25, 50, 100, 200, 300], text: (n) => `${n} career appearances` },
-  { key: 'mvp', field: 'mvpCount', steps: [5, 10, 25], text: (n) => `${n} Man of the Match awards` }
+  { key: 'goals', field: 'goals', steps: [10, 25, 50, 100, 150, 200, 300], text: (n) => `karyerada ${n} ta gol` },
+  { key: 'apps', field: 'appearances', steps: [25, 50, 100, 200, 300], text: (n) => `karyerada ${n} ta o'yin` },
+  { key: 'mvp', field: 'mvpCount', steps: [5, 10, 25], text: (n) => `${n} marta o'yin eng yaxshisi` }
 ];
 
 function milestoneMessages(player) {
@@ -282,8 +283,8 @@ function milestoneMessages(player) {
     if (!step) return;
     out.push(make(`gen_ms_${key}_${step}`, {
       type: 'milestone', date: player.career.gameDate, from: player.club.name,
-      subject: `Milestone: ${text(step)}`,
-      body: `Congratulations from everyone at ${player.club.name}! You have reached ${text(step)}. The numbers speak for themselves - keep going.`
+      subject: `Marra: ${text(step)}`,
+      body: `${player.club.name} jamoasi nomidan tabriklaymiz! Siz ${text(step)} ga yetdingiz. Raqamlar o'zi gapiradi — davom eting.`
     }));
   });
   return out;
@@ -294,9 +295,9 @@ function milestoneMessages(player) {
 // ---------------------------------------------------------------------------
 function welcomeMessage(player) {
   return make('gen_system_welcome', {
-    type: 'system', date: player.career.gameDate, from: 'System',
-    subject: 'Your inbox has been upgraded',
-    body: 'Messages are now sorted into Coach, Club, National and System tabs. Tap the star on any message to pin it to the Starred tab. A red dot in the menu means you have unread messages.'
+    type: 'system', date: player.career.gameDate, from: 'Tizim',
+    subject: "Xabarlar bo'limi yangilandi",
+    body: "Xabarlar endi Murabbiy, Klub, Terma jamoa va Tizim bo'limlariga ajratiladi. Istalgan xabardagi yulduzchani bossangiz, u «Belgilangan» bo'limiga tushadi. Menyudagi qizil nuqta o'qilmagan xabar borligini bildiradi."
   });
 }
 

@@ -586,7 +586,7 @@ app.post('/api/career/submit-match-result', authMiddleware, (req, res) => {
     cs.career.matchRatings = [...(cs.career.matchRatings || []), myRating].slice(-10);
   }
   if (myInjured) {
-    cs.career.injury = { daysLeft: myInjuryDays || 5, description: 'Match injury' };
+    cs.career.injury = { daysLeft: myInjuryDays || 5, description: "O'yindagi jarohat" };
   }
   target.careerSavedAt = new Date().toISOString();
 
@@ -607,8 +607,8 @@ app.post('/api/career/submit-match-result', authMiddleware, (req, res) => {
             ccs.career.messages = [...(ccs.career.messages || []), {
               id: `msg_cup_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
               type: 'club', date: world.gameDate, from: world.cup.name,
-              subject: `Champions: ${world.cup.name}!`,
-              body: `Congratulations - you've won the ${world.cup.name} this season!`,
+              subject: `Chempionlar: ${world.cup.name}!`,
+              body: `Tabriklaymiz — siz bu mavsumda ${world.cup.name} kubogini yutdingiz!`,
               read: false, resolved: true,
             }];
             champUser.careerSavedAt = new Date().toISOString();
@@ -793,7 +793,7 @@ function autoResolveStalePendingMatches(db, newDate, opts = {}) {
             cs.career.assists = (cs.career.assists || 0) + hr.pStats.assists;
             cs.career.matchRatings = [...(cs.career.matchRatings || []), hr.pStats.rating].slice(-10);
             if (hr.pStats.injured) {
-              cs.career.injury = { daysLeft: hr.pStats.injuryDays, description: 'Match injury' };
+              cs.career.injury = { daysLeft: hr.pStats.injuryDays, description: "O'yindagi jarohat" };
             }
           }
           const resultLine = `${isHome ? homeTeam.name : awayTeam.name} ${isHome ? result.golA : result.golB} - ${isHome ? result.golB : result.golA} ${opponentTeam.name}`;
@@ -856,7 +856,7 @@ function autoResolveStalePendingMatches(db, newDate, opts = {}) {
               cs.career.goals = (cs.career.goals || 0) + hr.pStats.goals;
               cs.career.assists = (cs.career.assists || 0) + hr.pStats.assists;
               cs.career.matchRatings = [...(cs.career.matchRatings || []), hr.pStats.rating].slice(-10);
-              if (hr.pStats.injured) cs.career.injury = { daysLeft: hr.pStats.injuryDays, description: 'Match injury' };
+              if (hr.pStats.injured) cs.career.injury = { daysLeft: hr.pStats.injuryDays, description: "O'yindagi jarohat" };
             }
             const resultLine = `${homeTeam.name} ${result.golA} - ${result.golB} ${awayTeam.name}`;
             cs.career.messages = [...cs.career.messages, {
@@ -887,8 +887,8 @@ function autoResolveStalePendingMatches(db, newDate, opts = {}) {
                 ccs.career.messages = [...(ccs.career.messages || []), {
                   id: `msg_cup_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
                   type: 'club', date: newDate, from: world.cup.name,
-                  subject: `Champions: ${world.cup.name}!`,
-                  body: `Congratulations - you've won the ${world.cup.name} this season!`,
+                  subject: `Chempionlar: ${world.cup.name}!`,
+                  body: `Tabriklaymiz — siz bu mavsumda ${world.cup.name} kubogini yutdingiz!`,
                   read: false, resolved: true,
                 }];
                 champUser.careerSavedAt = new Date().toISOString();
@@ -1091,7 +1091,7 @@ function resolveCupRoundForLeague(db, leagueId, newDate) {
         cs.career.goals = (cs.career.goals || 0) + hr.pStats.goals;
         cs.career.assists = (cs.career.assists || 0) + hr.pStats.assists;
         cs.career.matchRatings = [...(cs.career.matchRatings || []), hr.pStats.rating].slice(-10);
-        if (hr.pStats.injured) cs.career.injury = { daysLeft: hr.pStats.injuryDays, description: 'Match injury' };
+        if (hr.pStats.injured) cs.career.injury = { daysLeft: hr.pStats.injuryDays, description: "O'yindagi jarohat" };
       }
       user.careerSavedAt = new Date().toISOString();
     });
@@ -1114,8 +1114,8 @@ function resolveCupRoundForLeague(db, leagueId, newDate) {
           cs.career.messages = [...(cs.career.messages || []), {
             id: `msg_cup_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
             type: 'club', date: newDate, from: world.cup.name,
-            subject: `Champions: ${world.cup.name}!`,
-            body: `Congratulations - you've won the ${world.cup.name} this season!`,
+            subject: `Chempionlar: ${world.cup.name}!`,
+            body: `Tabriklaymiz — siz bu mavsumda ${world.cup.name} kubogini yutdingiz!`,
             read: false, resolved: true,
           }];
           champUser.careerSavedAt = new Date().toISOString();
@@ -1417,7 +1417,7 @@ function advanceWorldOnce(db) {
           cs.career.assists = (cs.career.assists || 0) + hr.pStats.assists;
           cs.career.matchRatings = [...(cs.career.matchRatings || []), hr.pStats.rating].slice(-10);
           if (hr.pStats.injured) {
-            cs.career.injury = { daysLeft: hr.pStats.injuryDays, description: 'Match injury' };
+            cs.career.injury = { daysLeft: hr.pStats.injuryDays, description: "O'yindagi jarohat" };
           }
         }
         cs.career.lastMatchResult = {
@@ -1621,12 +1621,37 @@ app.get('/api/career/league-state', authMiddleware, (req, res) => {
 // ============================================================
 const LOGO_DIR = path.join(__dirname, 'gamedata', 'logoData');
 const LOGO_FILE_RE = /^([a-z0-9_-]+)\.(png|webp|svg)$/i;
+const LOGO_EXT_RE = /\.(png|webp|svg)$/i;
 const LOGO_MIME = { png: 'image/png', webp: 'image/webp', svg: 'image/svg+xml' };
+const LOGO_ALIASES = require('./gamedata/logoMap'); // 'liga papkasi/fayl nomi' -> klub id
+// Indeks: klub id (kichik harf) -> { ext, full }. logoData ichidagi BARCHA papkalar o'qiladi:
+//  1) logoMap.js'dagi moslashtirish bo'yicha, 2) fayl nomi klub id'siga teng bo'lsa (tekis yoki papka ichida).
+let LOGO_INDEX = null;
+function buildLogoIndex() {
+  const idx = {};
+  const walk = (dir, rel) => {
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+    entries.forEach((ent) => {
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) { walk(full, rel ? `${rel}/${ent.name}` : ent.name); return; }
+      const m = ent.name.match(LOGO_EXT_RE);
+      if (!m) return;
+      const stem = ent.name.slice(0, -m[0].length);
+      const ext = m[1].toLowerCase();
+      const key = rel ? `${rel}/${stem}` : stem;
+      const id = (LOGO_ALIASES[key] || stem).toLowerCase();
+      // Aniq moslashtirilgan (alias) fayl har doim ustun; aks holda birinchi topilgani qoladi.
+      if (!idx[id] || LOGO_ALIASES[key]) idx[id] = { ext, full };
+    });
+  };
+  walk(LOGO_DIR, '');
+  return idx;
+}
+function logoIndex() { if (!LOGO_INDEX) LOGO_INDEX = buildLogoIndex(); return LOGO_INDEX; }
 function listLogos() {
   const files = {};
-  try {
-    fs.readdirSync(LOGO_DIR).forEach((f) => { const m = f.match(LOGO_FILE_RE); if (m) files[m[1].toLowerCase()] = m[2].toLowerCase(); });
-  } catch (e) { /* papka yo'q - hech qaysi klubda haqiqiy logotip yo'q */ }
+  Object.keys(logoIndex()).forEach((id) => { files[id] = logoIndex()[id].ext; });
   return files;
 }
 app.get('/api/logos', (req, res) => {
@@ -1636,12 +1661,14 @@ app.get('/api/logos', (req, res) => {
 app.get('/api/logo/:file', (req, res) => {
   const m = String(req.params.file || '').match(LOGO_FILE_RE);
   if (!m) return res.status(400).json({ ok: false, error: "Noto'g'ri fayl nomi" });
-  const full = path.join(LOGO_DIR, `${m[1]}.${m[2].toLowerCase()}`);
-  // Papkadan tashqariga chiqib ketmasin (path traversal) - regex allaqachon / va . ni taqiqlaydi, lekin ikki marta tekshiramiz.
-  if (!full.startsWith(LOGO_DIR) || !fs.existsSync(full)) return res.status(404).json({ ok: false, error: 'Logotip topilmadi' });
-  res.set('Content-Type', LOGO_MIME[m[2].toLowerCase()]);
+  const hit = logoIndex()[m[1].toLowerCase()];
+  // Faqat indeksdagi (logoData ichidagi) fayllar beriladi - path traversal imkoni yo'q.
+  if (!hit || hit.ext !== m[2].toLowerCase() || !hit.full.startsWith(LOGO_DIR) || !fs.existsSync(hit.full)) {
+    return res.status(404).json({ ok: false, error: 'Logotip topilmadi' });
+  }
+  res.set('Content-Type', LOGO_MIME[hit.ext]);
   res.set('Cache-Control', 'public, max-age=86400');
-  res.sendFile(full);
+  res.sendFile(hit.full);
 });
 
 // ============================================================

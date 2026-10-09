@@ -12,6 +12,7 @@
 import { INITIAL_TEAMS } from '../../data/teamsData';
 import { LEAGUES } from '../../data/leaguesData';
 import { getMergedSquad } from '../data/clubRosterStore';
+import { roleOf, lineupStrength } from '../../utils/squadRoles';
 import { snapshotGoals, diffGoals, appendNews, buildRoundNews, buildCupNews, buildSeasonEndNews, buildMonthNews, buildTransferNews, buildRatingNews } from './newsGenerator';
 import { isMvpPerformance, resolveVeteranProgression, getRetirementChance, calcMainStats, calcGoalkeeperOVR, calcOVR, clampPrecise } from './statCalc';
 
@@ -106,8 +107,7 @@ export function initStandings(teamIds) {
 // ---------------------------------------------------------------------------
 function teamStrength(team) {
   if (!team || !team.squad?.length) return 70;
-  const top = [...team.squad].sort((a, b) => (b.ovr || 0) - (a.ovr || 0)).slice(0, 11);
-  return top.reduce((s, p) => s + (p.ovr || 68), 0) / top.length;
+  return lineupStrength(team.squad, 70); // pozitsiyalar bo'yicha tuzilgan asosiy 11lik o'rtachasi
 }
 
 function rollGoals(lambda) {
@@ -134,6 +134,10 @@ function simulatePlayerMatch(player, opponentTeam) {
   if (tier === 'bench') {
     if (Math.random() > 0.55) return { played: false };
     minutes = randInt(15, 45);
+  } else if (tier === 'reserve') {
+    // Rezervdagi o'yinchi deyarli o'ynamaydi
+    if (Math.random() > 0.15) return { played: false };
+    minutes = randInt(5, 25);
   }
 
   const oppStrength = teamStrength(opponentTeam);
@@ -224,8 +228,8 @@ export function recomputeTier(player) {
   const team = INITIAL_TEAMS.find((t) => t.id === player.club.id);
   if (!team) return player.club.tier;
   const squad = getMergedSquad(team).filter((p) => p.id !== player.id);
-  const betterCount = squad.filter((p) => (p.ovr || 0) > (player.overall || 0)).length;
-  return betterCount < 11 ? 'starter' : 'bench';
+  // O'z pozitsiyasidagi raqobatchilarga nisbatan: 'starter' | 'bench' | 'reserve'
+  return roleOf([...squad, { id: player.id, pos: player.position, ovr: player.overall || 0 }], player.id);
 }
 
 function maybeGenerateTransferOffer(player, league, gameDate) {
@@ -240,8 +244,8 @@ function maybeGenerateTransferOffer(player, league, gameDate) {
     type: 'transfer',
     date: gameDate,
     from: team.name,
-    subject: `Transfer interest from ${team.name}`,
-    body: `${team.name} have been watching your recent performances and want to sign you for $${wageOffer.toLocaleString()}/week.`,
+    subject: `${team.name} sizga qiziqmoqda`,
+    body: `${team.name} so'nggi o'yinlaringizni kuzatib bordi va sizni haftasiga $${wageOffer.toLocaleString()} maosh bilan sotib olmoqchi. «Muzokara qilish» tugmasi orqali shartlarni o'zgartirishingiz mumkin.`,
     read: false,
     resolved: false,
     offer: { teamId: team.id, wage: wageOffer }
@@ -258,16 +262,16 @@ function maybeGenerateScoutInterest(player, league, gameDate) {
   const team = INITIAL_TEAMS.find((t) => t.id === pick(candidates));
   if (!team) return null;
   const lines = [
-    `${team.name}'s scouts were in the stands for your last match - nothing formal yet, but they're keeping an eye on you.`,
-    `Rumours in the press: ${team.name} have added you to their list of transfer targets for the upcoming window.`,
-    `A source close to ${team.name} says the club's recruitment team rates you highly and will "monitor the situation".`
+    `${team.name} skautlari oxirgi o'yiningizda tribunada edi — hozircha rasmiy gap yo'q, lekin sizni kuzatishmoqda.`,
+    `Matbuotda mish-mish: ${team.name} sizni kelgusi transfer oynasidagi nishonlar ro'yxatiga qo'shgan.`,
+    `${team.name}ga yaqin manba aytishicha, klubning skaut bo'limi sizni yuqori baholaydi va vaziyatni kuzatib boradi.`
   ];
   return {
     id: newId('msg'),
     type: 'scout',
     date: gameDate,
     from: team.name,
-    subject: `${team.name} are watching you`,
+    subject: `${team.name} sizni kuzatmoqda`,
     body: pick(lines),
     read: false,
     resolved: true
@@ -287,18 +291,18 @@ function maybeGenerateTeammateMessage(player, gameDate) {
   const won = player.career.matchRatings?.length && player.career.matchRatings[player.career.matchRatings.length - 1] >= 7;
   const lines = won
     ? [
-      `Great game out there today, that performance deserved the three points!`,
-      `Was a pleasure playing alongside you today, let's keep this run going.`,
-      `Coach was buzzing about your display in the dressing room after the match.`
+      `Bugun ajoyib o'ynadik, bu o'yin uch ochkoga munosib edi!`,
+      `Bugun siz bilan yonma-yon o'ynash zavq edi, shu seriyani davom ettiramiz.`,
+      `O'yindan keyin murabbiy kiyinish xonasida o'yiningizdan juda xursand edi.`
     ]
     : [
-      `Rough one today, but we'll bounce back next week - heads up.`,
-      `Fancy an extra shooting session tomorrow before training? Could help both of us.`,
-      `Don't worry about today's result too much, one bad game means nothing over a season.`
+      `Bugun og'ir o'yin bo'ldi, lekin keyingi hafta qaytamiz — bosh ko'tarib turing.`,
+      `Ertaga mashg'ulotdan oldin qo'shimcha zarba mashqi qilamizmi? Ikkimizga ham foydasi bo'ladi.`,
+      `Bugungi natijadan ko'p xafa bo'lmang, butun mavsumda bitta yomon o'yin hech narsa emas.`
     ];
   return {
-    id: newId('msg'), type: 'teammate', date: gameDate, from: mate.name || 'Teammate',
-    subject: `Message from ${mate.name || 'a teammate'}`,
+    id: newId('msg'), type: 'teammate', date: gameDate, from: mate.name || 'Jamoadosh',
+    subject: `${mate.name || 'Jamoadosh'}dan xabar`,
     body: pick(lines), read: false, resolved: true
   };
 }
@@ -368,21 +372,21 @@ function processRound(round, player, standings, topScorers) {
         potential = Math.min(99, potential + 1);
       }
       if (pStats.injured) {
-        injury = { daysLeft: pStats.injuryDays, description: 'Match injury' };
+        injury = { daysLeft: pStats.injuryDays, description: "O'yindagi jarohat" };
         potential = Math.max(Math.ceil(player.overall), potential - randInt(1, 3));
       }
 
-      let body = `${resultLine}. You played ${pStats.minutes}' and rated ${pStats.rating}/10`;
-      if (pStats.goals) body += ` with ${pStats.goals} goal${pStats.goals > 1 ? 's' : ''}`;
-      if (pStats.assists) body += `${pStats.goals ? ' and' : ' with'} ${pStats.assists} assist${pStats.assists > 1 ? 's' : ''}`;
+      let body = `${resultLine}. Siz ${pStats.minutes} daqiqa o'ynadingiz, bahoyingiz ${pStats.rating}/10`;
+      if (pStats.goals) body += `, ${pStats.goals} ta gol`;
+      if (pStats.assists) body += `${pStats.goals ? ' va' : ','} ${pStats.assists} ta assist`;
       const mvp = isMvpPerformance(pStats);
-      if (mvp) body += ' - Man of the Match!';
+      if (mvp) body += " — o'yinning eng yaxshi futbolchisi!";
       body += '.';
-      if (pStats.injured) body += ` You picked up a knock and will be out for around ${pStats.injuryDays} days.`;
+      if (pStats.injured) body += ` Jarohat oldingiz va taxminan ${pStats.injuryDays} kun maydondan chetda qolasiz.`;
 
       messages.push({
         id: newId('msg'), type: 'club', date: round.date, from: player.club.name,
-        subject: pStats.injured ? 'Injury update' : `Match report: ${resultLine}`,
+        subject: pStats.injured ? 'Jarohat haqida' : `O'yin hisoboti: ${resultLine}`,
         body, read: false, resolved: true
       });
 
@@ -423,8 +427,8 @@ function processRound(round, player, standings, topScorers) {
     } else {
       messages.push({
         id: newId('msg'), type: 'club', date: round.date, from: player.club.name,
-        subject: `Matchday: ${resultLine}`,
-        body: `${resultLine}. You stayed on the bench this time - keep training to force your way into the XI.`,
+        subject: `O'yin kuni: ${resultLine}`,
+        body: `${resultLine}. Bu safar skameykada qoldingiz — asosiy 11likka kirish uchun mashg'ulotni davom ettiring.`,
         read: false, resolved: true
       });
       playerPatch.careerUpdate = { stamina: clamp(player.career.stamina + 5, 0, 100) };
@@ -560,15 +564,15 @@ function resolveCupFixture(player, cupRun, career, standings /* unused, kept for
   let won = golA > golB;
   if (golA === golB) won = Math.random() < 0.5; // decided on penalties
 
-  const roundName = cupRun.roundNames[cupRun.stage] || `Round ${fixture.round}`;
+  const roundName = cupRun.roundNames[cupRun.stage] || `${fixture.round}-davra`;
   const updatedFixtures = cupRun.fixtures.map((f, i) => (i === cupRun.stage ? { ...f, played: true, golFor: golA, golAgainst: golB, won } : f));
   const isLastRound = cupRun.stage === cupRun.fixtures.length - 1;
 
   const message = {
     id: newId('msg'), type: 'club', date: gameDate, from: cupRun.name,
-    subject: won ? `${roundName} won!` : `${roundName}: eliminated`,
-    body: `${cupRun.name} ${roundName}: ${player.club.name} ${golA}-${golB} ${opponent.name}${golA === golB ? ' (won on penalties)' : ''}. ${
-      won ? (isLastRound ? `You've won the ${cupRun.name}!` : 'You advance to the next round.') : 'Your run in this competition ends here.'
+    subject: won ? `${roundName}: g'alaba!` : `${roundName}: turnirdan chiqdingiz`,
+    body: `${cupRun.name} ${roundName}: ${player.club.name} ${golA}-${golB} ${opponent.name}${golA === golB ? " (penaltilarda g'alaba)" : ''}. ${
+      won ? (isLastRound ? `Siz ${cupRun.name} kubogini qo'lga kiritdingiz!` : 'Keyingi bosqichga o\'tdingiz.') : "Bu turnirdagi yo'lingiz shu yerda tugadi."
     }`,
     read: false, resolved: true
   };
@@ -662,16 +666,16 @@ export function recordPlayedMatch(player, m) {
   const myClub = player.club.name;
   const home = m.isHome ? myClub : m.opponentName;
   const away = m.isHome ? m.opponentName : myClub;
-  const resultLine = `${home} ${m.isHome ? m.golFor : m.golAgainst} - ${m.isHome ? m.golAgainst : m.golFor} ${away}${m.competition === 'cup' ? ' (Cup)' : ''}`;
-  let body = `${resultLine}. You played ${pStats.minutes}' and rated ${rating}/10`;
-  if (pStats.goals) body += ` with ${pStats.goals} goal${pStats.goals > 1 ? 's' : ''}`;
-  if (pStats.assists) body += `${pStats.goals ? ' and' : ' with'} ${pStats.assists} assist${pStats.assists > 1 ? 's' : ''}`;
-  if (mvp) body += ' - Man of the Match!';
+  const resultLine = `${home} ${m.isHome ? m.golFor : m.golAgainst} - ${m.isHome ? m.golAgainst : m.golFor} ${away}${m.competition === 'cup' ? ' (Kubok)' : ''}`;
+  let body = `${resultLine}. Siz ${pStats.minutes} daqiqa o'ynadingiz, bahoyingiz ${rating}/10`;
+  if (pStats.goals) body += `, ${pStats.goals} ta gol`;
+  if (pStats.assists) body += `${pStats.goals ? ' va' : ','} ${pStats.assists} ta assist`;
+  if (mvp) body += " — o'yinning eng yaxshi futbolchisi!";
   body += '.';
-  if (pStats.injured) body += ` You picked up a knock and will be out for around ${pStats.injuryDays} days.`;
+  if (pStats.injured) body += ` Jarohat oldingiz va taxminan ${pStats.injuryDays} kun maydondan chetda qolasiz.`;
   const messages = [...(c.messages || []), {
     id: newId('msg'), type: 'club', date, from: myClub,
-    subject: pStats.injured ? 'Injury update' : `Match report: ${resultLine}`, body, read: false, resolved: true,
+    subject: pStats.injured ? 'Jarohat haqida' : `O'yin hisoboti: ${resultLine}`, body, read: false, resolved: true,
   }];
   const league = LEAGUES.find((l) => l.id === player.club.leagueId);
   if (!pStats.injured && rating >= 7.5 && league) {
@@ -697,7 +701,7 @@ export function recordPlayedMatch(player, m) {
     mvpCount: (c.mvpCount || 0) + (mvp ? 1 : 0),
     form,
     stamina: clamp((c.stamina ?? 100) - randInt(15, 25), 0, 100),
-    injury: pStats.injured ? { daysLeft: pStats.injuryDays, description: 'Match injury' } : c.injury,
+    injury: pStats.injured ? { daysLeft: pStats.injuryDays, description: "O'yindagi jarohat" } : c.injury,
     messages,
   };
   try {
@@ -807,7 +811,7 @@ function finalizeSeason(player, career, standings, topScorers, schedule, message
     trophies.push({ name: `${league?.name || 'League'} Champion`, year: seasonYear, icon: '🏆' });
     newMessages.push({
       id: newId('msg'), type: 'club', date: career.gameDate, from: player.club.name,
-      subject: 'CHAMPIONS!', body: `${player.club.name} have won the ${league?.name || 'league'} title! An unforgettable season.`,
+      subject: 'CHEMPIONLAR!', body: `${player.club.name} ${league?.name || 'liga'} chempionligini qo'lga kiritdi! Unutilmas mavsum bo'ldi.`,
       read: false, resolved: true
     });
   }
@@ -816,8 +820,8 @@ function finalizeSeason(player, career, standings, topScorers, schedule, message
   if (wonGoldenBoot) {
     trophies.push({ name: `${league?.name || 'League'} Golden Boot`, year: seasonYear, icon: '⚽' });
     newMessages.push({
-      id: newId('msg'), type: 'club', date: career.gameDate, from: 'League Awards',
-      subject: 'Golden Boot!', body: `You finished the season as top scorer with ${goldenBoot.goals} goals - the Golden Boot is yours!`,
+      id: newId('msg'), type: 'club', date: career.gameDate, from: 'Liga mukofotlari',
+      subject: 'Oltin butsa!', body: `Siz mavsumni ${goldenBoot.goals} ta gol bilan eng yaxshi to'purar sifatida yakunladingiz — Oltin butsa sizniki!`,
       read: false, resolved: true
     });
   }
@@ -842,8 +846,8 @@ function finalizeSeason(player, career, standings, topScorers, schedule, message
   if (qualifiedContinentalNextSeason && !career.continentalCup) {
     newMessages.push({
       id: newId('msg'), type: 'club', date: career.gameDate, from: player.club.name,
-      subject: 'Continental qualification!',
-      body: `Finishing ${playerPosition}${['th','st','nd','rd'][((playerPosition%100)-20)%10] || 'th'} means ${player.club.name} have qualified for the ${qualifiedContinentalNextSeason.name} next season!`,
+      subject: 'Qit\u02bbalararo turnirga yo\u02bbllanma!',
+      body: `${playerPosition}-o'rin ${player.club.name} jamoasiga kelgusi mavsumda ${qualifiedContinentalNextSeason.name} da o'ynash huquqini berdi!`,
       read: false, resolved: true
     });
   }
@@ -851,8 +855,8 @@ function finalizeSeason(player, career, standings, topScorers, schedule, message
   if (!wonLeague) {
     newMessages.push({
       id: newId('msg'), type: 'club', date: career.gameDate, from: player.club.name,
-      subject: 'Season Review',
-      body: `The season has ended - ${player.club.name} finished ${playerPosition}${['th','st','nd','rd'][((playerPosition%100)-20)%10] || 'th'} in the ${league?.name || 'league'}, with ${championTeam?.name || 'a rival'} taking the title.`,
+      subject: 'Mavsum yakuni',
+      body: `Mavsum tugadi — ${player.club.name} ${league?.name || 'ligada'} ${playerPosition}-o'rinni egalladi, chempionlik esa ${championTeam?.name || 'raqib'} jamoasiga nasib etdi.`,
       read: false, resolved: true
     });
   }
@@ -885,7 +889,7 @@ function finalizeSeason(player, career, standings, topScorers, schedule, message
 
   newMessages.push({
     id: newId('msg'), type: 'club', date: nextStartDate, from: player.club.name,
-    subject: 'New Season Begins', body: `A new season kicks off today at ${player.club.name}. Good luck!`,
+    subject: 'Yangi mavsum boshlandi', body: `${player.club.name} jamoasida bugun yangi mavsum boshlandi. Omad!`,
     read: false, resolved: true
   });
 
@@ -946,7 +950,7 @@ export function prepareNextDay(player) {
     career.growthUsedThisYear = 0;
     messages = [...messages, {
       id: newId('msg'), type: 'club', date: newDate, from: player.club.name,
-      subject: 'Happy Birthday!', body: `You've turned ${age} today. Here's to another year of your career.`,
+      subject: "Tug'ilgan kuningiz bilan!", body: `Bugun ${age} yoshga to'ldingiz. Karyerangizdagi yana bir yil muborak bo'lsin.`,
       read: false, resolved: true
     }];
 
@@ -972,8 +976,8 @@ export function prepareNextDay(player) {
       overall = isGk ? calcGoalkeeperOVR(subStats, { precise: true }) : calcOVR(player.position, mainStats, { precise: true });
       messages = [...messages, {
         id: newId('msg'), type: 'club', date: newDate, from: player.club.name,
-        subject: 'Age is catching up',
-        body: `At ${age}, your recent form hasn't been enough to hold back time - your attributes have declined slightly this year.`,
+        subject: 'Yosh o\'z ta\'sirini ko\'rsatmoqda',
+        body: `${age} yoshda so'nggi formangiz vaqtni to'xtatishga yetmadi — bu yil ko'rsatkichlaringiz biroz pasaydi.`,
         read: false, resolved: true
       }];
     }
@@ -994,8 +998,8 @@ export function prepareNextDay(player) {
         retirementLegacy: { money: career.money || 0, surname: player.surname, retiredAge: age },
         messages: [...messages, {
           id: newId('msg'), type: 'club', date: newDate, from: player.club.name,
-          subject: 'Retirement',
-          body: `At ${age}, you've decided to retire from professional football. Thank you for an incredible career.`,
+          subject: 'Nafaqaga chiqish',
+          body: `${age} yoshda professional futboldan nafaqaga chiqishga qaror qildingiz. Ajoyib karyera uchun rahmat.`,
           read: false, resolved: true
         }],
       };
@@ -1038,10 +1042,12 @@ export function prepareNextDay(player) {
     if (clubTier !== player.club.tier) {
       messages = [...messages, {
         id: newId('msg'), type: 'club', date: newDate, from: player.club.name,
-        subject: clubTier === 'starter' ? "You're in the Starting XI!" : 'Squad update',
+        subject: clubTier === 'starter' ? "Siz asosiy 11likdasiz!" : clubTier === 'reserve' ? "Tarkib yangilanishi: rezerv" : "Tarkib yangilanishi",
         body: clubTier === 'starter'
-          ? "Your recent form and improvement have earned you a place in the Starting XI - go show what you can do."
-          : "The manager has decided to rotate the squad - you're back among the substitutes for now. Keep training.",
+          ? "So'nggi o'yinlaringiz va rivojlanishingiz sizga o'z pozitsiyangizda asosiy 11likdan joy berdi. Maydonda o'zingizni ko'rsating!"
+          : clubTier === 'reserve'
+            ? "Murabbiy o'z pozitsiyangizda boshqa o'yinchilarni ustun ko'rdi, hozircha rezerv tarkibdasiz. Mashg'ulotni davom ettiring."
+            : "Murabbiy tarkibni almashtirdi: hozircha zaxira o'yinchilar qatoridasiz. Mashg'ulotni davom ettiring.",
         read: false, resolved: true
       }];
     }
@@ -1177,8 +1183,8 @@ function checkContractStatus(player, career, newDay, messages) {
       career: { ...career, freeAgent: true, contract: null },
       messages: [...messages, {
         id: newId('msg'), type: 'club', date: career.gameDate, from: player.club.name,
-        subject: 'Contract expired',
-        body: `Your contract with ${player.club.name} has run out and wasn't renewed in time - you're now a free agent. Offers from other clubs should start coming in.`,
+        subject: 'Shartnoma muddati tugadi',
+        body: `${player.club.name} bilan shartnomangiz tugadi va o'z vaqtida yangilanmadi — endi erkin agentsiz. Boshqa klublardan takliflar kela boshlaydi.`,
         read: false, resolved: true
       }]
     };
@@ -1190,8 +1196,8 @@ function checkContractStatus(player, career, newDay, messages) {
       career: { ...career, contractTalksOpened: true },
       messages: [...messages, {
         id: newId('msg'), type: 'contract', date: career.gameDate, from: player.club.name,
-        subject: 'Contract renewal talks',
-        body: `Your deal with ${player.club.name} runs out in a few months. They're offering a new ${offer.years}-year contract at $${offer.wage.toLocaleString()}/week - accept, or negotiate elsewhere before time runs out.`,
+        subject: 'Shartnomani yangilash muzokarasi',
+        body: `${player.club.name} bilan shartnomangiz bir necha oydan keyin tugaydi. Klub ${offer.years} yillik yangi shartnomani haftasiga $${offer.wage.toLocaleString()} bilan taklif qilmoqda — qabul qiling yoki «Muzokara qilish» orqali shartlarni o'zgartiring.`,
         read: false, resolved: false,
         offer
       }]
@@ -1214,8 +1220,8 @@ function maybeGenerateFreeAgentOffer(player, gameDate) {
   const years = rollContractLength(league.id);
   return {
     id: newId('msg'), type: 'transfer', date: gameDate, from: team.name,
-    subject: `Contract offer from ${team.name}`,
-    body: `${team.name} want to sign you as a free agent: a ${years}-year deal at $${wage.toLocaleString()}/week.`,
+    subject: `${team.name} dan shartnoma taklifi`,
+    body: `${team.name} sizni erkin agent sifatida olmoqchi: ${years} yillik shartnoma, haftasiga $${wage.toLocaleString()}. «Muzokara qilish» orqali shartlarni o'zgartirishingiz mumkin.`,
     read: false, resolved: false,
     offer: { teamId: team.id, leagueId: league.id, wage, years, freeAgentSigning: true }
   };

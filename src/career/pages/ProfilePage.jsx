@@ -587,7 +587,7 @@ export default function ProfilePage() {
               <div className="flex flex-wrap gap-2">
                 {player.club?.tier && (
                   <span className={`rounded-full border px-3 py-1 text-xs font-extrabold ${player.club.tier === 'starter' ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-surface-line bg-surface-muted text-ink-soft'}`}>
-                    {player.club.tier === 'starter' ? '⭐ Starting XI' : '🪑 Bench'}
+                    {player.club.tier === 'starter' ? '⭐ Asosiy 11lik' : player.club.tier === 'reserve' ? '📦 Rezerv' : '🪑 Zaxira (bench)'}
                   </span>
                 )}
                 <span className="rounded-full border border-accent/30 bg-accent-tint px-3 py-1 text-xs font-extrabold text-accent-dark">Form: {career.form || 'Average'}</span>

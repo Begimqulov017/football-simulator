@@ -1,7 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import AppShell from '../components/AppShell';
+import NegotiationModal from '../transfers/NegotiationModal';
+import { buildContext, startNegotiation, getTeam } from '../transfers/transferUtils';
 import { useGame } from '../context/GameContext';
 import { INBOX_TABS, categoryOf, unreadCounts } from '../utils/messageGenerator';
+
+const LIVE_STAGES = ['offer', 'counter', 'final', 'accepted'];
+const RENEW_KEY = (clubId) => `renew_${clubId}`;
 
 const TYPE_ICON = {
   club: '🏟️', transfer: '💸', contract: '📄', scout: '🔎', teammate: '🗣️',
@@ -9,17 +14,17 @@ const TYPE_ICON = {
 };
 
 const EMPTY_TEXT = {
-  all: 'No messages yet - your coach, club and national team will reach out here.',
-  coach: 'No messages from your coach yet. Play a match and you will get a performance report.',
-  club: 'No club messages yet - transfer interest, contract offers and teammates show up here.',
-  national: 'No national team messages yet. Keep your rating high to earn a call-up.',
-  system: 'No system notices.',
-  starred: 'Nothing starred yet. Tap the ☆ on a message to keep it here.'
+  all: "Hozircha xabarlar yo'q — murabbiy, klub va terma jamoa shu yerda sizga yozadi.",
+  coach: "Murabbiydan hali xabar yo'q. O'yin o'ynang — o'yin hisobotini olasiz.",
+  club: "Klub xabarlari hali yo'q — transfer qiziqishi, shartnoma takliflari va jamoadoshlar shu yerda ko'rinadi.",
+  national: "Terma jamoadan xabar yo'q. Chaqiruv olish uchun reytingingizni baland tuting.",
+  system: "Tizim xabarlari yo'q.",
+  starred: "Belgilangan xabar yo'q. Xabarni shu yerda saqlash uchun ☆ ni bosing."
 };
 
 const RED = 'var(--accent-red)';
 
-function UnreadDot({ title = 'Unread' }) {
+function UnreadDot({ title = "O'qilmagan" }) {
   return (
     <span
       title={title}
@@ -33,9 +38,14 @@ function UnreadDot({ title = 'Unread' }) {
 }
 
 export default function MessagesPage() {
-  const { player, updatePlayer, markMessageRead, acceptTransferOffer, acceptContractOffer, declineOffer } = useGame();
+  const {
+    player, updatePlayer, markMessageRead, acceptTransferOffer, acceptContractOffer, declineOffer,
+    saveNegotiation, completeNegotiatedTransfer, completeContractRenewal,
+  } = useGame();
   const [tab, setTab] = useState('all');
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [activeMsgId, setActiveMsgId] = useState(null); // JONLI muzokara ochilgan xabar
+  const [fresh, setFresh] = useState(null);             // hali saqlanmagan (yangi boshlangan) muzokara
 
   const allMessages = player?.career?.messages;
 
@@ -54,6 +64,52 @@ export default function MessagesPage() {
     if (unreadOnly && m.read) return false;
     return true;
   }), [sorted, tab, unreadOnly]);
+
+  const career = player?.career;
+  const activeMsg = activeMsgId ? (allMessages || []).find((m) => m.id === activeMsgId) || null : null;
+  const isRenewal = activeMsg?.type === 'contract';
+
+  // Muzokara kontekst: transfer taklifi -> yangi klub; shartnoma yangilash -> hozirgi klub (summasiz).
+  const negoCtx = useMemo(() => {
+    if (!player || !activeMsg || !activeMsg.offer) return null;
+    const team = isRenewal ? getTeam(player.club?.id) : getTeam(activeMsg.offer.teamId);
+    if (!team) return null;
+    return buildContext({ player, career: player.career, team, offer: activeMsg.offer, renewal: isRenewal });
+  }, [activeMsg, isRenewal, player?.overall, player?.age, player?.potential, career?.day, career?.freeAgent, career?.contract]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const negoKey = negoCtx ? (isRenewal ? RENEW_KEY(player.club.id) : negoCtx.team.id) : null;
+  const persistedNego = negoKey ? (career?.negotiations || {})[negoKey] : null;
+  const negotiation = persistedNego && LIVE_STAGES.includes(persistedNego.stage) ? persistedNego : fresh;
+
+  const openNegotiation = useCallback((m) => {
+    if (!player || !m.offer) return;
+    const renewal = m.type === 'contract';
+    const team = renewal ? getTeam(player.club?.id) : getTeam(m.offer.teamId);
+    if (!team) return;
+    const key = renewal ? RENEW_KEY(player.club.id) : team.id;
+    const existing = (player.career.negotiations || {})[key];
+    if (existing && LIVE_STAGES.includes(existing.stage) && existing.messageId === m.id) {
+      setFresh(null);
+    } else {
+      const c = buildContext({ player, career: player.career, team, offer: m.offer, renewal });
+      setFresh({ ...startNegotiation(c, player.career.day, m.id), teamId: key });
+    }
+    if (!m.read) markMessageRead(m.id);
+    setActiveMsgId(m.id);
+  }, [player, markMessageRead]);
+
+  const closeRoom = useCallback(() => { setActiveMsgId(null); setFresh(null); }, []);
+  const handleNegoChange = (next) => saveNegotiation(next.teamId, { ...next, teamId: negoKey });
+  const handleNegoWalk = (next) => {
+    saveNegotiation(negoKey, { ...next, teamId: negoKey });
+    if (next.messageId) declineOffer(next.messageId);
+    closeRoom();
+  };
+  const handleNegoSign = (deal) => {
+    if (isRenewal) completeContractRenewal({ ...deal, teamId: player.club.id });
+    else completeNegotiatedTransfer(deal);
+    closeRoom();
+  };
 
   if (!player) return null;
 
@@ -81,9 +137,9 @@ export default function MessagesPage() {
     <AppShell>
       <div className="page-header">
         <div>
-          <h1>Messages & Suggests</h1>
+          <h1>Xabarlar va takliflar</h1>
           <div className="sub">
-            {counts.total ? `${counts.total} unread` : 'All caught up'} · {sorted.length} total
+            {counts.total ? `${counts.total} ta o'qilmagan` : "Hammasi o'qilgan"} · jami {sorted.length} ta
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -93,10 +149,10 @@ export default function MessagesPage() {
             aria-pressed={unreadOnly}
             onClick={() => setUnreadOnly((v) => !v)}
           >
-            Unread only
+            Faqat o'qilmaganlar
           </button>
           <button type="button" className="btn btn-ghost" disabled={!visibleUnread} onClick={markVisibleRead}>
-            Mark all read
+            Hammasini o'qilgan deb belgilash
           </button>
         </div>
       </div>
@@ -116,7 +172,7 @@ export default function MessagesPage() {
               onClick={() => setTab(key)}
             >
               {key === 'starred' ? '★ ' : ''}{label}
-              {hasUnread && <UnreadDot title={`${counts[key]} unread`} />}
+              {hasUnread && <UnreadDot title={`${counts[key]} ta o'qilmagan`} />}
             </button>
           );
         })}
@@ -124,7 +180,7 @@ export default function MessagesPage() {
 
       {visible.length === 0 && (
         <div className="card">
-          <p className="sub">{unreadOnly ? 'No unread messages in this tab.' : EMPTY_TEXT[tab]}</p>
+          <p className="sub">{unreadOnly ? "Bu bo'limda o'qilmagan xabar yo'q." : EMPTY_TEXT[tab]}</p>
         </div>
       )}
 
@@ -148,17 +204,17 @@ export default function MessagesPage() {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 'none' }}>
-                  {!m.read && <span className="badge badge-gold">New</span>}
+                  {!m.read && <span className="badge badge-gold">Yangi</span>}
                   {m.resolved && m.outcome && (
                     <span className={`badge ${m.outcome === 'accepted' ? 'badge-green' : 'badge-red'}`}>
-                      {m.outcome === 'accepted' ? 'Accepted' : 'Declined'}
+                      {m.outcome === 'accepted' ? 'Qabul qilindi' : 'Rad etildi'}
                     </span>
                   )}
                   <button
                     type="button"
                     aria-pressed={!!m.starred}
-                    aria-label={m.starred ? 'Remove star' : 'Star this message'}
-                    title={m.starred ? 'Remove star' : 'Star this message'}
+                    aria-label={m.starred ? 'Belgini olib tashlash' : 'Xabarni belgilash'}
+                    title={m.starred ? 'Belgini olib tashlash' : 'Xabarni belgilash'}
                     onClick={(e) => { e.stopPropagation(); toggleStar(m.id); }}
                     style={{
                       background: 'none', border: 'none', cursor: 'pointer', padding: 2, fontSize: 20, lineHeight: 1,
@@ -173,7 +229,7 @@ export default function MessagesPage() {
               <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 8, lineHeight: 1.5 }}>{m.body}</p>
 
               {!m.resolved && (m.type === 'transfer' || m.type === 'contract') && (
-                <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+                <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
                   <button
                     className="btn btn-primary"
                     onClick={(e) => {
@@ -182,10 +238,19 @@ export default function MessagesPage() {
                       else acceptContractOffer(m.id);
                     }}
                   >
-                    Accept
+                    Qabul qilish
                   </button>
-                  <button className="btn" onClick={(e) => { e.stopPropagation(); declineOffer(m.id); }}>
-                    Decline
+                  {m.offer && (
+                    <button
+                      className="btn"
+                      style={{ borderColor: 'var(--accent-gold)', fontWeight: 700 }}
+                      onClick={(e) => { e.stopPropagation(); openNegotiation(m); }}
+                    >
+                      🤝 Muzokara qilish
+                    </button>
+                  )}
+                  <button className="btn btn-ghost" onClick={(e) => { e.stopPropagation(); declineOffer(m.id); }}>
+                    Rad etish
                   </button>
                 </div>
               )}
@@ -193,6 +258,19 @@ export default function MessagesPage() {
           );
         })}
       </div>
+
+      {negoCtx && negotiation && activeMsg && !activeMsg.resolved && (
+        <NegotiationModal
+          key={negoKey}
+          ctx={negoCtx}
+          negotiation={negotiation}
+          currentWage={career.weeklyWage}
+          onChange={handleNegoChange}
+          onWalk={handleNegoWalk}
+          onSign={handleNegoSign}
+          onClose={closeRoom}
+        />
+      )}
     </AppShell>
   );
 }

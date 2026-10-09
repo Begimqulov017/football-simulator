@@ -110,8 +110,8 @@ export default function WheelStep({ form, onBack, onAccepted }) {
   const potentialShown = useCountUp(potential, { start: phase === 'accepted', duration: 1600 });
 
   const tier = useMemo(
-    () => (offer && rating != null ? previewClubTier(offer.team, rating) : null),
-    [offer, rating],
+    () => (offer && rating != null ? previewClubTier(offer.team, rating, form.position) : null),
+    [offer, rating, form.position],
   );
   const spinning = phase === 'spinning';
   const isLeague = stage === 'league';
@@ -253,7 +253,11 @@ export default function WheelStep({ form, onBack, onAccepted }) {
             </div>
             {tier && (
               <div className={`text-center text-sm font-bold rounded-control px-3 py-2 border ${tier === 'starter' ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-surface-muted border-surface-line text-ink-soft'}`}>
-                {tier === 'starter' ? "⭐ Klub sizni asosiy tarkib darajasida ko'radi" : "🪑 Hozircha zaxira darajasida — muzokarada rolni so'rashingiz mumkin"}
+                {tier === 'starter'
+                  ? "⭐ Klub sizni o'z pozitsiyangizda asosiy tarkib darajasida ko'radi"
+                  : tier === 'bench'
+                    ? "🪑 Hozircha zaxira (bench) darajasida — muzokarada rolni so'rashingiz mumkin"
+                    : "📦 Hozircha rezervdasiz — avval reytingni oshirish kerak yoki muzokarada rol so'rang"}
               </div>
             )}
             <Button variant="accent" size="lg" onClick={() => onAccepted({ clubResult: offer, rating, potential, naturalTier: tier })} className="w-full">

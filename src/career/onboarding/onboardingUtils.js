@@ -150,7 +150,7 @@ export function evaluateProposal({ ovr, potential, naturalTier, leagueId, wage, 
   // Potensiali yuqori yosh o'yinchiga klub ko'proq to'lashga tayyor
   const leniency = 0.1 + Math.max(0, potential - 78) * 0.012;
   const pWage = ratio <= 1 ? 1 : Math.max(0, 1 - (ratio - 1) / (leniency * 2.2));
-  const keyMismatch = role === 'key' && naturalTier === 'bench';
+  const keyMismatch = role === 'key' && naturalTier !== 'starter';
   const pRole = keyMismatch ? Math.min(0.75, 0.3 + Math.max(0, potential - 80) * 0.03) : 1;
   const yearsMod = Math.min(1.05, 0.9 + 0.05 * (years - 1)); // uzoqroq shartnoma — klub uchun xavfsizroq
   const probability = Math.max(0.03, Math.min(0.97, pWage * pRole * yearsMod));
@@ -261,8 +261,8 @@ export function buildNewPlayer({ form, clubResult, rating, potential, contract, 
         type: 'club',
         date: '2026-08-01',
         from: clubResult.team.name,
-        subject: `Welcome to ${clubResult.team.name}!`,
-        body: `Congratulations on signing with ${clubResult.team.name}. You'll be joining as a ${contract.role === 'key' ? 'Key Player' : 'Rotation player'} on a ${contract.years}-year deal worth $${contract.wage.toLocaleString()} per week. The season kicks off on 1 August 2026 - hit the training ground and get ready.`,
+        subject: `${clubResult.team.name} ga xush kelibsiz!`,
+        body: `${clubResult.team.name} bilan shartnoma imzolaganingiz bilan tabriklaymiz. Siz ${contract.role === 'key' ? "asosiy o'yinchi" : "almashinuvchi o'yinchi"} sifatida ${contract.years} yillik shartnoma bilan, haftasiga $${contract.wage.toLocaleString()} maosh evaziga qo'shilasiz. Mavsum 2026-yil 1-avgustda boshlanadi — mashg'ulotga chiqing va tayyorlaning.`,
         read: false,
         resolved: true,
       }],

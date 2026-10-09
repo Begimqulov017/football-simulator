@@ -25,30 +25,30 @@ export const CONTRACT_YEARS = [1, 2, 3, 4, 5, 6];
 // o'yinchidan YUQORI bo'lmasligi kerak (kichikroq = yuqoriroq rol).
 export const ROLES = {
   star: {
-    id: 'star', label: 'Star Player', icon: '🌟', order: 3, wageMult: 1.3,
-    desc: 'Centrepiece of the squad. Highest pay, highest expectations.',
+    id: 'star', label: 'Yulduz o\u02bbyinchi', icon: '🌟', order: 3, wageMult: 1.3,
+    desc: 'Jamoaning markaziy figurasi. Eng yuqori maosh va eng katta umidlar.',
   },
   key: {
-    id: 'key', label: 'Key Player', icon: '⭐', order: 2, wageMult: 1.0,
-    desc: 'Regular starter with plenty of playing time.',
+    id: 'key', label: 'Asosiy o\u02bbyinchi', icon: '⭐', order: 2, wageMult: 1.0,
+    desc: 'Doimiy asosiy tarkib o\u02bbyinchisi, o\u02bbynash vaqti ko\u02bbp.',
   },
   rotation: {
-    id: 'rotation', label: 'Rotation', icon: '🔄', order: 1, wageMult: 0.7,
-    desc: 'Rotation player. Lower pay, so the club agrees more easily.',
+    id: 'rotation', label: 'Almashinuvchi', icon: '🔄', order: 1, wageMult: 0.7,
+    desc: 'Almashinuvchi o\u02bbyinchi. Maosh pastroq, klub osonroq rozi bo\u02bblad\u0069.',
   },
   prospect: {
-    id: 'prospect', label: 'Prospect', icon: '🌱', order: 0, wageMult: 0.55,
-    desc: 'Young talent being developed. Lowest pay and minutes.',
+    id: 'prospect', label: 'Istiqbolli yosh', icon: '🌱', order: 0, wageMult: 0.55,
+    desc: 'Rivojlantirilayotgan yosh iqtidor. Maosh va o\u02bbyin vaqti eng kam.',
   },
 };
 export const ROLE_LIST = [ROLES.star, ROLES.key, ROLES.rotation, ROLES.prospect];
 
 export const TERM_LABELS = {
-  salary: 'Weekly salary',
-  role: 'Squad role',
-  years: 'Contract length',
-  clause: 'Release clause',
-  fee: 'Transfer fee',
+  salary: 'Haftalik maosh',
+  role: 'Jamoadagi rol',
+  years: 'Shartnoma muddati',
+  clause: 'Chiqish klauzulasi',
+  fee: 'Transfer summasi',
 };
 
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
@@ -136,25 +136,25 @@ export function analyseClub(player, team) {
 }
 
 export const INTEREST_META = {
-  hot: { label: 'Wants you', tone: 'green', hint: 'The club is actively chasing you — talks should be easy.' },
-  open: { label: 'Interested', tone: 'green', hint: 'The club is open to signing you.' },
-  monitoring: { label: 'Monitoring', tone: 'gold', hint: 'The club is watching you — expect tougher talks.' },
-  closed: { label: 'Not interested', tone: 'red', hint: "You're not at this club's level yet." },
+  hot: { label: 'Sizni xohlaydi', tone: 'green', hint: 'Klub sizni faol izlayapti — muzokara oson kechadi.' },
+  open: { label: 'Qiziqmoqda', tone: 'green', hint: 'Klub sizni sotib olishga tayyor.' },
+  monitoring: { label: 'Kuzatmoqda', tone: 'gold', hint: "Klub sizni kuzatmoqda — muzokara qiyinroq bo'ladi." },
+  closed: { label: 'Qiziqmaydi', tone: 'red', hint: 'Siz hali bu klub darajasiga yetmagansiz.' },
 };
 
 // Interest + negotiation holatini bitta "status"ga yig'adi (kartadagi indikator).
 export function clubStatus({ team, analysis, player, career, offerMsg }) {
-  if (player.club?.id === team.id) return { key: 'current', label: 'Your club', tone: 'blue' };
+  if (player.club?.id === team.id) return { key: 'current', label: 'Sizning klubingiz', tone: 'blue' };
   const neg = (career.negotiations || {})[team.id];
   if (neg) {
-    if (neg.stage === 'accepted') return { key: 'agreed', label: 'Deal agreed', tone: 'green' };
+    if (neg.stage === 'accepted') return { key: 'agreed', label: 'Kelishildi', tone: 'green' };
     if (['offer', 'counter', 'final'].includes(neg.stage)) {
-      return { key: 'negotiating', label: `Negotiating · turn ${turnOf(neg.stage)}/${MAX_TURNS}`, tone: 'gold' };
+      return { key: 'negotiating', label: `Muzokara · ${turnOf(neg.stage)}/${MAX_TURNS}-bosqich`, tone: 'gold' };
     }
     const left = cooldownLeft(neg, career.day);
-    if (left > 0) return { key: 'cooldown', label: `Cooling off · ${left}d`, tone: 'red' };
+    if (left > 0) return { key: 'cooldown', label: `Sovish · ${left} kun`, tone: 'red' };
   }
-  if (offerMsg) return { key: 'offer', label: 'Offer received', tone: 'green' };
+  if (offerMsg) return { key: 'offer', label: 'Taklif keldi', tone: 'green' };
   const meta = INTEREST_META[analysis.interest];
   return { key: analysis.interest, label: meta.label, tone: meta.tone };
 }
@@ -171,12 +171,15 @@ export function cooldownLeft(neg, day) {
 // ---------------------------------------------------------------------------
 // offer — kiruvchi taklif (messages'dagi {teamId, wage, years}); bo'lsa klubning
 // byudjeti shu taklifdan olinadi.
-export function buildContext({ player, career, team, offer = null }) {
+// renewal: true — o'yinchi HOZIRGI klubi bilan shartnomani yangilayapti: transfer summasi yo'q,
+// klub o'zi taklif qilgani uchun qiziqish kamida 'open' deb olinadi.
+export function buildContext({ player, career, team, offer = null, renewal = false }) {
   const league = getLeagueOfTeam(team.id);
-  const leagueId = league?.id;
+  const leagueId = league?.id || player.club?.leagueId;
   const analysis = analyseClub(player, team);
+  if (renewal && (analysis.interest === 'closed' || analysis.interest === 'monitoring')) analysis.interest = 'open';
   const mv = marketValue(player);
-  const fee = transferFee(player, career);
+  const fee = renewal ? 0 : transferFee(player, career);
 
   const keyAnchor = computeStartingWage(ovrOf(player), 'starter', leagueId); // 'key' roli uchun asos
   const deservedMult = ROLES[analysis.deservedRole].wageMult;
@@ -186,7 +189,7 @@ export function buildContext({ player, career, team, offer = null }) {
   const idealYears = offer?.years || (age <= 23 ? 5 : age <= 29 ? 4 : age <= 32 ? 2 : 1);
   const idealClause = Math.max(1, round1(mv * 2.5));
   const budget = Math.max(5, (analysis.power - 62) * 6); // klubning transfer byudjeti ($M)
-  const freeAgent = !!career.freeAgent;
+  const freeAgent = renewal ? false : !!career.freeAgent;
 
   // Qiziqish yuqori bo'lsa klub yumshoqroq, past bo'lsa qattiqroq.
   const interestShift = { hot: -6, open: 0, monitoring: 8, closed: 99 }[analysis.interest];
@@ -195,7 +198,7 @@ export function buildContext({ player, career, team, offer = null }) {
   const leniency = clamp(0.12 + potentialLeniency + (analysis.interest === 'hot' ? 0.05 : 0), 0.1, 0.3);
 
   return {
-    team, league, leagueId, analysis, marketValue: mv, fee, budget: round1(budget), freeAgent, day: career.day,
+    team, league, leagueId, analysis, marketValue: mv, fee, budget: round1(budget), freeAgent, day: career.day, renewal,
     anchor, idealYears: clamp(idealYears, 1, 6), idealClause, leniency,
     thresholds: {
       1: 82 + interestShift + stubborn,
@@ -253,11 +256,11 @@ export function evaluateTerms(terms, ctx) {
   const score = Math.round(100 * (0.35 * salary + 0.2 * role + 0.15 * yearsSat + 0.15 * clauseSat + 0.15 * fee));
 
   const notes = {
-    salary: ratio <= 1 ? 'Within budget' : ratio <= 1 + ctx.leniency ? 'A bit above budget' : 'Far above budget',
-    role: over === 0 ? 'Fits your level' : `Club sees you as ${ROLES[ctx.analysis.deservedRole].label}`,
-    years: terms.years === ctx.idealYears ? 'Ideal length' : terms.years > ctx.idealYears ? 'Longer than the club wants' : 'Shorter than the club wants',
-    clause: terms.clause == null ? 'No clause — club is happy' : clauseSat >= 1 ? 'Protects the club' : 'Too cheap to buy you out',
-    fee: ctx.freeAgent || ctx.fee === 0 ? 'Free agent — no fee' : fee >= 1 ? 'Fee fits the club budget' : 'Fee strains the club budget',
+    salary: ratio <= 1 ? 'Byudjet doirasida' : ratio <= 1 + ctx.leniency ? 'Byudjetdan biroz yuqori' : 'Byudjetdan ancha yuqori',
+    role: over === 0 ? 'Darajangizga mos' : `Klub sizni «${ROLES[ctx.analysis.deservedRole].label}» deb ko\u02bbradi`,
+    years: terms.years === ctx.idealYears ? 'Klub istagan muddat' : terms.years > ctx.idealYears ? 'Klub istagandan uzoqroq' : 'Klub istagandan qisqaroq',
+    clause: terms.clause == null ? 'Klauzulasiz — klub xursand' : clauseSat >= 1 ? 'Klubni himoya qiladi' : 'Sizni sotib olish juda arzon',
+    fee: ctx.renewal ? 'Yangilash — transfer summasi yo\u02bbq' : ctx.freeAgent || ctx.fee === 0 ? 'Erkin agent — summa yo\u02bbq' : fee >= 1 ? 'Summa klub byudjetiga mos' : 'Summa klub byudjetiga og\u02bbir',
   };
   const sats = { salary, role, years: yearsSat, clause: clauseSat, fee };
   const status = (v) => (v >= 0.85 ? 'good' : v >= 0.5 ? 'warn' : 'bad');
@@ -306,8 +309,8 @@ function clubNote(terms, ctx, kind) {
     .sort((a, b) => a[1].value - b[1].value)[0];
   const [key, info] = worst;
   const label = TERM_LABELS[key].toLowerCase();
-  if (kind === 'counter') return `We like you, but the ${label} is the sticking point (${info.note.toLowerCase()}). Here is our counter-proposal.`;
-  if (kind === 'final') return 'This is our final decision. The terms are non-negotiable — take it or leave it.';
+  if (kind === 'counter') return `Siz bizga yoqasiz, lekin asosiy to\u02bbsiq — «${label}» (${info.note.toLowerCase()}). Mana bizning qarshi taklifimiz.`;
+  if (kind === 'final') return "Bu bizning yakuniy qarorimiz. Shartlar o'zgarmaydi — qabul qiling yoki rad eting.";
   return info.note;
 }
 
@@ -342,7 +345,7 @@ export function submitOffer(neg, terms, ctx) {
   let thread = push(neg, { turn, by: 'you', kind: 'offer', terms, score: ev.score });
 
   if (ev.score >= ctx.thresholds[turn]) {
-    thread = [...thread, { turn, by: 'club', kind: 'accept', terms, note: 'Deal! We accept your terms.' }];
+    thread = [...thread, { turn, by: 'club', kind: 'accept', terms, note: 'Kelishdik! Shartlaringizni qabul qilamiz.' }];
     return { ...neg, thread, draft: terms, stage: 'accepted', deal: terms, clubTerms: null, turn };
   }
 
@@ -357,10 +360,36 @@ export function submitOffer(neg, terms, ctx) {
   return { ...neg, thread, draft: final, stage: 'final', turn: 3, clubTerms: final };
 }
 
+// Klubning qarshi taklifi atrofida 2 ta muqobil PAKET (variant): klub har birini qabul qilishga tayyor.
+// Foydalanuvchi variantni shundayligicha qabul qilishi yoki maydonlarga qo'yib o'zgartirishi mumkin.
+export function buildClubVariants(neg, ctx) {
+  const base = neg.clubTerms;
+  if (!base) return [];
+  const tryPack = (label, hint, terms) => {
+    const t = { ...terms, wage: Math.max(100, roundTo(terms.wage)), years: clamp(terms.years, 1, 6) };
+    if (evaluateTerms(t, ctx).score < (ctx.thresholds[3] ?? ctx.thresholds[2] ?? 60) - 4) return null;
+    return { label, hint, terms: t };
+  };
+  const out = [{ label: 'Klub taklifi', hint: 'Klub eng ma\u02bbqul deb bilgan shartlar', terms: base }];
+  const a = tryPack('Ko\u02bbproq maosh — qisqa muddat', 'Maosh +8%, muddat 1 yil qisqa', { ...base, wage: base.wage * 1.08, years: base.years - 1 });
+  const b = tryPack('Barqaror — uzoq muddat', 'Maosh -6%, muddat 1 yil uzoq', { ...base, wage: base.wage * 0.94, years: base.years + 1 });
+  [a, b].forEach((v) => {
+    if (v && !out.some((o) => o.terms.wage === v.terms.wage && o.terms.years === v.terms.years)) out.push(v);
+  });
+  return out;
+}
+
+// Klub taklif qilgan istalgan variantni qabul qilish.
+export function acceptVariant(neg, terms) {
+  if (!['counter', 'final'].includes(neg.stage)) return neg;
+  const thread = push(neg, { turn: neg.turn, by: 'you', kind: 'accept', terms, note: 'Shu variantni qabul qilaman.' });
+  return { ...neg, thread, stage: 'accepted', deal: terms };
+}
+
 // Klubning qarshi/yakuniy taklifini qabul qilish.
 export function acceptClubTerms(neg) {
   if (!['counter', 'final'].includes(neg.stage) || !neg.clubTerms) return neg;
-  const thread = push(neg, { turn: neg.turn, by: 'you', kind: 'accept', terms: neg.clubTerms, note: 'We accept your terms.' });
+  const thread = push(neg, { turn: neg.turn, by: 'you', kind: 'accept', terms: neg.clubTerms, note: 'Klub shartlarini qabul qilaman.' });
   return { ...neg, thread, stage: 'accepted', deal: neg.clubTerms };
 }
 
@@ -368,9 +397,9 @@ export function acceptClubTerms(neg) {
 export function walkAway(neg, day) {
   if (!['offer', 'counter', 'final'].includes(neg.stage)) return neg;
   const stage = neg.stage === 'final' ? 'rejected' : 'walked';
-  const thread = push(neg, { turn: neg.turn, by: 'you', kind: stage, note: stage === 'rejected' ? 'Final offer rejected.' : 'You walked away from the talks.' });
+  const thread = push(neg, { turn: neg.turn, by: 'you', kind: stage, note: stage === 'rejected' ? 'Yakuniy taklif rad etildi.' : 'Siz muzokaradan chiqib ketdingiz.' });
   return { ...neg, thread, stage, closedDay: day };
 }
 
 // Tarix yozuvi uchun qisqa shartnoma matni
-export const formatTerms = (t) => (t ? `$${t.wage.toLocaleString()}/wk · ${t.years}y · ${ROLES[t.role]?.label || t.role}${t.clause != null ? ` · clause $${t.clause}M` : ''}` : '—');
+export const formatTerms = (t) => (t ? `$${t.wage.toLocaleString()}/hafta · ${t.years} yil · ${ROLES[t.role]?.label || t.role}${t.clause != null ? ` · klauzula $${t.clause}M` : ''}` : '—');

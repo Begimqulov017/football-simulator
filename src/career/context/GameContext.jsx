@@ -307,8 +307,8 @@ export function GameProvider({ children, username }) {
         type: 'contract',
         date: prev.career.gameDate,
         from: prev.club.name,
-        subject: 'New contract offer',
-        body: `Based on your recent form, ${prev.club.name} are offering a new ${offer.years}-year deal at $${offer.wage.toLocaleString()}/week (currently $${(prev.career.weeklyWage || 0).toLocaleString()}/week).`,
+        subject: 'Yangi shartnoma taklifi',
+        body: `So'nggi formangizga ko'ra ${prev.club.name} ${offer.years} yillik yangi shartnomani haftasiga $${offer.wage.toLocaleString()} bilan taklif qilmoqda (hozir haftasiga $${(prev.career.weeklyWage || 0).toLocaleString()}). «Muzokara qilish» orqali shartlarni o'zgartirishingiz mumkin.`,
         read: false,
         resolved: false,
         offer
@@ -480,8 +480,8 @@ export function GameProvider({ children, username }) {
       );
 
       const welcome = {
-        id: `msg_${Date.now()}`, type: 'club', date, from: newTeam.name, subject: `Welcome to ${newTeam.name}!`,
-        body: `Your move${oldName ? ` from ${oldName}` : ''} is official${fee > 0 ? ` (fee: $${fee.toFixed(1)}M)` : ' (free transfer)'}. You'll play as ${role === 'star' ? 'a Star Player' : role === 'key' ? 'a Key Player' : role === 'rotation' ? 'a Rotation player' : 'a Prospect'} on a ${years}-year deal worth $${wage.toLocaleString()}/week${clause != null ? `, release clause $${clause}M` : ''}.`,
+        id: `msg_${Date.now()}`, type: 'club', date, from: newTeam.name, subject: `${newTeam.name} ga xush kelibsiz!`,
+        body: `${oldName ? `${oldName} jamoasidan ` : ''}transferingiz rasman tasdiqlandi${fee > 0 ? ` (summa: $${fee.toFixed(1)}M)` : ' (bepul transfer)'}. Siz ${role === 'star' ? "yulduz o'yinchi" : role === 'key' ? "asosiy o'yinchi" : role === 'rotation' ? "almashinuvchi o'yinchi" : "istiqbolli yosh o'yinchi"} sifatida ${years} yillik shartnoma bilan, haftasiga $${wage.toLocaleString()} maosh evaziga o'ynaysiz${clause != null ? `, chiqish klauzulasi $${clause}M` : ''}.`,
         read: false, resolved: true
       };
       const messages = prev.career.messages
@@ -508,6 +508,41 @@ export function GameProvider({ children, username }) {
     });
   }, []);
 
+  // Hozirgi klub bilan JONLI muzokarada kelishilgan shartnoma yangilanishini rasmiylashtiradi.
+  const completeContractRenewal = useCallback((deal) => {
+    setPlayer((prev) => {
+      if (!prev || !deal?.terms) return prev;
+      const { wage, years, role, clause } = deal.terms;
+      const tier = role === 'star' || role === 'key' ? 'starter' : prev.club.tier;
+      const roleName = { star: 'yulduz o\u02bbyinchi', key: 'asosiy o\u02bbyinchi', rotation: 'almashinuvchi o\u02bbyinchi', prospect: 'istiqbolli yosh o\u02bbyinchi' }[role] || role;
+      const confirm = {
+        id: `msg_${Date.now()}`, type: 'contract', date: prev.career.gameDate, from: prev.club.name,
+        subject: 'Shartnoma yangilandi',
+        body: `${prev.club.name} bilan yangi shartnoma imzolandi: ${years} yil, haftasiga $${wage.toLocaleString()}${clause != null ? `, chiqish klauzulasi $${clause}M` : ''}. Rolingiz: ${roleName}.`,
+        read: false, resolved: true, outcome: 'accepted'
+      };
+      const live = ['offer', 'counter', 'final', 'accepted'];
+      const negotiations = Object.fromEntries(
+        Object.entries(prev.career.negotiations || {}).map(([k, n]) => [k, k === prev.club.id && live.includes(n.stage) ? { ...n, stage: 'signed', closedDay: prev.career.day } : n])
+      );
+      return {
+        ...prev,
+        club: { ...prev.club, tier, role },
+        career: {
+          ...withTransferEntry(prev.career, { type: 'renewal', date: prev.career.gameDate, from: prev.club?.name || null, fromLogo: prev.club?.logo || null, to: prev.club?.name || null, toLogo: prev.club?.logo || null, wage, years, role, releaseClause: clause ?? null }),
+          weeklyWage: wage,
+          contract: { yearsTotal: years, signedDay: prev.career.day, role, releaseClause: clause ?? null },
+          contractTalksOpened: false,
+          contractFailedNegotiations: 0,
+          negotiations,
+          messages: prev.career.messages
+            .map((m) => (deal.messageId && m.id === deal.messageId ? { ...m, resolved: true, read: true, outcome: 'accepted' } : m))
+            .concat(confirm)
+        }
+      };
+    });
+  }, []);
+
   const declineOffer = useCallback((messageId) => {
     setPlayer((prev) => {
       if (!prev) return prev;
@@ -526,8 +561,8 @@ export function GameProvider({ children, username }) {
             ...prev.career.messages.map((m) => (m.id === messageId ? { ...m, resolved: true, read: true, outcome: 'declined' } : m)),
             ...(forcedFreeAgent ? [{
               id: `msg_${Date.now()}`, type: 'club', date: prev.career.gameDate, from: prev.club.name,
-              subject: 'Released',
-              body: `After ${failedCount} failed rounds of contract talks, ${prev.club.name} have decided to let you go. You're now a free agent.`,
+              subject: "Klubdan bo'shatildingiz",
+              body: `${failedCount} marta muvaffaqiyatsiz shartnoma muzokarasidan keyin ${prev.club.name} sizni qo'yib yuborishga qaror qildi. Endi erkin agentsiz.`,
               read: false, resolved: true
             }] : [])
           ]
@@ -589,7 +624,7 @@ export function GameProvider({ children, username }) {
     worldDate, hasUnwatchedResult, acknowledgeResult,
     pendingWorldMatch, refreshPendingWorldMatch,
     markMessageRead, requestNewContract, acceptContractOffer, acceptTransferOffer, declineOffer,
-    saveNegotiation, completeNegotiatedTransfer,
+    saveNegotiation, completeNegotiatedTransfer, completeContractRenewal,
     purchasePerk
   };
 

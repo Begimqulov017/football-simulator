@@ -210,7 +210,7 @@ function HubTab({ rows, player, career, onOpen }) {
 }
 
 function TalksTab({ career, currentClubId, onOpenTeam }) {
-  const entries = Object.values(career.negotiations || {}).filter((n) => n.teamId !== currentClubId).sort((a, b) => (b.closedDay ?? 1e9) - (a.closedDay ?? 1e9) || b.startedDay - a.startedDay);
+  const entries = Object.values(career.negotiations || {}).filter((n) => n.teamId !== currentClubId && !String(n.teamId).startsWith('renew_')).sort((a, b) => (b.closedDay ?? 1e9) - (a.closedDay ?? 1e9) || b.startedDay - a.startedDay);
   const live = entries.filter((n) => LIVE_STAGES.includes(n.stage));
   const past = entries.filter((n) => !LIVE_STAGES.includes(n.stage));
 
@@ -424,7 +424,7 @@ export default function TransfersPage() {
 
   const log = career.transferLog || [];
   const totalVolume = log.reduce((s, t) => s + t.fee, 0);
-  const liveCount = Object.values(negotiations || {}).filter((n) => LIVE_STAGES.includes(n.stage) && n.teamId !== player.club?.id).length;
+  const liveCount = Object.values(negotiations || {}).filter((n) => LIVE_STAGES.includes(n.stage) && n.teamId !== player.club?.id && !String(n.teamId).startsWith('renew_')).length;
   const persisted = activeId ? (negotiations || {})[activeId] : null;
   const negotiation = persisted && LIVE_STAGES.includes(persisted.stage) ? persisted : fresh;
 

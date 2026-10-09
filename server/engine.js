@@ -13,6 +13,7 @@
 const { INITIAL_TEAMS } = require('./gamedata/teamsData');
 const { LEAGUES, NATIONALITIES } = require('./gamedata/leaguesData');
 const { nationalityFor } = require('./gamedata/nationsData');
+const { lineupStrength } = require('./squadRoles');
 
 // 4-BAND: bir odam ishtirok etadigan o'yin uchun DETERMINISTIK seed.
 // Shu leaguega/mavsumga/turga/ikki klubga tayanadi, shuning uchun bir xil
@@ -95,8 +96,7 @@ function initStandings(teamIds) {
 // static data the game shipped with.
 function teamStrength(squad) {
   if (!squad?.length) return 70;
-  const top = [...squad].sort((a, b) => (b.ovr || 0) - (a.ovr || 0)).slice(0, 11);
-  return top.reduce((s, p) => s + (p.ovr || 68), 0) / top.length;
+  return lineupStrength(squad, 70); // pozitsiyalar bo'yicha tuzilgan asosiy 11lik o'rtachasi
 }
 
 function rollGoals(lambda) {
@@ -124,6 +124,9 @@ function simulateHumanPlayerMatch(player, opponentSquad) {
   if (tier === 'bench') {
     if (Math.random() > 0.55) return { played: false };
     minutes = randInt(15, 45);
+  } else if (tier === 'reserve') {
+    if (Math.random() > 0.15) return { played: false };
+    minutes = randInt(5, 25);
   }
   const oppStrength = teamStrength(opponentSquad);
   const formValue = { Poor: -0.6, Average: 0, Good: 0.5, Excellent: 1.0 }[player.career?.form] ?? 0;

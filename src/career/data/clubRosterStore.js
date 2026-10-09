@@ -21,6 +21,8 @@
 // touching any of the call sites below.
 // ---------------------------------------------------------------------------
 
+import { roleOf } from '../../utils/squadRoles';
+
 const STORE_KEY = 'fpcs_global_club_rosters_v1';
 
 function loadRosters() {
@@ -89,9 +91,10 @@ export function getMergedSquad(team) {
 // whether they start out on the bench - then persist them into the shared
 // roster for that club so anyone at (or later joining) this club sees them.
 export function joinClubRoster(team, playerEntry) {
-  const before = getMergedSquad(team);
-  const betterCount = before.filter((p) => (p.ovr || 0) > (playerEntry.ovr || 0)).length;
-  const tier = betterCount < 11 ? 'starter' : 'bench';
+  // Rol o'yin tomonidan hisoblanadi: o'yinchi O'Z POZITSIYASIDAGI eng yaxshilar bilan solishtiriladi
+  // (asosiy 11lik / bench / reserve). Qo'lda belgilangan 11lik hisobga olinmaydi.
+  const before = getMergedSquad(team).filter((p) => p.id !== playerEntry.id);
+  const tier = roleOf([...before, playerEntry], playerEntry.id);
   addPlayerToClubRoster(team.id, { ...playerEntry, tier });
   return tier;
 }
@@ -99,9 +102,8 @@ export function joinClubRoster(team, playerEntry) {
 // Read-only preview of the tier a player *would* get at a club right now,
 // without writing anything - used by the Start Page to show a live "you'll
 // start as..." hint while the person is still spinning.
-export function previewClubTier(team, ovr) {
+export function previewClubTier(team, ovr, pos = 'CM') {
   if (!team) return null;
   const before = getMergedSquad(team);
-  const betterCount = before.filter((p) => (p.ovr || 0) > (ovr || 0)).length;
-  return betterCount < 11 ? 'starter' : 'bench';
+  return roleOf([...before, { id: '__preview__', pos, ovr }], '__preview__');
 }
