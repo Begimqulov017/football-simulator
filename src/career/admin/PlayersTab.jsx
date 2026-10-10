@@ -3,6 +3,7 @@ import RatingBadge from '../../components/match/RatingBadge';
 import { fetchAdminPlayers } from '../utils/careerApi';
 import { useFetch, Panel, Loading, ErrorBox, Empty, Stat, inputCls } from './adminUi';
 import { displayRating } from '../utils/statCalc';
+import { TeamBadge } from '../../components/TeamLogo';
 
 const SORTS = {
   goals: { label: 'Gollar', get: (p) => p.goals },
@@ -22,7 +23,7 @@ function TransferHistory({ list }) {
         <li key={i} className="flex items-center gap-3 text-xs bg-surface rounded-control border border-surface-line px-3 py-2">
           <span className={`shrink-0 rounded-full px-2 py-0.5 font-extrabold text-[10px] ${TYPE_TONE[t.type] || TYPE_TONE.renewal}`}>{TYPE_LABEL[t.type] || t.type}</span>
           <span className="flex-1 min-w-0 truncate font-semibold text-ink">
-            {t.from && t.from !== t.to ? <>{t.fromLogo} {t.from} <span className="text-ink-subtle">→</span> </> : null}{t.toLogo} {t.to}
+            {t.from && t.from !== t.to ? <><TeamBadge value={t.fromLogo} size={16} /> {t.from} <span className="text-ink-subtle">→</span> </> : null}<TeamBadge value={t.toLogo} size={16} /> {t.to}
           </span>
           <span className="tabular-nums text-ink-muted shrink-0">${(t.wage || 0).toLocaleString()}/h</span>
           <span className="tabular-nums text-ink-subtle shrink-0">{t.date}</span>
@@ -92,7 +93,7 @@ export default function PlayersTab() {
                         <div className="font-bold text-ink">{p.name} <span className="text-ink-subtle font-semibold text-xs">{p.position}</span></div>
                         <div className="text-[11px] text-ink-muted">@{p.username}{p.isAdmin ? ' · admin' : ''}</div>
                       </td>
-                      <td className="px-2 whitespace-nowrap">{p.club?.logo} {p.club?.name || <span className="text-ink-muted">Erkin agent</span>}</td>
+                      <td className="px-2 whitespace-nowrap"><TeamBadge value={p.club?.logo} size={16} /> {p.club?.name || <span className="text-ink-muted">Erkin agent</span>}</td>
                       <td className="px-2 text-center tabular-nums">{displayRating(p.overall)}<span className="text-ink-subtle">/{p.potential}</span></td>
                       <td className="px-2 text-center tabular-nums">{p.appearances}</td>
                       <td className="px-2 text-center tabular-nums font-extrabold">{p.goals}</td>

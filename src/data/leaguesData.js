@@ -20,7 +20,7 @@ const LEAGUES = [
     id: 'premier_league',
     name: 'Premier League',
     country: 'England',
-    flag: '🏴',
+    flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
     teamIds: [
       'manchester_city', 'liverpool', 'arsenal', 'man_utd', 'aston_villa',
       'bournemouth', 'sunderland', 'brighton', 'brentford', 'chelsea',
@@ -193,7 +193,7 @@ function getLeagueByTeamId(teamId) {
 const NATIONALITIES = [
   { name: 'Uzbekistan', flag: '🇺🇿' },
   { name: 'Spain', flag: '🇪🇸' },
-  { name: 'England', flag: '🏴' },
+  { name: 'England', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿' },
   { name: 'Germany', flag: '🇩🇪' },
   { name: 'France', flag: '🇫🇷' },
   { name: 'Italy', flag: '🇮🇹' },

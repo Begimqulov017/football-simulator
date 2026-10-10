@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { API_BASE } from '../career/utils/careerApi';
 import { INITIAL_TEAMS } from '../data/teamsData';
+import { STATIC_LOGO_IDS } from '../data/logoManifest';
+
+// Logotiplar frontend bilan birga (public/logos/<klub_id>.png) keladi: backend uxlab yotgan yoki eski bo'lsa ham ko'rinadi.
+const STATIC_BASE = `${process.env.PUBLIC_URL || ''}/logos`;
 
 // Klub logotipi: serverda server/gamedata/logoData/<id>.png bo'lsa - haqiqiy rasm, bo'lmasa avvalgi emoji.
 // Mavjud logotiplar ro'yxati bir marta yuklanadi va hamma komponentlar orasida bo'lishiladi.
@@ -24,6 +28,8 @@ function loadLogoList() {
 }
 
 export function logoUrlFor(id) {
+  const key = id ? String(id).toLowerCase() : '';
+  if (key && STATIC_LOGO_IDS.has(key)) return `${STATIC_BASE}/${key}.png`;
   const ext = logoFiles && id ? logoFiles[String(id).toLowerCase()] : null;
   return ext ? `${API_BASE}/api/logo/${String(id).toLowerCase()}.${ext}` : null;
 }
@@ -56,14 +62,29 @@ export default function TeamLogo({ id, logo, size = 24, className = '', style, t
   return <span className={className} style={style} title={title}>{logo || '\u26BD'}</span>;
 }
 
-// Emoji -> klub id (faqat bir klubga tegishli emojilar; takrorlanganlari noaniq, shuning uchun o'tkazib yuboriladi).
-const EMOJI_TO_ID = (() => {
+// Emoji-logo -> klub id. 1) emoji oxiridagi ko'rinmas identifikator (teamsData.js qo'shadi) - aniq;
+// 2) eski saqlangan ma'lumotlar uchun: faqat bir klubga tegishli emojilar.
+const ID_RE = /\u2060([\u200B\u200C]{10})$/;
+const UNIQUE_EMOJI = (() => {
+  const strip = (l) => String(l || '').replace(/\u2060[\u200B\u200C]{10}$/, '');
   const count = new Map();
-  INITIAL_TEAMS.forEach((t) => count.set(t.logo, (count.get(t.logo) || 0) + 1));
+  INITIAL_TEAMS.forEach((t) => count.set(strip(t.logo), (count.get(strip(t.logo)) || 0) + 1));
   const m = new Map();
-  INITIAL_TEAMS.forEach((t) => { if (count.get(t.logo) === 1) m.set(t.logo, t.id); });
+  INITIAL_TEAMS.forEach((t) => { if (count.get(strip(t.logo)) === 1) m.set(strip(t.logo), t.id); });
   return m;
 })();
+const EMOJI_TO_ID = {
+  get(value) {
+    const str = String(value || '');
+    const m = str.match(ID_RE);
+    if (m) {
+      let idx = 0;
+      m[1].split('').forEach((ch) => { idx = (idx << 1) | (ch === '\u200C' ? 1 : 0); });
+      return INITIAL_TEAMS[idx] ? INITIAL_TEAMS[idx].id : undefined;
+    }
+    return UNIQUE_EMOJI.get(str);
+  },
+};
 
 // Hamma joyda ishlatish uchun: `value` klub id'si yoki emoji-logo satri bo'lishi mumkin.
 // Serverda haqiqiy logotip bo'lsa - rasm, bo'lmasa - o'sha emoji.

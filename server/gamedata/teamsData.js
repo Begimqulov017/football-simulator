@@ -5150,4 +5150,15 @@ const INITIAL_TEAMS = [
     ]
   },
 ];
+
+// Har bir jamoa emoji-logosiga KO'RINMAS identifikator (jamoa tartib raqami) qo'shiladi.
+// Sabab: ko'p jamoalarda emoji bir xil, shuning uchun emoji matnidan jamoani aniqlab bo'lmasdi.
+// Endi emoji-logo qaysi joyga uzatilmasin, TeamBadge undan jamoani topib, haqiqiy logotipni ko'rsatadi.
+INITIAL_TEAMS.forEach((t, i) => {
+  if (typeof t.logo === 'string' && t.logo.indexOf('\u2060') === -1) {
+    let bits = '';
+    for (let b = 9; b >= 0; b -= 1) bits += (i >> b) & 1 ? '\u200C' : '\u200B';
+    t.logo = t.logo + '\u2060' + bits;
+  }
+});
 module.exports = { INITIAL_TEAMS };

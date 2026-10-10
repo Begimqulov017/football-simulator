@@ -7,6 +7,7 @@ import { fetchAwards, fetchAwardsPreview, fetchGlobalAwards, fetchGlobalAwardsLi
 import { useFetch, Loading, ErrorBox } from '../admin/adminUi';
 import AwardsCeremony from '../awards/AwardsCeremony';
 import { Button } from '../../components/ui';
+import { TeamBadge } from '../../components/TeamLogo';
 
 export const AWARDS_SEEN_KEY = (playerId) => `fs_awards_seen_${playerId}`;
 
@@ -47,7 +48,7 @@ function BallonDor({ bd, weights, myId }) {
         <div className="text-4xl">🏆</div>
         <div className="flex-1 min-w-[200px]">
           <div className="text-xl font-black">{w.name}{w.id === myId ? ' (siz!)' : w.username ? ` (@${w.username})` : ''}</div>
-          <div className="text-sm text-ink-muted">{w.logo} {w.clubName} · {w.leagueFlag} {w.leagueName} · {w.pos} · OVR {w.ovr}</div>
+          <div className="text-sm text-ink-muted"><TeamBadge value={w.logo} size={16} /> {w.clubName} · {w.leagueFlag} {w.leagueName} · {w.pos} · OVR {w.ovr}</div>
           <div className="text-xs text-ink-muted">Mavsumda {w.goals} gol</div>
         </div>
         <div className="text-right">
@@ -80,7 +81,7 @@ function BallonDor({ bd, weights, myId }) {
               <li key={n.id} className="py-1.5 flex items-center gap-2 text-sm">
                 <span className="w-5 text-ink-muted">{i + 2}</span>
                 <span className="font-bold">{n.name}{n.id === myId ? ' (siz)' : ''}</span>
-                <span className="text-xs text-ink-muted">{n.logo} {n.clubName} · {n.leagueFlag}</span>
+                <span className="text-xs text-ink-muted"><TeamBadge value={n.logo} size={16} /> {n.clubName} · {n.leagueFlag}</span>
                 <span className="ml-auto font-extrabold">{n.score}</span>
               </li>
             ))}
@@ -104,7 +105,7 @@ function GoldenBoot({ list, myId }) {
             <tr key={r.id} className={`border-t border-surface-line ${r.id === myId ? 'bg-amber-50 font-bold' : ''} ${r.rank === 1 ? 'font-extrabold' : ''}`}>
               <td className="py-1.5 pr-2">{r.rank === 1 ? '👟' : r.rank}</td>
               <td className="pr-2">{r.name}{r.id === myId ? ' (siz)' : ''}</td>
-              <td className="pr-2 text-xs text-ink-muted">{r.logo} {r.clubName} · {r.leagueFlag} {r.leagueName}</td>
+              <td className="pr-2 text-xs text-ink-muted"><TeamBadge value={r.logo} size={16} /> {r.clubName} · {r.leagueFlag} {r.leagueName}</td>
               <td className="text-right">{r.goals}</td>
               <td className="text-right"><Pill tone={r.coef >= 2 ? 'top5' : 'other'}>{r.coef.toFixed(1)}x</Pill></td>
               <td className="text-right font-extrabold">{r.weighted}</td>
@@ -128,7 +129,7 @@ function TeamOfSeason({ team, myId }) {
           <li key={p.id} className={`py-1.5 flex items-center gap-2 ${p.id === myId ? 'font-extrabold text-amber-800' : ''}`}>
             <span className="w-8 text-xs text-ink-muted">{p.pos}</span>
             <span>{p.name}{p.id === myId ? ' ★' : ''}</span>
-            <span className="text-xs text-ink-muted">{p.logo} {p.clubName}</span>
+            <span className="text-xs text-ink-muted"><TeamBadge value={p.logo} size={16} /> {p.clubName}</span>
             <span className="ml-auto text-xs">{p.leagueFlag}</span>
           </li>
         ))}

@@ -6,6 +6,7 @@ import {
 } from '../utils/careerApi';
 import { Button, Badge } from '../../components/ui';
 import { useFetch, Panel, Loading, ErrorBox, Empty, Stat, inputCls } from './adminUi';
+import { TeamBadge } from '../../components/TeamLogo';
 
 const ROLE_LABEL = { user: 'Foydalanuvchi', moderator: 'Moderator', admin: 'Admin' };
 
@@ -148,7 +149,7 @@ export default function UsersTab({ currentUser }) {
                             {!u.suspended && !u.muted && !u.canAccessPro && <Badge>Oddiy</Badge>}
                           </div>
                         </td>
-                        <td className="text-xs">{u.hasCareer ? <><span className="mr-1">{u.club?.logo}</span><b>{u.name}</b> <span className="text-ink-muted">· {u.position} · OVR {u.overall}</span></> : <span className="text-ink-muted">Karyera yo'q</span>}</td>
+                        <td className="text-xs">{u.hasCareer ? <><span className="mr-1"><TeamBadge value={u.club?.logo} size={16} /></span><b>{u.name}</b> <span className="text-ink-muted">· {u.position} · OVR {u.overall}</span></> : <span className="text-ink-muted">Karyera yo'q</span>}</td>
                         <td className="text-center tabular-nums text-xs">{u.hasCareer ? `${u.appearances}/${u.goals}/${u.assists}` : '—'}</td>
                         <td className="px-4">
                           <div className="flex flex-wrap justify-end gap-1.5">

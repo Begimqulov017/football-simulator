@@ -4,6 +4,7 @@ import AppShell from '../components/AppShell';
 import { useGame } from '../context/GameContext';
 import { buildMatchTimeline } from '../utils/season';
 import { isMvpPerformance } from '../utils/statCalc';
+import { TeamBadge } from '../../components/TeamLogo';
 
 const SPEEDS = [
   { id: 1, label: '1x', ms: 260 },
@@ -99,14 +100,14 @@ export default function LiveResultPage() {
       <div className="card" style={{ textAlign: 'center', marginBottom: 18 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 24 }}>
           <div style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{ fontSize: 40 }}>{homeLogo}</div>
+            <div style={{ fontSize: 40 }}><TeamBadge value={homeLogo} size={48} /></div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, marginTop: 4 }}>{homeName}</div>
           </div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 44, minWidth: 120 }}>
             {homeGoals} - {awayGoals}
           </div>
           <div style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{ fontSize: 40 }}>{awayLogo}</div>
+            <div style={{ fontSize: 40 }}><TeamBadge value={awayLogo} size={48} /></div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, marginTop: 4 }}>{awayName}</div>
           </div>
         </div>

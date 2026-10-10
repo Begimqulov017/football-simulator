@@ -17,7 +17,7 @@
 const CORE_NATIONS = [
   // --- UEFA ---
   { name: 'Spain', flag: '🇪🇸', confederation: 'UEFA' },
-  { name: 'England', flag: '🏴', confederation: 'UEFA' },
+  { name: 'England', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', confederation: 'UEFA' },
   { name: 'Germany', flag: '🇩🇪', confederation: 'UEFA' },
   { name: 'France', flag: '🇫🇷', confederation: 'UEFA' },
   { name: 'Italy', flag: '🇮🇹', confederation: 'UEFA' },
@@ -36,8 +36,8 @@ const CORE_NATIONS = [
   { name: 'Norway', flag: '🇳🇴', confederation: 'UEFA' },
   { name: 'Austria', flag: '🇦🇹', confederation: 'UEFA' },
   { name: 'Czechia', flag: '🇨🇿', confederation: 'UEFA' },
-  { name: 'Scotland', flag: '🏴', confederation: 'UEFA' },
-  { name: 'Wales', flag: '🏴', confederation: 'UEFA' },
+  { name: 'Scotland', flag: '🏴󠁧󠁢󠁳󠁣󠁴󠁿', confederation: 'UEFA' },
+  { name: 'Wales', flag: '🏴󠁧󠁢󠁷󠁬󠁳󠁿', confederation: 'UEFA' },
   { name: 'Greece', flag: '🇬🇷', confederation: 'UEFA' },
   { name: 'Romania', flag: '🇷🇴', confederation: 'UEFA' },
   { name: 'Hungary', flag: '🇭🇺', confederation: 'UEFA' },

@@ -1,6 +1,7 @@
 import React from 'react';
 import AppShell from '../components/AppShell';
 import { useGame } from '../context/GameContext';
+import { TeamBadge } from '../../components/TeamLogo';
 
 export default function AllStatsPage() {
   const { player } = useGame();
@@ -131,7 +132,7 @@ export default function AllStatsPage() {
           {history.map((h) => (
             <div key={h.id} className="list-row">
               <span>
-                {h.opponentLogo} {h.isHome ? 'vs' : '@'} {h.opponent}
+                <TeamBadge value={h.opponentLogo} size={16} /> {h.isHome ? 'vs' : '@'} {h.opponent}
                 <span className="sub" style={{ marginLeft: 8 }}>{h.date}</span>
               </span>
               <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>

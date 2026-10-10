@@ -6,6 +6,7 @@ import {
   resolveTie, finalizeKnockoutRoundIfComplete, finalizeCLPlayoffIfComplete,
 } from '../utils/tournamentEngine';
 import LiveMatch from './LiveMatch';
+import { TeamBadge } from './TeamLogo';
 
 const AUTO_PLAY_DELAY = 900;
 
@@ -30,7 +31,7 @@ function StandingsTable({ standings, teamsById, advanceCount }) {
           return (
             <tr key={s.id} className={`${zebra} ${qualified ? 'standings-qualified' : ''}`}>
               <td>{idx + 1}</td>
-              <td className="standings-team">{teamsById[s.id]?.logo} {teamsById[s.id]?.name}</td>
+              <td className="standings-team"><TeamBadge value={teamsById[s.id]?.logo} size={16} /> {teamsById[s.id]?.name}</td>
               <td>{s.played}</td><td>{s.won}</td><td>{s.draw}</td><td>{s.lost}</td>
               <td>{s.gf}</td><td>{s.ga}</td><td>{s.gd}</td><td><b>{s.points}</b></td>
             </tr>
@@ -83,7 +84,7 @@ function FixtureList({ fixtures, teamsById, onPlay }) {
       {shown.map((f, i) => (
         <div key={i} className="fixture-block">
           <div className="fixture-row">
-            <span>{teamsById[f.home]?.logo} {teamsById[f.home]?.name}</span>
+            <span><TeamBadge value={teamsById[f.home]?.logo} size={16} /> {teamsById[f.home]?.name}</span>
             {f.scoreHome != null ? (
               <span className="fixture-score">{f.scoreHome} - {f.scoreAway}</span>
             ) : onPlay ? (
@@ -91,7 +92,7 @@ function FixtureList({ fixtures, teamsById, onPlay }) {
             ) : (
               <span className="fixture-score">vs</span>
             )}
-            <span>{teamsById[f.away]?.logo} {teamsById[f.away]?.name}</span>
+            <span><TeamBadge value={teamsById[f.away]?.logo} size={16} /> {teamsById[f.away]?.name}</span>
           </div>
           <ScorerLine events={f.events} />
         </div>
@@ -106,7 +107,7 @@ function KnockoutFixture({ fixture, teamsById, twoLegged, onPlayLeg }) {
   const awayT = fixture.away ? teamsById[fixture.away] : null;
 
   if (!awayT) {
-    return <div className="ko-fixture ko-bye">{homeT?.logo} {homeT?.name} — bye (avtomatik o'tdi)</div>;
+    return <div className="ko-fixture ko-bye"><TeamBadge value={homeT?.logo} size={16} /> {homeT?.name} — bye (avtomatik o'tdi)</div>;
   }
 
   const needsLeg1 = !fixture.winnerId && !fixture.leg1;
@@ -117,7 +118,7 @@ function KnockoutFixture({ fixture, teamsById, twoLegged, onPlayLeg }) {
       <div className="ko-fixture-main">
         <div className="ko-team">
           {fixture.winnerId === fixture.home && <span className="ko-winner-mark">🏆</span>}
-          {homeT?.logo} {homeT?.name}
+          <TeamBadge value={homeT?.logo} size={16} /> {homeT?.name}
         </div>
         <div className="ko-score">
           {fixture.leg1
@@ -128,7 +129,7 @@ function KnockoutFixture({ fixture, teamsById, twoLegged, onPlayLeg }) {
         </div>
         <div className="ko-team">
           {fixture.winnerId === fixture.away && <span className="ko-winner-mark">🏆</span>}
-          {awayT?.logo} {awayT?.name}
+          <TeamBadge value={awayT?.logo} size={16} /> {awayT?.name}
         </div>
       </div>
       {fixture.leg1 && <ScorerLine events={fixture.leg1.events} />}
@@ -552,7 +553,7 @@ export default function TournamentView({ tournament, teams, onUpdate, onBack, on
 
       {tournament.champion && (
         <div className="motm-banner" style={{ marginBottom: '14px' }}>
-          🏆 Chempion: <b>{teamsById[tournament.champion]?.logo} {teamsById[tournament.champion]?.name}</b>
+          🏆 Chempion: <b><TeamBadge value={teamsById[tournament.champion]?.logo} size={16} /> {teamsById[tournament.champion]?.name}</b>
         </div>
       )}
 

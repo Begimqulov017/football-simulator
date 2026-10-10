@@ -4,6 +4,7 @@ import { useGame } from '../context/GameContext';
 import { getLeagueTable } from '../utils/season';
 import { INITIAL_TEAMS } from '../../data/teamsData';
 import TeamLogo from '../../components/TeamLogo';
+import { TeamBadge } from '../../components/TeamLogo';
 
 export default function LeaguePage() {
   const { player } = useGame();
@@ -14,7 +15,7 @@ export default function LeaguePage() {
   const log = player.career.roundResultsLog || [];
   const selected = roundIdx === null ? log[log.length - 1] : log[roundIdx];
   const teamName = (id) => INITIAL_TEAMS.find((t) => t.id === id)?.name || id;
-  const teamLogo = (id) => INITIAL_TEAMS.find((t) => t.id === id)?.logo || '⚽';
+  const teamLogo = (id) => <TeamBadge id={id} value={INITIAL_TEAMS.find((t) => t.id === id)?.logo || '⚽'} size={16} />;
 
   return (
     <AppShell>

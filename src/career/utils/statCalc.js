@@ -148,6 +148,21 @@ export function generateSubStatsForMain(mainKey, targetValue, rng = Math.random)
   return subStats;
 }
 
+// Admin reytingni o'zgartirganda: barcha sub-statlar (pace, shot va h.k.) shunday suriladiki,
+// o'yinchining hisoblangan OVR'i aynan `target` bo'lsin. Shunda o'yin va trening yangi statlarga tayanadi.
+export function rescaleStatsToOverall(position, subStats, target) {
+  if (!subStats || !Object.keys(subStats).length || !Number.isFinite(Number(target))) return null;
+  const isGk = position === 'GK';
+  const evalOvr = (s) => (isGk ? calcGoalkeeperOVR(s, { precise: true }) : calcOVR(position, calcMainStats(s, { precise: true }), { precise: true }));
+  let s = { ...subStats };
+  for (let i = 0; i < 14; i += 1) {
+    const diff = Number(target) - evalOvr(s);
+    if (Math.abs(diff) < 0.05) break;
+    Object.keys(s).forEach((k) => { s[k] = clampPrecise((s[k] || 0) + diff); });
+  }
+  return { subStats: s, mainStats: isGk ? s : calcMainStats(s, { precise: true }), overall: Number(target) };
+}
+
 export function generateGkSubStats(targetValue, rng = Math.random) {
   const subStats = {};
   Object.keys(GK_SUB_STAT_WEIGHTS).forEach((key) => {

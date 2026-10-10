@@ -7,6 +7,7 @@ import { fetchNationSquad } from '../utils/careerApi';
 import { flagOfNation } from '../international/calendar';
 import { buildHonours, yearOf } from '../utils/honours';
 import TeamLogo from '../../components/TeamLogo';
+import { TeamBadge } from '../../components/TeamLogo';
 
 // ---------------------------------------------------------------------------
 // PHASE 3 - PROFILE PAGE
@@ -715,7 +716,7 @@ export default function ProfilePage() {
                   return (
                     <div key={m.id} className="flex items-center gap-3 rounded-control border border-surface-line px-3 py-2 text-sm">
                       <span className={`flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-black text-white ${res === 'W' ? 'bg-brand' : res === 'L' ? 'bg-rose-500' : 'bg-slate-400'}`}>{res}</span>
-                      <span className="min-w-0 flex-1 truncate font-semibold text-ink">{m.isHome ? 'vs' : '@'} {m.opponentLogo} {m.opponent}</span>
+                      <span className="min-w-0 flex-1 truncate font-semibold text-ink">{m.isHome ? 'vs' : '@'} <TeamBadge value={m.opponentLogo} size={16} /> {m.opponent}</span>
                       <span className="font-black tabular-nums text-ink-soft">{m.golFor}-{m.golAgainst}</span>
                       <span className="w-10 text-right text-xs font-black tabular-nums text-amber-600">{m.rating != null ? Number(m.rating).toFixed(1) : '—'}</span>
                     </div>

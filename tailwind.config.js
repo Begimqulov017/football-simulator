@@ -42,7 +42,7 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'Montserrat', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+        sans: ['Twemoji Country Flags', 'Inter', 'Montserrat', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
       },
       borderRadius: {
         card: '16px',

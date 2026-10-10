@@ -3,6 +3,7 @@ import AppShell from '../components/AppShell';
 import { fetchAllCareerUsers, checkBackendVersion, REQUIRED_SERVER_VERSION } from '../utils/careerApi';
 import Icon from '../../components/Icon';
 import { displayRating } from '../utils/statCalc';
+import { TeamBadge } from '../../components/TeamLogo';
 
 function formatMoney(n) {
   if (n == null) return '-';
@@ -71,7 +72,7 @@ export default function UsersPage({ currentUser }) {
                   border: '1px solid var(--glass-border)', display: 'flex', alignItems: 'center',
                   justifyContent: 'center', fontSize: 22,
                 }}>
-                  {u.club?.logo || '⚽'}
+                  <TeamBadge value={u.club?.logo || '⚽'} size={40} />
                 </div>
                 <div>
                   <div className="card-title" style={{ marginBottom: 2 }}>

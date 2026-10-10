@@ -10,6 +10,7 @@ import {
   marketValue, remainingContractYears, startNegotiation, transferFee, turnOf, formatTerms,
 } from '../transfers/transferUtils';
 import TeamLogo from '../../components/TeamLogo';
+import { TeamBadge } from '../../components/TeamLogo';
 
 const LIVE_STAGES = ['offer', 'counter', 'final', 'accepted'];
 const PAGE_SIZE = 24;
@@ -303,7 +304,7 @@ function HistoryTab({ career }) {
                       <div className="tx-move">
                         <span>{t.fromLogo || '🆓'} {t.from || 'Free agent'}</span>
                         <span className="arrow">→</span>
-                        <span>{t.toLogo} {t.to}</span>
+                        <span><TeamBadge value={t.toLogo} size={16} /> {t.to}</span>
                       </div>
                     </td>
                     <td><span className={`tx-pill ${meta.tone}`}>{meta.label}</span></td>
@@ -345,7 +346,7 @@ function WorldTab({ log }) {
               <span>
                 {t.playerName} {t.isUser && <span className="tx-pill green" style={{ marginLeft: 4 }}>You</span>} <span className="sub">({t.playerPos}, {t.ovr} OVR)</span>
                 <br />
-                <span className="sub">{t.fromLogo} {t.fromClub} → {t.toLogo} {t.toClub}</span>
+                <span className="sub"><TeamBadge value={t.fromLogo} size={16} /> {t.fromClub} → <TeamBadge value={t.toLogo} size={16} /> {t.toClub}</span>
               </span>
               <span className="badge badge-gold">{fmtFee(t.fee)}</span>
             </div>

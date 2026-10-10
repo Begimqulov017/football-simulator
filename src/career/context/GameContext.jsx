@@ -5,7 +5,7 @@ import { advanceOneDay, addDays, applyWorldState, alignToWorld, computeContractO
 import { LEAGUES } from '../../data/leaguesData';
 import { saveCareerToServer, loadCareerFromServer, ackMatchResult, fetchLeagueState } from '../utils/careerApi';
 import { mergeServerHonours } from '../utils/honoursSync';
-import { displayRating } from '../utils/statCalc';
+import { displayRating, rescaleStatsToOverall } from '../utils/statCalc';
 import { appendNews, buildTransferNews, buildAdminNews } from '../utils/newsGenerator';
 
 const GameContext = createContext(null);
@@ -47,7 +47,20 @@ function persistLocalSave(username, player) {
 // o'zgartirgan maydonlar almashadi).
 function applyAdminPatch(prev, patch) {
   if (!prev || !patch) return prev;
-  return { ...prev, ...(patch.player || {}), career: { ...prev.career, ...(patch.career || {}) } };
+  const pp = patch.player || {};
+  const next = { ...prev, ...pp, career: { ...prev.career, ...(patch.career || {}) } };
+  // Admin faqat OVR bergan bo'lsa: pace/shot/pas... ham shunga moslab o'zgaradi (trening ham qaytarib yubormaydi).
+  if (pp.overall != null && pp.subStats === undefined) {
+    const r = rescaleStatsToOverall(next.position, prev.subStats, pp.overall);
+    if (r) {
+      next.adminBase = prev.adminBase || { overall: prev.overall, potential: prev.potential, subStats: prev.subStats, mainStats: prev.mainStats };
+      next.subStats = r.subStats;
+      next.mainStats = r.mainStats;
+      next.overall = r.overall;
+      if ((next.potential || 0) < r.overall) next.potential = r.overall;
+    }
+  }
+  return next;
 }
 // Majburiy yangiliklar feed'ga bir marta (id bo'yicha) qo'shiladi
 function mergeForcedNews(prev, forcedNews) {

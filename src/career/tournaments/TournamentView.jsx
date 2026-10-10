@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { NATIONALITIES } from '../../data/leaguesData';
 import SegmentedTabs from '../../components/match/SegmentedTabs';
+import { TeamBadge } from '../../components/TeamLogo';
 
 // Chempionlar Ligasi / Yevropa Ligasi (mode="club") va Jahon Chempionati / Yevro va h.k.
 // (mode="nation") uchun umumiy ko'rinish: guruhlar, pley-off setkasi, natijalar, top butsi.
@@ -44,7 +45,7 @@ function GroupCard({ group, ent, mode }) {
             const e = ent(mode === 'club' ? r.id : r.country);
             return (
               <tr key={mode === 'club' ? r.id : r.country} className={i < 2 ? 'bg-brand-tint/60' : ''}>
-                <td className="px-3 py-1.5 font-semibold text-ink truncate"><span className="mr-1.5">{e.badge}</span>{e.name}</td>
+                <td className="px-3 py-1.5 font-semibold text-ink truncate"><span className="mr-1.5"><TeamBadge value={e.badge} size={16} /></span>{e.name}</td>
                 <td className="text-center tabular-nums text-ink-soft">{r.played}</td>
                 <td className="text-center tabular-nums text-ink-soft">{r.gf}-{r.ga}</td>
                 <td className="text-center font-extrabold tabular-nums text-ink">{r.pts}</td>
@@ -68,7 +69,7 @@ function Bracket({ knockout, ent }) {
             const h = ent(t.home); const a = ent(t.away);
             const row = (side, e, g) => (
               <div className={`flex items-center justify-between gap-2 px-2.5 py-1.5 ${t.winner === side ? 'font-extrabold text-ink' : 'text-ink-muted'}`}>
-                <span className="truncate text-xs"><span className="mr-1.5">{e.badge}</span>{e.name}</span>
+                <span className="truncate text-xs"><span className="mr-1.5"><TeamBadge value={e.badge} size={16} /></span>{e.name}</span>
                 <span className="text-xs tabular-nums">{g}{t.penalties && t.winner === side ? ' ★' : ''}</span>
               </div>
             );
@@ -96,9 +97,9 @@ function Results({ results, ent }) {
         return (
           <div key={i} className="flex items-center gap-2 bg-surface rounded-control border border-surface-line px-3 py-2 text-xs">
             <span className="w-24 shrink-0 text-[10px] font-bold text-ink-muted truncate">{m.stage}</span>
-            <span className="flex-1 text-right truncate font-semibold">{h.name} {h.badge}</span>
+            <span className="flex-1 text-right truncate font-semibold">{h.name} <TeamBadge value={h.badge} size={16} /></span>
             <span className="w-14 text-center font-black tabular-nums text-ink">{m.golA}-{m.golB}</span>
-            <span className="flex-1 truncate font-semibold">{a.badge} {a.name}</span>
+            <span className="flex-1 truncate font-semibold"><TeamBadge value={a.badge} size={16} /> {a.name}</span>
           </div>
         );
       })}

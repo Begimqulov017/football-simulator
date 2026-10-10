@@ -5,6 +5,7 @@ import { useGame } from '../context/GameContext';
 import { getPlayerFixtures } from '../utils/season';
 import { INITIAL_TEAMS } from '../../data/teamsData';
 import TeamLogo from '../../components/TeamLogo';
+import { TeamBadge } from '../../components/TeamLogo';
 
 export default function GamesPage() {
   const { player, pendingWorldMatch, waitingForAdmin } = useGame();
@@ -80,7 +81,7 @@ export default function GamesPage() {
               const isNext = isDueLeague(f);
               return (
                 <div key={f.round} className="list-row">
-                  <span>{f.opponentLogo} {f.isHome ? 'vs' : '@'} {f.opponent}</span>
+                  <span><TeamBadge value={f.opponentLogo} size={16} /> {f.isHome ? 'vs' : '@'} {f.opponent}</span>
                   {isNext ? (
                     <button className="btn btn-primary" style={{ padding: '4px 14px', fontSize: 12 }} onClick={handlePlay}>
                       ▶ Play
@@ -103,7 +104,7 @@ export default function GamesPage() {
               const drew = f.golFor === f.golAgainst;
               return (
                 <div key={f.round} className="list-row">
-                  <span>{f.opponentLogo} {f.isHome ? 'vs' : '@'} {f.opponent}</span>
+                  <span><TeamBadge value={f.opponentLogo} size={16} /> {f.isHome ? 'vs' : '@'} {f.opponent}</span>
                   <span className={`badge ${won ? 'badge-green' : drew ? 'badge-gold' : 'badge-red'}`}>
                     {f.golFor} - {f.golAgainst}
                   </span>

@@ -5,6 +5,7 @@ import {
   fetchLeagues, fetchAdminLeague, fetchContinental, fetchInternational, fetchSimLog,
 } from '../utils/careerApi';
 import { useFetch, Panel, Loading, ErrorBox, Empty, inputCls } from './adminUi';
+import { TeamBadge } from '../../components/TeamLogo';
 
 function LeagueBrowser() {
   const leagues = useFetch(fetchLeagues, []);
@@ -34,7 +35,7 @@ function LeagueBrowser() {
                   {d.table.map((r) => (
                     <tr key={r.id} className="border-t border-surface-line">
                       <td className="py-1.5 px-1 font-bold text-ink-muted">{r.pos}</td>
-                      <td className="font-semibold text-ink whitespace-nowrap">{r.logo} {r.name}</td>
+                      <td className="font-semibold text-ink whitespace-nowrap"><TeamBadge value={r.logo} size={16} /> {r.name}</td>
                       <td className="text-center tabular-nums">{r.played}</td><td className="text-center tabular-nums">{r.win}</td>
                       <td className="text-center tabular-nums">{r.draw}</td><td className="text-center tabular-nums">{r.loss}</td>
                       <td className="text-center tabular-nums">{r.gf}-{r.ga}</td><td className="text-center px-2 font-extrabold tabular-nums">{r.pts}</td>
@@ -52,9 +53,9 @@ function LeagueBrowser() {
                   <div className="flex flex-col gap-1">
                     {r.matches.map((m, i) => (
                       <div key={i} className="flex items-center gap-2 text-xs">
-                        <span className="flex-1 text-right truncate">{m.home} {m.homeLogo}</span>
+                        <span className="flex-1 text-right truncate">{m.home} <TeamBadge value={m.homeLogo} size={16} /></span>
                         <span className={`w-12 text-center font-black tabular-nums ${m.pending ? 'text-amber-600' : ''}`}>{m.pending ? 'kutmoqda' : `${m.golA}-${m.golB}`}</span>
-                        <span className="flex-1 truncate">{m.awayLogo} {m.away}</span>
+                        <span className="flex-1 truncate"><TeamBadge value={m.awayLogo} size={16} /> {m.away}</span>
                       </div>
                     ))}
                   </div>

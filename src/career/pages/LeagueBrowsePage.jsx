@@ -5,9 +5,10 @@ import { fetchWorld } from '../utils/careerApi';
 import { computeStandingsTable } from '../utils/season';
 import { INITIAL_TEAMS } from '../../data/teamsData';
 import TeamLogo from '../../components/TeamLogo';
+import { TeamBadge } from '../../components/TeamLogo';
 
 const teamName = (id) => INITIAL_TEAMS.find((t) => t.id === id)?.name || id;
-const teamLogo = (id) => INITIAL_TEAMS.find((t) => t.id === id)?.logo || '⚽';
+const teamLogo = (id) => <TeamBadge id={id} value={INITIAL_TEAMS.find((t) => t.id === id)?.logo || '⚽'} size={16} />;
 
 // 2-BAND: istalgan foydalanuvchi istalgan liganing istalgan o'yiniga kirib
 // natija/statistikani ko'ra olishi kerak. Bu sahifa /api/world/:leagueId

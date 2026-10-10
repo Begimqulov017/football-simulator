@@ -1,6 +1,7 @@
 import React from 'react';
 import { fetchAdminPending, skipPendingMatch } from '../utils/careerApi';
 import { useFetch, Panel, Loading, ErrorBox, Empty } from './adminUi';
+import { TeamBadge } from '../../components/TeamLogo';
 
 // Admin Skip Logic: admin kunlarni o'tkazib yuborganda, real o'yinchisi bor o'yinlar
 // hal qilinmaydi. Ular o'yinchi o'sha kunga "yetib kelguncha" KUTISH (pending) holatida turadi.
@@ -23,7 +24,7 @@ export default function PendingTab() {
                 {data.pending.map((p, i) => (
                   <tr key={i} className="border-t border-surface-line">
                     <td className="py-2 font-semibold">{p.league}</td><td>{p.round}</td><td className="tabular-nums">{p.date}</td>
-                    <td className="whitespace-nowrap">{p.homeLogo} {p.home} <span className="text-ink-subtle">vs</span> {p.away} {p.awayLogo}</td>
+                    <td className="whitespace-nowrap"><TeamBadge value={p.homeLogo} size={16} /> {p.home} <span className="text-ink-subtle">vs</span> {p.away} <TeamBadge value={p.awayLogo} size={16} /></td>
                     <td>{p.users.length ? p.users.map((u) => <span key={u} className="inline-block bg-amber-50 border border-amber-200 text-amber-800 rounded-full px-2 py-0.5 font-bold mr-1">@{u}</span>) : '—'}</td>
                     <td className="text-center tabular-nums font-bold">{p.waitingDays} kun</td>
                     <td className="text-center">

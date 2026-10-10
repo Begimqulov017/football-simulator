@@ -21,6 +21,7 @@ import {
   buildLineup, computeChemistry, cleanName, catOf, CAT_COLOR, CAT_SHORT,
 } from '../club/squadUtils';
 import TeamLogo from '../../components/TeamLogo';
+import { TeamBadge } from '../../components/TeamLogo';
 
 function NameModeToggle({ value, onChange }) {
   const opt = (id, label) => (
@@ -187,7 +188,7 @@ export default function ClubPage() {
             </span>
             {upcoming.slice(0, 3).map((f) => (
               <span key={f.round} className="flex items-center justify-between gap-3 py-2 border-t border-surface-line text-sm text-ink">
-                <span className="truncate">{f.opponentLogo} {f.isHome ? 'vs' : '@'} {f.opponent}</span>
+                <span className="truncate"><TeamBadge value={f.opponentLogo} size={16} /> {f.isHome ? 'vs' : '@'} {f.opponent}</span>
                 <span className="shrink-0 text-xs font-bold text-ink-muted">{f.date}</span>
               </span>
             ))}

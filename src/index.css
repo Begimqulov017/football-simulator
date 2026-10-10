@@ -10,13 +10,21 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Windows'da bayroq emojilari harfga (ES, IT...) aylanmasligi uchun: faqat bayroq belgilariga qo'llanadi */
+@font-face {
+  font-family: 'Twemoji Country Flags';
+  unicode-range: U+1F1E6-1F1FF, U+1F3F4, U+E0062-E007F;
+  src: url('./assets/TwemojiCountryFlags.woff2') format('woff2');
+  font-display: swap;
+}
+
 /* Asosiy Fon va Shriftlar */
 body {
   margin: 0;
   padding: 0;
   background-color: #0b0f19;
   color: #f4f4f5;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Twemoji Country Flags', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   user-select: none;
 }
 

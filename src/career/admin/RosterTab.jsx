@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from '../../components/ui';
 import {
-  fetchLeagues, fetchFixtures, fetchSquad, editSquadPlayer, fetchAdminPlayers, editUserCareer,
+  fetchLeagues, fetchFixtures, fetchSquad, editSquadPlayer, resetSquadPlayer, resetUserRating, fetchAdminPlayers, editUserCareer,
 } from '../utils/careerApi';
 import { useFetch, Panel, Loading, ErrorBox, Empty, inputCls } from './adminUi';
 
@@ -40,6 +40,12 @@ function SquadEditor() {
     if (r.ok) { setDrafts((d) => { const n = { ...d }; delete n[p.id]; return n; }); squad.reload(); }
   };
 
+  const resetNpc = async (p) => {
+    const r = await resetSquadPlayer(leagueId, teamId, p.id);
+    setMsg(r.ok ? { kind: 'ok', text: `${r.player.name} asl holatiga qaytarildi (OVR ${r.player.ovr})` } : { kind: 'err', text: r.error || 'Qaytarilmadi' });
+    if (r.ok) squad.reload();
+  };
+
   return (
     <Panel title="Jamoa tarkibi (NPC futbolchilar)">
       <div className="flex flex-wrap gap-2 mb-3">
@@ -68,7 +74,10 @@ function SquadEditor() {
                     </td>
                     <td><input type="number" min={40} max={99} className={`${inputCls} !py-1 !px-2 w-16 tabular-nums`} value={dr.ovr ?? p.ovr} onChange={(e) => setDraft(p.id, 'ovr', e.target.value)} aria-label={`${p.name} OVR`} /></td>
                     <td><input type="number" min={15} max={45} className={`${inputCls} !py-1 !px-2 w-16 tabular-nums`} value={dr.age ?? p.age ?? ''} onChange={(e) => setDraft(p.id, 'age', e.target.value)} aria-label={`${p.name} yoshi`} /></td>
-                    <td className="text-right">{drafts[p.id] && <Button size="sm" variant="accent" onClick={() => save(p)}>Saqlash</Button>}</td>
+                    <td className="text-right whitespace-nowrap">
+                      {drafts[p.id] && <Button size="sm" variant="accent" onClick={() => save(p)}>Saqlash</Button>}
+                      {p.edited && !drafts[p.id] && <Button size="sm" variant="ghost" onClick={() => resetNpc(p)}>↩ Asl holatga</Button>}
+                    </td>
                   </tr>
                 );
               })}
@@ -111,6 +120,12 @@ function UserCareerEditor() {
     } else setMsg({ kind: 'err', text: r.error || 'Saqlanmadi' });
   };
 
+  const resetRating = async () => {
+    const r = await resetUserRating(username);
+    if (r.ok) { setMsg({ kind: 'ok', text: `${username} reytingi va statlari asl holatiga (OVR ${r.overall}) qaytarildi.` }); reload(); }
+    else setMsg({ kind: 'err', text: r.error || 'Qaytarilmadi' });
+  };
+
   return (
     <Panel title="O'yinchi karyerasi va statistikasi">
       {players.length === 0 ? <Empty>Karyera boshlagan foydalanuvchi yo'q.</Empty> : (
@@ -133,6 +148,7 @@ function UserCareerEditor() {
           <div className="flex flex-wrap items-center gap-3">
             <Button size="sm" variant="accent" disabled={!changed} onClick={save}>O'zgarishlarni saqlash</Button>
             {changed && <Button size="sm" variant="ghost" onClick={() => setDraft({})}>Bekor qilish</Button>}
+            <Button size="sm" variant="secondary" onClick={resetRating}>↩ Reytingni asl holatga qaytarish</Button>
             <span className="text-[11px] text-ink-muted">Server chegaralarni o'zi tekshiradi. Foydalanuvchi ochiq bo'lsa, tahrir 20 soniya ichida unga yetib boradi va uning eski nusxasi ustidan yozilmaydi.</span>
           </div>
           <Note msg={msg} />

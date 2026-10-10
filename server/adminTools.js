@@ -189,7 +189,7 @@ function registerAdminTools(app, ctx) {
     const league = engine.LEAGUES.find((l) => l.id === req.params.leagueId);
     if (!league || !league.teamIds.includes(req.params.teamId)) return res.status(404).json({ ok: false, error: 'Liga yoki jamoa topilmadi' });
     const world = ensureWorldForLeague(db, league.id);
-    const squad = (world.squads?.[req.params.teamId] || []).map((p) => ({ id: p.id, name: p.name, pos: p.pos, ovr: p.ovr, age: p.age ?? null }));
+    const squad = (world.squads?.[req.params.teamId] || []).map((p) => ({ id: p.id, name: p.name, pos: p.pos, ovr: p.ovr, age: p.age ?? null, edited: !!p.adminBase }));
     squad.sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
     res.json({ ok: true, team: teamMini(req.params.teamId), squad });
   });
@@ -201,7 +201,17 @@ function registerAdminTools(app, ctx) {
     const p = squad?.find((x) => String(x.id) === String(req.params.playerId));
     if (!p) return res.status(404).json({ ok: false, error: "O'yinchi topilmadi" });
     const b = req.body || {};
-    if (b.ovr !== undefined) p.ovr = clampInt(b.ovr, 40, 99, p.ovr);
+    if (b.ovr !== undefined) {
+      const newOvr = clampInt(b.ovr, 40, 99, p.ovr);
+      if (newOvr !== p.ovr) {
+        // Asl qiymat birinchi tahrirda saqlanadi (keyin admin "asl holatga qaytarish" qila oladi).
+        if (!p.adminBase) p.adminBase = { ovr: p.ovr, stats: p.stats ? { ...p.stats } : null };
+        const delta = newOvr - p.ovr;
+        // Pace/shot/pas... ham reytingga qarab suriladi, aks holda o'yin eski statlarga qarayverardi.
+        if (p.stats) Object.keys(p.stats).forEach((k) => { p.stats[k] = Math.max(1, Math.min(99, Math.round(p.stats[k] + delta))); });
+        p.ovr = newOvr;
+      }
+    }
     if (b.age !== undefined) p.age = clampInt(b.age, 15, 45, p.age);
     if (b.pos !== undefined) {
       const pos = String(b.pos).toUpperCase().slice(0, 4);
@@ -216,6 +226,38 @@ function registerAdminTools(app, ctx) {
     p.adminEdited = true;
     writeDB(db);
     res.json({ ok: true, player: { id: p.id, name: p.name, pos: p.pos, ovr: p.ovr, age: p.age } });
+  });
+
+  // NPC futbolchini asl reyting/statlariga qaytarish
+  app.post('/api/admin/squad/:leagueId/:teamId/:playerId/reset', authMiddleware, adminMiddleware, (req, res) => {
+    const db = req.db;
+    const squad = db.leagueWorlds?.[req.params.leagueId]?.squads?.[req.params.teamId];
+    const p = squad?.find((x) => String(x.id) === String(req.params.playerId));
+    if (!p) return res.status(404).json({ ok: false, error: "O'yinchi topilmadi" });
+    if (!p.adminBase) return res.json({ ok: false, error: "Bu o'yinchi admin tomonidan o'zgartirilmagan" });
+    p.ovr = p.adminBase.ovr;
+    if (p.adminBase.stats) p.stats = { ...p.adminBase.stats };
+    delete p.adminBase;
+    p.adminEdited = false;
+    writeDB(db);
+    res.json({ ok: true, player: { id: p.id, name: p.name, pos: p.pos, ovr: p.ovr, age: p.age } });
+  });
+
+  // Haqiqiy o'yinchining reyting/statlarini admin o'zgartirishidan oldingi holatga qaytarish
+  app.post('/api/admin/users/:username/career-reset-rating', authMiddleware, adminMiddleware, (req, res) => {
+    const db = req.db;
+    const target = findUser(db, req.params.username);
+    if (!target) return res.status(404).json({ ok: false, error: 'Foydalanuvchi topilmadi' });
+    const base = target.careerSave && target.careerSave.adminBase;
+    if (!base) return res.json({ ok: false, error: "Asl qiymat topilmadi: reyting admin tomonidan o'zgartirilmagan (yoki foydalanuvchi hali qayta saqlamagan)" });
+    const patch = { player: { overall: base.overall, potential: base.potential, subStats: base.subStats, mainStats: base.mainStats, adminBase: null }, career: {} };
+    Object.assign(target.careerSave, patch.player);
+    delete target.careerSave.adminBase;
+    const rev = ((target.adminEdit && target.adminEdit.rev) || 0) + 1;
+    target.adminEdit = { rev, patch, at: new Date().toISOString(), by: req.user.username };
+    target.careerSavedAt = new Date().toISOString();
+    writeDB(db);
+    res.json({ ok: true, rev, overall: base.overall });
   });
 
   // Haqiqiy (login qilgan) o'yinchi karyerasini tahrirlash

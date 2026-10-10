@@ -4,6 +4,7 @@ import Icon from '../../components/Icon';
 import { useGame } from '../context/GameContext';
 import { fetchChat, sendChatMessage, pinChatMessage, deleteChatMessage, muteUser } from '../utils/careerApi';
 import { setChatSeen } from '../utils/chatSeen';
+import { TeamBadge } from '../../components/TeamLogo';
 
 // Phase 9 — Global Chat
 //   • Hamma uchun ochiq chat; HTTP polling (~2.5s) bilan real-time
@@ -45,7 +46,7 @@ function Message({ m, me, isStaff, isAdmin, pinned, onPin, onDelete, onMute }) {
       data-tagged={tagged ? 'true' : undefined}
     >
       <div className="flex items-center gap-2 text-xs">
-        {m.clubLogo ? <span>{m.clubLogo}</span> : null}
+        {m.clubLogo ? <span><TeamBadge value={m.clubLogo} size={16} /></span> : null}
         <span className="font-extrabold text-ink">{m.displayName}</span>
         <span className="text-ink-muted">@{m.username}</span>
         {m.isAdmin && <span className="text-[10px] font-extrabold bg-ink text-white rounded-full px-2 py-0.5">ADMIN</span>}
