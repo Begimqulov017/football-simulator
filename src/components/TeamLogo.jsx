@@ -63,7 +63,7 @@ export default function TeamLogo({ id, logo, size = 24, className = '', style, t
         width={size}
         height={size}
         className={className}
-        style={{ objectFit: 'contain', verticalAlign: 'middle', display: 'inline-block', ...style }}
+        style={{ objectFit: 'contain', verticalAlign: 'middle', display: 'inline-block', filter: 'drop-shadow(0 0 1px rgba(255,255,255,0.9))', ...style }}
         onError={() => setBroken(true)}
         data-team-logo={id}
       />
