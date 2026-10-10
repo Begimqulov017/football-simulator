@@ -85,6 +85,31 @@ app.use(cors());
 // Karyera obyekti (jadval, yangiliklar, tarix) 100 KB dan oshishi mumkin - standart limit saqlashni jimgina rad etardi.
 app.use(express.json({ limit: '10mb' }));
 
+// Eski saqlangan ma'lumotlardagi emoji-logolar (belgisiz) javobdan oldin JORIY logo bilan almashtiriladi:
+// klub id yoki nomi bo'yicha topiladi. Shunda wipe qilinmagan eski dunyolarda ham to'g'ri logotip chiqadi.
+const _TEAM_BY_ID = new Map(); const _TEAM_BY_NAME = new Map();
+require('./gamedata/teamsData').INITIAL_TEAMS.forEach((t) => { _TEAM_BY_ID.set(t.id, t); _TEAM_BY_NAME.set(String(t.name).toLowerCase(), t); });
+const _findTeam = (...c) => { for (const x of c) { if (typeof x !== 'string') continue; const t = _TEAM_BY_ID.get(x) || _TEAM_BY_NAME.get(x.toLowerCase()); if (t) return t; } return null; };
+function fixLogos(v, depth = 0) {
+  if (!v || typeof v !== 'object' || depth > 14) return;
+  if (Array.isArray(v)) { v.forEach((x) => fixLogos(x, depth + 1)); return; }
+  Object.keys(v).forEach((k) => {
+    const val = v[k];
+    if (typeof val === 'string' && /logo$/i.test(k) && val && val.indexOf('\u2060') === -1) {
+      const base = k.slice(0, -4);
+      const t = k === 'logo'
+        ? _findTeam(v.id, v.teamId, v.clubId, v.name, v.clubName, v.teamName)
+        : _findTeam(v[base], v[base + 'Id'], v[base + 'Name'], v[base + 'Club'], v[base + 'Team']);
+      if (t) v[k] = t.logo;
+    } else if (val && typeof val === 'object') fixLogos(val, depth + 1);
+  });
+}
+app.use((req, res, next) => {
+  const origJson = res.json.bind(res);
+  res.json = (body) => { try { fixLogos(body); } catch (e) { /* logo tuzatish xato bersa javob baribir yuboriladi */ } return origJson(body); };
+  next();
+});
+
 // ------------------------------------------------------------
 // Admin akkauntni birinchi ishga tushirishda (yoki agar negadir
 // o'chib qolgan bo'lsa) avtomatik yaratib/tiklab qo'yamiz.
@@ -1275,6 +1300,8 @@ app.post('/api/admin/wipe-data', authMiddleware, adminMiddleware, (req, res) => 
 
   db.users = [freshAdmin];
   db.leagueWorlds = {};
+  delete db.continental;   // Chempionlar ligasi / Yevropa ligasi tarixi
+  delete db.globalAwards;  // Global Ballon d'Or / Oltin butsa / Mavsum jamoasi tarixi
   db.international = { activeTournaments: [], history: [], newsLog: [], lastDate: null };
   delete db.worldDate;
   db.sessions = {};

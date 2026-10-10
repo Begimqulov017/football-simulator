@@ -4,6 +4,9 @@ import './index.css';
 import './career/career.css';
 import './career/career-light.css';
 import App from './App';
+import { preloadLogos } from './components/TeamLogo';
+
+preloadLogos();
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

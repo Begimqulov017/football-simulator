@@ -34,6 +34,16 @@ export function logoUrlFor(id) {
   return ext ? `${API_BASE}/api/logo/${String(id).toLowerCase()}.${ext}` : null;
 }
 
+// Ilova ochilishi bilan barcha logotiplarni brauzer keshiga oldindan yuklaydi (sahifalarda "asta ochilmasligi" uchun).
+let preloaded = false;
+export function preloadLogos() {
+  if (preloaded || typeof window === 'undefined') return;
+  preloaded = true;
+  const ids = Array.from(STATIC_LOGO_IDS);
+  const run = () => ids.forEach((id) => { const im = new Image(); im.decoding = 'async'; im.src = `${STATIC_BASE}/${id}.png`; });
+  run();
+}
+
 export default function TeamLogo({ id, logo, size = 24, className = '', style, title }) {
   const [, force] = useState(0);
   const [broken, setBroken] = useState(false);
