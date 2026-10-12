@@ -5,6 +5,9 @@ import { STATIC_LOGO_IDS } from '../data/logoManifest';
 
 // Logotiplar frontend bilan birga (public/logos/<klub_id>.png) keladi: backend uxlab yotgan yoki eski bo'lsa ham ko'rinadi.
 const STATIC_BASE = `${process.env.PUBLIC_URL || ''}/logos`;
+// Logolar brauzerda uzoq muddat keshlanadi (vercel.json). Fayl nomi o'zgarmagani uchun logolar yangilanganda
+// shu raqamni oshiring - shunda barcha kompyuterlar eski keshdagi rasmni emas, yangisini yuklaydi.
+export const LOGO_VERSION = '5';
 
 // Klub logotipi: serverda server/gamedata/logoData/<id>.png bo'lsa - haqiqiy rasm, bo'lmasa avvalgi emoji.
 // Mavjud logotiplar ro'yxati bir marta yuklanadi va hamma komponentlar orasida bo'lishiladi.
@@ -29,9 +32,9 @@ function loadLogoList() {
 
 export function logoUrlFor(id) {
   const key = id ? String(id).toLowerCase() : '';
-  if (key && STATIC_LOGO_IDS.has(key)) return `${STATIC_BASE}/${key}.png`;
+  if (key && STATIC_LOGO_IDS.has(key)) return `${STATIC_BASE}/${key}.png?v=${LOGO_VERSION}`;
   const ext = logoFiles && id ? logoFiles[String(id).toLowerCase()] : null;
-  return ext ? `${API_BASE}/api/logo/${String(id).toLowerCase()}.${ext}` : null;
+  return ext ? `${API_BASE}/api/logo/${String(id).toLowerCase()}.${ext}?v=${LOGO_VERSION}` : null;
 }
 
 // Ilova ochilishi bilan barcha logotiplarni brauzer keshiga oldindan yuklaydi (sahifalarda "asta ochilmasligi" uchun).
@@ -40,7 +43,7 @@ export function preloadLogos() {
   if (preloaded || typeof window === 'undefined') return;
   preloaded = true;
   const ids = Array.from(STATIC_LOGO_IDS);
-  const run = () => ids.forEach((id) => { const im = new Image(); im.decoding = 'async'; im.src = `${STATIC_BASE}/${id}.png`; });
+  const run = () => ids.forEach((id) => { const im = new Image(); im.decoding = 'async'; im.src = `${STATIC_BASE}/${id}.png?v=${LOGO_VERSION}`; });
   run();
 }
 

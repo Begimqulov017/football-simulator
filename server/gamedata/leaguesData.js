@@ -149,7 +149,7 @@ const LEAGUES = [
     name: 'Eredivisie',
     country: 'Netherlands',
     flag: '🇳🇱',
-    teamIds: ['ajax', 'psv', 'feyenoord', 'az_alkmaar']
+    teamIds: ['ajax', 'psv', 'feyenoord', 'az_alkmaar', 'twente', 'utrecht', 'sc_heerenveen', 'sparta_rotterdam', 'go_ahead_eagles', 'nec_nijmegen', 'fc_groningen', 'pec_zwolle', 'fortuna_sittard', 'willem_ii', 'excelsior', 'ado_den_haag', 'sc_cambuur', 'telstar']
   },
   {
     id: 'belgian_pro_league',

@@ -609,7 +609,7 @@ function buildNextCupRound(prevRound) {
 // Jamoa/futbolchi ma'lumotlari (gamedata/teamsData.js, leaguesData.js) strukturasi o'zgarganda oshiriladi.
 // 2: top-5 liga haqiqiy FC reytinglari + `nat` (terma jamoa), jamoa id'lari o'zgargan (inter, milan, como, elche, hamburger_sv).
 // Eski ma'lumotdan yaratilgan world'lar bilan yangi ma'lumot aralashib ketmasligi uchun server shuni tekshiradi.
-const DATA_VERSION = 2;
+const DATA_VERSION = 3;
 
 module.exports = {
   DATA_VERSION,
