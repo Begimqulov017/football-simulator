@@ -12,6 +12,8 @@ export const LOGO_VERSION = '5';
 // Klub logotipi: serverda server/gamedata/logoData/<id>.png bo'lsa - haqiqiy rasm, bo'lmasa avvalgi emoji.
 // Mavjud logotiplar ro'yxati bir marta yuklanadi va hamma komponentlar orasida bo'lishiladi.
 let logoFiles = null; // { real_madrid: 'png', ... }
+let customLogoIds = new Set(); // creator Excel bilan yuklagan logolar (serverdan; o'rnatilganlardan ustun)
+let customLogoVersion = 0;
 let loading = false;
 const subscribers = new Set();
 
@@ -20,7 +22,11 @@ function loadLogoList() {
   loading = true;
   fetch(`${API_BASE}/api/logos`)
     .then((r) => { if (!r.ok) throw new Error('logos http ' + r.status); return r.json(); })
-    .then((d) => { logoFiles = (d && d.files) || {}; })
+    .then((d) => {
+      logoFiles = (d && d.files) || {};
+      customLogoIds = new Set(((d && d.custom) || []).map((x) => String(x).toLowerCase()));
+      customLogoVersion = (d && d.customVersion) || 0;
+    })
     .catch(() => {
       // Server uxlab yotgan / hali yangilanmagan bo'lishi mumkin: natijani SAQLAB QO'YMAYMIZ,
       // 8 soniyadan keyin qayta uriniladi (avval {} saqlanib, sahifa yangilanmaguncha emoji qolardi).
@@ -32,6 +38,7 @@ function loadLogoList() {
 
 export function logoUrlFor(id) {
   const key = id ? String(id).toLowerCase() : '';
+  if (key && customLogoIds.has(key)) return `${API_BASE}/api/logo/${key}.png?v=${customLogoVersion}`;
   if (key && STATIC_LOGO_IDS.has(key)) return `${STATIC_BASE}/${key}.png?v=${LOGO_VERSION}`;
   const ext = logoFiles && id ? logoFiles[String(id).toLowerCase()] : null;
   return ext ? `${API_BASE}/api/logo/${String(id).toLowerCase()}.${ext}?v=${LOGO_VERSION}` : null;

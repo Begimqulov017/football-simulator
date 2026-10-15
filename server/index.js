@@ -60,7 +60,8 @@ function mergeServerOwnedFields(existing, incoming) {
 const globalAwards = require('./globalAwards');
 const chat = require('./chat');
 const registerAdminTools = require('./adminTools');
-const { moderationView, roleOf, isMuted } = require('./roles');
+const { moderationView, roleOf, isMuted, isCreator } = require('./roles');
+const creatorData = require('./creatorData');
 
 // Phase 7: player.overall is stored with 2 decimals; everyone else sees it rounded naturally (72.50 -> 73).
 const roundOvr = (n) => (n == null ? n : Math.round(Math.round(n * 100) / 100));
@@ -88,7 +89,12 @@ app.use(express.json({ limit: '10mb' }));
 // Eski saqlangan ma'lumotlardagi emoji-logolar (belgisiz) javobdan oldin JORIY logo bilan almashtiriladi:
 // klub id yoki nomi bo'yicha topiladi. Shunda wipe qilinmagan eski dunyolarda ham to'g'ri logotip chiqadi.
 const _TEAM_BY_ID = new Map(); const _TEAM_BY_NAME = new Map();
-require('./gamedata/teamsData').INITIAL_TEAMS.forEach((t) => { _TEAM_BY_ID.set(t.id, t); _TEAM_BY_NAME.set(String(t.name).toLowerCase(), t); });
+function _rebuildTeamMaps() {
+  _TEAM_BY_ID.clear(); _TEAM_BY_NAME.clear();
+  require('./gamedata/teamsData').INITIAL_TEAMS.forEach((t) => { _TEAM_BY_ID.set(t.id, t); _TEAM_BY_NAME.set(String(t.name).toLowerCase(), t); });
+}
+_rebuildTeamMaps();
+creatorData.onChange(_rebuildTeamMaps); // creator yangi klub qo'shganda/qaytarganda
 const _findTeam = (...c) => { for (const x of c) { if (typeof x !== 'string') continue; const t = _TEAM_BY_ID.get(x) || _TEAM_BY_NAME.get(x.toLowerCase()); if (t) return t; } return null; };
 function fixLogos(v, depth = 0) {
   if (!v || typeof v !== 'object' || depth > 14) return;
@@ -155,7 +161,7 @@ function ensureAdminSeeded() {
 // ------------------------------------------------------------
 function publicUser(u) {
   const m = moderationView(u);
-  return { username: u.username, canAccessPro: !!u.canAccessPro, isAdmin: !!u.isAdmin, role: m.role, muted: m.muted };
+  return { username: u.username, canAccessPro: !!u.canAccessPro, isAdmin: !!u.isAdmin, isCreator: isCreator(u), role: m.role, muted: m.muted };
 }
 
 // Faqat ADMIN paneli uchun — parolni ham (ochiq matn) qo'shib qaytaradi.
@@ -267,6 +273,10 @@ const authMiddleware = withLock(function (req, res, next) {
   next();
 });
 
+function creatorMiddleware(req, res, next) {
+  if (!isCreator(req.user)) return res.status(403).json({ ok: false, error: 'Bu amal faqat creator uchun' });
+  next();
+}
 function adminMiddleware(req, res, next) {
   if (!req.user?.isAdmin) return res.status(403).json({ ok: false, error: "Bu amal faqat admin uchun" });
   next();
@@ -1681,13 +1691,24 @@ function listLogos() {
   Object.keys(logoIndex()).forEach((id) => { files[id] = logoIndex()[id].ext; });
   return files;
 }
+// Creator Excel bilan birga yuklagan logolar (bazada, PNG). Ular o'rnatilgan logolardan USTUN turadi.
+const customLogos = () => (readDB().customData && readDB().customData.logos) || {};
 app.get('/api/logos', (req, res) => {
   res.set('Cache-Control', 'public, max-age=60');
-  res.json({ ok: true, files: listLogos() });
+  const custom = Object.keys(customLogos());
+  const files = listLogos();
+  custom.forEach((id) => { files[id] = 'png'; });
+  res.json({ ok: true, files, custom, customVersion: creatorData.getVersion() });
 });
 app.get('/api/logo/:file', (req, res) => {
   const m = String(req.params.file || '').match(LOGO_FILE_RE);
   if (!m) return res.status(400).json({ ok: false, error: "Noto'g'ri fayl nomi" });
+  const uri = m[2].toLowerCase() === 'png' ? customLogos()[m[1].toLowerCase()] : null;
+  if (uri) {
+    res.set('Content-Type', 'image/png');
+    res.set('Cache-Control', 'public, max-age=0, must-revalidate');
+    return res.send(Buffer.from(uri.replace(/^data:image\/png;base64,/, ''), 'base64'));
+  }
   const hit = logoIndex()[m[1].toLowerCase()];
   // Faqat indeksdagi (logoData ichidagi) fayllar beriladi - path traversal imkoni yo'q.
   if (!hit || hit.ext !== m[2].toLowerCase() || !hit.full.startsWith(LOGO_DIR) || !fs.existsSync(hit.full)) {
@@ -1982,9 +2003,13 @@ const adminTools = registerAdminTools(app, {
   advanceDays, countPending, ensureWorldForLeague, runLocked, ADMIN_USERNAME,
 });
 
+creatorData.register(app, { authMiddleware, creatorMiddleware, readDB, writeDB });
+
 initDB()
   .then(() => {
     ensureAdminSeeded();
+    // Creator avval yuklagan klub/futbolchi ma'lumotini o'yinga qaytadan qo'llaymiz (server qayta ishga tushganda)
+    creatorData.applyCustomData(readDB());
 
 // Phase 12b: JSON xato javobi - kutilmagan xatoda Express HTML sahifa o'rniga sababni JSON qilib qaytaradi,
 // klient esa "Server bu so'rovni tanimadi" o'rniga aniq xatoni ko'rsatadi.

@@ -9,6 +9,7 @@ import FixturesTab from './FixturesTab';
 import RosterTab from './RosterTab';
 import NewsTab from './NewsTab';
 import UsersTab from './UsersTab';
+import ImportTab from './ImportTab';
 import ChatPanel from '../chat/ChatPanel';
 import { useFetch, Panel, Loading, ErrorBox, Empty } from './adminUi';
 import { fetchChatAudit } from '../utils/careerApi';
@@ -25,6 +26,7 @@ const ADMIN_TABS = [
   { key: 'users', label: 'Users' },
   { key: 'pending', label: 'Skip / Pending' },
 ];
+const CREATOR_TABS = [{ key: 'import', label: "Ma'lumot yuklash (Excel)" }];
 const MOD_TABS = [{ key: 'chat', label: 'Chat' }];
 
 const ACTION_LABEL = { pin: 'biriktirdi', unpin: 'pinni oldi', delete: "o'chirdi", mute: 'mute qildi', unmute: 'unmute qildi' };
@@ -53,7 +55,8 @@ function ChatModeration({ currentUser }) {
 
 export default function AdminDashboard({ currentUser }) {
   const isAdmin = !!currentUser?.isAdmin;
-  const tabs = isAdmin ? ADMIN_TABS : MOD_TABS;
+  const isCreator = !!currentUser?.isCreator;
+  const tabs = isAdmin ? (isCreator ? [...ADMIN_TABS, ...CREATOR_TABS] : ADMIN_TABS) : MOD_TABS;
   const [tab, setTab] = useState(isAdmin ? 'players' : 'chat');
   // Kun o'tgach (qo'lda yoki avto-rejim) barcha tablar ma'lumotni qayta yuklashi uchun
   const [version, setVersion] = useState(0);
@@ -62,7 +65,7 @@ export default function AdminDashboard({ currentUser }) {
   return (
     <div className="font-sans text-ink flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge tone="accent">{isAdmin ? 'Admin' : 'Moderator'}: {currentUser?.username}</Badge>
+        <Badge tone="accent">{isCreator ? 'Creator' : isAdmin ? 'Admin' : 'Moderator'}: {currentUser?.username}</Badge>
       </div>
       {isAdmin && <MasterCalendar onAdvanced={bump} />}
       <SegmentedTabs tabs={tabs} active={tab} onChange={setTab} />
@@ -75,6 +78,7 @@ export default function AdminDashboard({ currentUser }) {
         {tab === 'chat' && <ChatModeration currentUser={currentUser} />}
         {isAdmin && tab === 'users' && <UsersTab currentUser={currentUser} />}
         {isAdmin && tab === 'pending' && <PendingTab />}
+        {isCreator && tab === 'import' && <ImportTab />}
       </div>
     </div>
   );

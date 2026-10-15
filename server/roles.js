@@ -21,6 +21,11 @@ function setRole(u, role) {
 
 const isStaff = (u) => roleOf(u) !== 'user';
 
+// CREATOR: tizim egasi (faqat shu akkaunt Excel orqali ma'lumot yuklay oladi). Admin bayrog'iga tegmaydi -
+// creator ham oddiy admin huquqlariga ega, qo'shimcha ravishda "Ma'lumot yuklash" bo'limi ochiladi.
+const CREATOR_USERNAME = process.env.CREATOR_USERNAME || 'Begimqulov017';
+const isCreator = (u) => !!u && u.username === CREATOR_USERNAME && !!u.isAdmin;
+
 // Mute: `mutedUntil` — ISO sana; "doimiy" mute uchun uzoq kelajak sanasi.
 const FOREVER = '9999-12-31T00:00:00.000Z';
 function isMuted(u, now = Date.now()) {
@@ -36,4 +41,4 @@ function moderationView(u) {
   };
 }
 
-module.exports = { ROLES, FOREVER, roleOf, setRole, isStaff, isMuted, moderationView };
+module.exports = { ROLES, FOREVER, roleOf, setRole, isStaff, isCreator, CREATOR_USERNAME, isMuted, moderationView };

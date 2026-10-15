@@ -140,6 +140,11 @@ export const editSquadPlayer = (leagueId, teamId, playerId, body) =>
   apiFetch(`/api/admin/squad/${encodeURIComponent(leagueId)}/${encodeURIComponent(teamId)}/${encodeURIComponent(playerId)}`, { method: 'POST', body: JSON.stringify(body) });
 export const editUserCareer = (username, body) =>
   apiFetch(`/api/admin/users/${encodeURIComponent(username)}/career-edit`, { method: 'POST', body: JSON.stringify(body) });
+// ---- CREATOR: Excel orqali ma'lumot yuklash ----
+export const creatorImportStatus = () => apiFetch('/api/creator/import/status');
+export const creatorImportValidate = (payload) => apiFetch('/api/creator/import/validate', { method: 'POST', body: JSON.stringify(payload) });
+export const creatorImportApply = (payload) => apiFetch('/api/creator/import/apply', { method: 'POST', body: JSON.stringify(payload) });
+export const creatorImportReset = () => apiFetch('/api/creator/import/reset', { method: 'POST' });
 export const resetSquadPlayer = (leagueId, teamId, playerId) =>
   apiFetch(`/api/admin/squad/${encodeURIComponent(leagueId)}/${encodeURIComponent(teamId)}/${encodeURIComponent(playerId)}/reset`, { method: 'POST' });
 export const resetUserRating = (username) =>

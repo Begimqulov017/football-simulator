@@ -5687,6 +5687,10 @@ EREDIVISIE_TEAMS.forEach((t) => {
   else INITIAL_TEAMS.push({ id: t.id, name: t.name, logo: t.logo, squad: t.squad });
 });
 
+// Creator yuklagan (Excel) klub/futbolchilar - localStorage'dagi oxirgi nusxadan, ilova ochilishi bilan.
+const { applyCustomClubs, readCustomCache } = require('./customData');
+applyCustomClubs(INITIAL_TEAMS, require('./leaguesData').LEAGUES, readCustomCache());
+
 // Har bir jamoa emoji-logosiga KO'RINMAS identifikator (jamoa tartib raqami) qo'shiladi.
 // Sabab: ko'p jamoalarda emoji bir xil, shuning uchun emoji matnidan jamoani aniqlab bo'lmasdi.
 // Endi emoji-logo qaysi joyga uzatilmasin, TeamBadge undan jamoani topib, haqiqiy logotipni ko'rsatadi.

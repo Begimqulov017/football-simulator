@@ -46,7 +46,8 @@ const addDays = engine.addDays;
 const ROUND_LABEL = { 16: 'Round of 16', 8: 'Quarter-final', 4: 'Semi-final', 2: 'Final' };
 const GROUP_PAIRINGS = [[[0, 1], [2, 3]], [[0, 2], [1, 3]], [[0, 3], [1, 2]]];
 
-const teamById = new Map(INITIAL_TEAMS.map((t) => [t.id, t]));
+// Creator yangi klub qo'shishi mumkin, shuning uchun har safar INITIAL_TEAMS dan jonli qidiramiz
+const teamById = { get: (id) => INITIAL_TEAMS.find((t) => t.id === id) };
 const leagueOfClub = new Map();
 LEAGUES.forEach((l) => l.teamIds.forEach((id) => leagueOfClub.set(id, l)));
 

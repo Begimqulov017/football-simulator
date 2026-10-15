@@ -5,8 +5,10 @@ import './career/career.css';
 import './career/career-light.css';
 import App from './App';
 import { preloadLogos } from './components/TeamLogo';
+import { syncCustomData } from './data/customSync';
 
 preloadLogos();
+syncCustomData();
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
